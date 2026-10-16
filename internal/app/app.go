@@ -169,6 +169,8 @@ func (a *App) warmMessages() {
 		a.messages = msgs
 		a.msgReady = true
 		a.mu.Unlock()
+		// 通知前端重拉列表:补齐前消息数一律显示 0
+		a.emit(EventMessagesReady, nil)
 	})
 }
 

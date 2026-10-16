@@ -26,6 +26,7 @@ export function App() {
   const [detailOpen, setDetailOpen] = useState(true)
   const [filter, setFilter] = useState<SidebarFilter>({})
   const [selected, setSelected] = useState<SessionView | null>(null)
+  const [listVersion, setListVersion] = useState(0)
 
   const onSelect = (s: SessionView) => {
     setSelected(s)
@@ -42,11 +43,11 @@ export function App() {
           onFilter={setFilter}
         />
         <div className={styles.listWrap}>
-          <SessionList filter={filter} selectedKey={selected?.key ?? null} onSelect={onSelect} />
+          <SessionList filter={filter} selectedKey={selected?.key ?? null} onSelect={onSelect} listVersion={listVersion} />
         </div>
         {detailOpen ? (
           <div className={styles.detailWrap}>
-            <DetailPane session={selected} onClose={() => setDetailOpen(false)} />
+            <DetailPane session={selected} onClose={() => setDetailOpen(false)} onChanged={() => setListVersion((v) => v + 1)} />
           </div>
         ) : (
           <button

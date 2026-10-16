@@ -31,7 +31,8 @@ type SessionService struct{ a *App }
 // List 按过滤条件返回会话视图（默认按最后活动降序，即 sessions 层顺序）。
 func (s *SessionService) List(f Filter) []SessionView {
 	list, _, ms := s.a.snapshot()
-	s.a.warmMessages()
+	// 异步补齐消息数:同步会阻塞首次 List 到全部 agent 的 ListAgent 走完
+	go s.a.warmMessages()
 	s.a.mu.Lock()
 	msgs, msgReady := s.a.messages, s.a.msgReady
 	s.a.mu.Unlock()
