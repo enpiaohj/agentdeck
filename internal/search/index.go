@@ -98,8 +98,9 @@ func (ix *Index) Reset() error {
 }
 
 // Add 把一批文档写入索引，整个批次在一个事务里，中途失败不留半批。
-// 同一 Key 再次写入时替换旧正文（原文与旧分词行都换）。切不出任何
-// 词元的正文跳过不收——它本来就无一词可中。
+// 同一 Key 再次写入时替换旧正文，替换语义不含例外：新正文切不出词元
+// 时同样走替换——旧行（原文与分词行）一起删掉，不留已失效的旧内容。
+// 全新的 Key 切不出词元才直接跳过，它本来就无一词可中。
 func (ix *Index) Add(docs []Doc) error {
 	if len(docs) == 0 {
 		return nil
@@ -110,13 +111,13 @@ func (ix *Index) Add(docs []Doc) error {
 	}
 	for _, d := range docs {
 		toks := Segment(d.Text)
-		if len(toks) == 0 {
-			continue
-		}
 		var rowid int64
 		err := tx.QueryRow(`SELECT rowid FROM docs WHERE key = ?`, d.Key).Scan(&rowid)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
+			if len(toks) == 0 {
+				continue
+			}
 			res, err := tx.Exec(`INSERT INTO docs(key, text) VALUES (?, ?)`, d.Key, d.Text)
 			if err != nil {
 				tx.Rollback()
@@ -127,22 +128,33 @@ func (ix *Index) Add(docs []Doc) error {
 				tx.Rollback()
 				return err
 			}
+			if _, err := tx.Exec(`INSERT INTO docs_fts(rowid, seg) VALUES (?, ?)`, rowid, join(toks)); err != nil {
+				tx.Rollback()
+				return err
+			}
 		case err != nil:
 			tx.Rollback()
 			return err
 		default:
-			if _, err := tx.Exec(`UPDATE docs SET text = ? WHERE rowid = ?`, d.Text, rowid); err != nil {
-				tx.Rollback()
-				return err
-			}
 			if _, err := tx.Exec(`DELETE FROM docs_fts WHERE rowid = ?`, rowid); err != nil {
 				tx.Rollback()
 				return err
 			}
-		}
-		if _, err := tx.Exec(`INSERT INTO docs_fts(rowid, seg) VALUES (?, ?)`, rowid, join(toks)); err != nil {
-			tx.Rollback()
-			return err
+			if len(toks) == 0 {
+				if _, err := tx.Exec(`DELETE FROM docs WHERE rowid = ?`, rowid); err != nil {
+					tx.Rollback()
+					return err
+				}
+				continue
+			}
+			if _, err := tx.Exec(`UPDATE docs SET text = ? WHERE rowid = ?`, d.Text, rowid); err != nil {
+				tx.Rollback()
+				return err
+			}
+			if _, err := tx.Exec(`INSERT INTO docs_fts(rowid, seg) VALUES (?, ?)`, rowid, join(toks)); err != nil {
+				tx.Rollback()
+				return err
+			}
 		}
 	}
 	return tx.Commit()
@@ -196,4 +208,17 @@ func (ix *Index) Search(ctx context.Context, query string, limit int) ([]Result,
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// Count 返回 query 的命中总数，不受 Search 的 limit 影响：调用方按
+// limit 取前面的结果时，报数用它才不失真。查询无有效词元时为 0。
+func (ix *Index) Count(ctx context.Context, query string) (int, error) {
+	expr := MatchOf(query)
+	if expr == "" {
+		return 0, ctx.Err()
+	}
+	var n int
+	err := ix.db.QueryRowContext(ctx,
+		`SELECT count(*) FROM docs_fts WHERE docs_fts MATCH ?`, expr).Scan(&n)
+	return n, err
 }

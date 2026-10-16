@@ -153,6 +153,13 @@ func runSearch(list []sessions.Session, query, path string) {
 		os.Exit(1)
 	}
 	defer ix.Close()
+	// 每次现建：打开既有落盘库也先整库重建。上一轮的行不在本轮范围里，
+	// 残留只会给出已失效的命中与「(无标题)」，索引是纯派生物，落盘只是
+	// 省内存，不省重建
+	if err := ix.Reset(); err != nil {
+		fmt.Fprintln(os.Stderr, "重建索引失败:", err)
+		os.Exit(1)
+	}
 
 	titles := map[string]string{}
 	var docs []search.Doc
@@ -194,11 +201,15 @@ func runSearch(list []sessions.Session, query, path string) {
 		fmt.Fprintln(os.Stderr, "检索失败:", err)
 		os.Exit(1)
 	}
-	if len(rs) == 0 {
+	total, err := ix.Count(context.Background(), query)
+	if err != nil {
+		total = len(rs) // 计数失败退回所见条数，不假装是全部
+	}
+	if total == 0 {
 		fmt.Println("没有命中。")
 		return
 	}
-	fmt.Printf("「%s」命中 %d 处，按相关度显示：\n\n", query, len(rs))
+	fmt.Printf("「%s」命中 %d 处，按相关度显示前 %d 条：\n\n", query, total, len(rs))
 	for _, r := range rs {
 		title := ""
 		if i := strings.LastIndex(r.Key, "#"); i >= 0 {
@@ -213,15 +224,18 @@ func runSearch(list []sessions.Session, query, path string) {
 
 // excerpt 从原文上切命中词附近的一段（前 36 / 后 120 rune，与
 // sessions 包的 Hit 同一尺度），越界侧以 … 示意截断。片段从原文上切，
-// 不从分词后的串上切——后者与渲染的原文对不上。
+// 不从分词后的串上切——后者与渲染的原文对不上。定位按 Segment 的
+// 词元而非查询原文的字面子串：分词契约里标点只是分隔符，查询
+// D:/Work 命中的原文可能写作 D:\Work，字面是找不到的；
+// 取找得到的词元里最长的作锚，避开单字词元的噪声。
 func excerpt(text, query string) string {
 	low := fold(text)
-	needle := sessions.NeedleOf(query)
 	at, n := -1, 0
-	for _, w := range strings.Fields(needle) {
-		if i := strings.Index(low, w); i >= 0 && (at < 0 || utf8.RuneCountInString(w) > n) {
-			at = len([]rune(low[:i]))
-			n = utf8.RuneCountInString(w)
+	for _, tok := range search.Segment(query) {
+		if i := strings.Index(low, tok); i >= 0 {
+			if n0 := utf8.RuneCountInString(tok); n0 > n {
+				at, n = len([]rune(low[:i])), n0
+			}
 		}
 	}
 	runes := []rune(text)

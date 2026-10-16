@@ -24,9 +24,16 @@ import (
 // 空白与标点，以空格连接后即可交给 FTS5（unicode61）原样收词。
 //
 // bigram 保住的是相邻关系：「远程连接」切成 远程/程连/连接，查询
-// 「远程连接」切出同样的词元序列，短语匹配即等价于子串匹配；代价
-// 是跨词元的 1 字查询（「连」对「连接」）不命中，与 Lucene
+// 「远程连接」切出同样的词元序列，同一 CJK 连续段内短语匹配即等价于
+// 子串匹配。两个边界处等价不成立，均为有意取舍：CJK 与拉丁字母之间
+// 不成跨界 bigram（「连接d」对 abc连接def 不命中，拉丁词元是整词
+// 匹配）；跨词元的 1 字查询（「连」对「连接」）不命中，与 Lucene
 // CJKAnalyzer 同一取舍。
+//
+// 已知限制：不做 NFC 归一。NFD 分解形的韩文（Jamo，macOS 导出的文本
+// 常见）与 NFC 文档的词元集合不相交，互相查不到；拉丁文由 unicode61
+// 去变音符号兜底，不受影响。中文为主的语料触发面窄，暂不为此引入
+// 归一化依赖。
 func Segment(text string) []string {
 	var toks []string
 	var word, cjk []rune
@@ -49,6 +56,14 @@ func Segment(text string) []string {
 		cjk = cjk[:0]
 	}
 	for _, r := range text {
+		// 全角字母/数字/标点折到半角（U+FF01–U+FF5E 减 0xFEE0，全角
+		// 空格折空格）：IME 在中文正文里打出的「端口８０８０」要能被
+		// 半角查询 8080 命中，而 unicode61 只去变音符号、不做宽度折叠
+		if r >= 0xFF01 && r <= 0xFF5E {
+			r -= 0xFEE0
+		} else if r == 0x3000 {
+			r = ' '
+		}
 		switch {
 		case isCJK(r):
 			flushWord()
