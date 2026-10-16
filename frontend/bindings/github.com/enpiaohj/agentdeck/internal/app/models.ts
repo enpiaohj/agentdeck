@@ -34,6 +34,80 @@ export class AgentView {
 }
 
 /**
+ * DiagRow 是一个 Agent 的能力诊断行。设计文档 §3/§11.3:能力由运行时
+ * 上报,UI 呈现证据、状态及验证时间——Found/Sessions/LastAt 即证据,
+ * 每次打开本页都是即时验证。
+ */
+export class DiagRow {
+    "agent": string;
+
+    /**
+     * 存储根是否发现(以扫描到会话为证)
+     */
+    "found": boolean;
+
+    /**
+     * 发现的会话数
+     */
+    "sessions": number;
+
+    /**
+     * 最近活动(RFC3339)
+     */
+    "last_at": string;
+
+    /**
+     * 能构造原生恢复命令
+     */
+    "resume": boolean;
+
+    /**
+     * 恢复能力说明
+     */
+    "resume_note": string;
+
+    /**
+     * local | wsl | gateway
+     */
+    "source": string;
+
+    /** Creates a new DiagRow instance. */
+    constructor($$source: Partial<DiagRow> = {}) {
+        if (!("agent" in $$source)) {
+            this["agent"] = "";
+        }
+        if (!("found" in $$source)) {
+            this["found"] = false;
+        }
+        if (!("sessions" in $$source)) {
+            this["sessions"] = 0;
+        }
+        if (!("last_at" in $$source)) {
+            this["last_at"] = "";
+        }
+        if (!("resume" in $$source)) {
+            this["resume"] = false;
+        }
+        if (!("resume_note" in $$source)) {
+            this["resume_note"] = "";
+        }
+        if (!("source" in $$source)) {
+            this["source"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DiagRow instance from a string or object.
+     */
+    static createFrom($$source: any = {}): DiagRow {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new DiagRow($$parsedSource as Partial<DiagRow>);
+    }
+}
+
+/**
  * Filter 是列表过滤条件。归档语义：Archived=false 看未归档（默认视图），
  * true 只看归档；归档只是标注过滤，源文件零改动。
  */
@@ -355,6 +429,16 @@ export class SessionView {
      * RFC3339
      */
     "last": string;
+
+    /**
+     * RFC3339;零值空串
+     */
+    "created": string;
+
+    /**
+     * 会话源文件路径(详情「源路径」,只读展示)
+     */
+    "source_path": string;
     "messages": number;
     "resume": string;
     "transcript": boolean;
@@ -394,6 +478,12 @@ export class SessionView {
         }
         if (!("last" in $$source)) {
             this["last"] = "";
+        }
+        if (!("created" in $$source)) {
+            this["created"] = "";
+        }
+        if (!("source_path" in $$source)) {
+            this["source_path"] = "";
         }
         if (!("messages" in $$source)) {
             this["messages"] = 0;
@@ -439,10 +529,10 @@ export class SessionView {
      * Creates a new SessionView instance from a string or object.
      */
     static createFrom($$source: any = {}): SessionView {
-        const $$createField16_0 = $$createType0;
+        const $$createField18_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tags" in $$parsedSource) {
-            $$parsedSource["tags"] = $$createField16_0($$parsedSource["tags"]);
+            $$parsedSource["tags"] = $$createField18_0($$parsedSource["tags"]);
         }
         return new SessionView($$parsedSource as Partial<SessionView>);
     }

@@ -24,6 +24,15 @@ export function Agents(): $CancellablePromise<$models.AgentView[]> {
 }
 
 /**
+ * Diagnostics 逐 Agent 汇报发现与恢复能力(即时验证,非缓存表)。
+ */
+export function Diagnostics(): $CancellablePromise<$models.DiagRow[]> {
+    return $Call.ByID(4237459432).then(($result: any) => {
+        return $$createType3($result);
+    });
+}
+
+/**
  * ExportMarkdown 把会话导出为 Markdown 文件，写到 destDir 目录，返回
  * 文件全路径。这是桌面端唯一一处写用户盘（导出目录由前端对话框传入）。
  */
@@ -36,8 +45,15 @@ export function ExportMarkdown(key: string, destDir: string): $CancellablePromis
  */
 export function Get(key: string): $CancellablePromise<$models.SessionView | null> {
     return $Call.ByID(2633753760, key).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType5($result);
     });
+}
+
+/**
+ * LastCrashed 上次进程是否未正常退出(前端启动横幅)。
+ */
+export function LastCrashed(): $CancellablePromise<boolean> {
+    return $Call.ByID(2942518222);
 }
 
 /**
@@ -45,7 +61,7 @@ export function Get(key: string): $CancellablePromise<$models.SessionView | null
  */
 export function List(f: $models.Filter): $CancellablePromise<$models.SessionView[]> {
     return $Call.ByID(2411886668, f).then(($result: any) => {
-        return $$createType4($result);
+        return $$createType6($result);
     });
 }
 
@@ -54,7 +70,7 @@ export function List(f: $models.Filter): $CancellablePromise<$models.SessionView
  */
 export function Projects(): $CancellablePromise<$models.ProjectView[]> {
     return $Call.ByID(2744492366).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType8($result);
     });
 }
 
@@ -63,7 +79,7 @@ export function Projects(): $CancellablePromise<$models.ProjectView[]> {
  */
 export function ScanProgress(): $CancellablePromise<$models.ScanProgress> {
     return $Call.ByID(2378428406).then(($result: any) => {
-        return $$createType7($result);
+        return $$createType9($result);
     });
 }
 
@@ -72,7 +88,7 @@ export function ScanProgress(): $CancellablePromise<$models.ScanProgress> {
  */
 export function SearchIn(key: string, needle: string): $CancellablePromise<$models.SearchHitView | null> {
     return $Call.ByID(2754701431, key, needle).then(($result: any) => {
-        return $$createType9($result);
+        return $$createType11($result);
     });
 }
 
@@ -81,20 +97,22 @@ export function SearchIn(key: string, needle: string): $CancellablePromise<$mode
  */
 export function Transcript(key: string): $CancellablePromise<$models.TranscriptView | null> {
     return $Call.ByID(4281957278, key).then(($result: any) => {
-        return $$createType11($result);
+        return $$createType13($result);
     });
 }
 
 // Private type creation functions
 const $$createType0 = $models.AgentView.createFrom;
 const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = $models.SessionView.createFrom;
-const $$createType3 = $Create.Nullable($$createType2);
-const $$createType4 = $Create.Array($$createType2);
-const $$createType5 = $models.ProjectView.createFrom;
-const $$createType6 = $Create.Array($$createType5);
-const $$createType7 = $models.ScanProgress.createFrom;
-const $$createType8 = $models.SearchHitView.createFrom;
-const $$createType9 = $Create.Nullable($$createType8);
-const $$createType10 = $models.TranscriptView.createFrom;
+const $$createType2 = $models.DiagRow.createFrom;
+const $$createType3 = $Create.Array($$createType2);
+const $$createType4 = $models.SessionView.createFrom;
+const $$createType5 = $Create.Nullable($$createType4);
+const $$createType6 = $Create.Array($$createType4);
+const $$createType7 = $models.ProjectView.createFrom;
+const $$createType8 = $Create.Array($$createType7);
+const $$createType9 = $models.ScanProgress.createFrom;
+const $$createType10 = $models.SearchHitView.createFrom;
 const $$createType11 = $Create.Nullable($$createType10);
+const $$createType12 = $models.TranscriptView.createFrom;
+const $$createType13 = $Create.Nullable($$createType12);

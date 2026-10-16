@@ -40,8 +40,9 @@ type Mark struct {
 // Store 是 marks.db 的句柄。service 层的调用来自 Wails 的多个 goroutine，
 // 写操作经 mu 串行；读走 database/sql 连接池。
 type Store struct {
-	db *sql.DB
-	mu sync.Mutex
+	db   *sql.DB
+	path string
+	mu   sync.Mutex
 }
 
 // schema 是本包的表结构。演进只加列不改列，user_version 从 1 起。
@@ -95,12 +96,50 @@ func Open(path string) (*Store, error) {
 			return nil, err
 		}
 	}
-	return &Store{db: db}, nil
+	return &Store{db: db, path: path}, nil
 }
 
 // Close 关闭底层库。
 func (s *Store) Close() error {
 	return s.db.Close()
+}
+
+// Path 返回库文件路径(恢复流程重建句柄用)。
+func (s *Store) Path() string { return s.path }
+
+// BackupTo 用 VACUUM INTO 做在线一致性备份:连接内原子完成,不复制
+// 正在写入的库文件(F09)。目标已存在时报错,不覆盖已有备份。
+func (s *Store) BackupTo(dest string) error {
+	if fi, err := os.Stat(dest); err == nil && !fi.IsDir() {
+		return fmt.Errorf("备份目标已存在,不覆盖: %s", dest)
+	}
+	_, err := s.db.Exec(`VACUUM INTO ?`, dest)
+	return err
+}
+
+// Validate 校验 path 是合法的 AgentDeck 标注库(user_version=1 且
+// marks 表存在),恢复前检查用。
+func Validate(path string) error {
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	var v int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil {
+		return err
+	}
+	if v != 1 {
+		return fmt.Errorf("schema 版本 %d 不是本程序标注库(期望 1)", v)
+	}
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='marks'`).Scan(&n); err != nil {
+		return err
+	}
+	if n != 1 {
+		return fmt.Errorf("缺少 marks 表,不是本程序标注库")
+	}
+	return nil
 }
 
 // Get 读一个会话的标注；没有记录时返回零值 Mark（Tags 为 nil）而非错误。

@@ -14,6 +14,7 @@ export {
 
 export {
     AgentView,
+    DiagRow,
     Filter,
     IndexStatus,
     Mark,

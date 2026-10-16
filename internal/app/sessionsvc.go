@@ -203,13 +203,15 @@ func view(s sessions.Session, key string, m marks.Mark, msgs map[string]int, msg
 		source = "wsl"
 	}
 	return SessionView{
-		Key:     key,
-		Agent:   s.Agent,
-		ID:      s.ID,
-		Cwd:     s.Cwd,
-		Project: projects.DisplayName(projects.Normalize(s.Cwd)),
-		Title:   s.Title,
-		Last:    lastString(s.Last),
+		Key:        key,
+		Agent:      s.Agent,
+		ID:         s.ID,
+		Cwd:        s.Cwd,
+		Project:    projects.DisplayName(projects.Normalize(s.Cwd)),
+		Title:      s.Title,
+		Last:       lastString(s.Last),
+		Created:    lastString(s.Start),
+		SourcePath: s.Path,
 		Messages: func() int {
 			if msgReady {
 				return msgs[key]

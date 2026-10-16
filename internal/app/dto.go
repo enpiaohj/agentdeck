@@ -13,7 +13,9 @@ type SessionView struct {
 	Cwd        string   `json:"cwd"`
 	Project    string   `json:"project"` // 归一化后的项目展示名
 	Title      string   `json:"title"`
-	Last       string   `json:"last"` // RFC3339
+	Last       string   `json:"last"`        // RFC3339
+	Created    string   `json:"created"`     // RFC3339;零值空串
+	SourcePath string   `json:"source_path"` // 会话源文件路径(详情「源路径」,只读展示)
 	Messages   int      `json:"messages"`
 	Resume     string   `json:"resume"`
 	Transcript bool     `json:"transcript"`

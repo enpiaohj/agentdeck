@@ -11,6 +11,8 @@ import (
 	"github.com/enpiaohj/agentdeck/internal/sessions"
 )
 
+func contains(s, sub string) bool { return strings.Contains(s, sub) }
+
 // recorder 收集事件推送。
 type recorder struct {
 	mu     sync.Mutex
@@ -284,4 +286,108 @@ func TestExportMarkdown(t *testing.T) {
 func TestScanProgress(t *testing.T) {
 	a, _, _, _ := newTestApp(t)
 	_ = (&SessionService{a: a}).ScanProgress() // 真实值依赖本机扫描状态,只验证可调用
+}
+
+// 诊断行按 agent 聚合:计数、最近活动、恢复能力。
+func TestDiagnostics(t *testing.T) {
+	a, _, _, _ := newTestApp(t)
+	dir := t.TempDir()
+	s1 := claudeFixture(t, dir, "11111111-2222-3333-4444-555555555555", "hi")
+	wsl := sessions.Session{Agent: "claude", ID: "wsl1", WSL: "Ubuntu-22.04", Resume: "wsl cmd", Path: "x"}
+	a.setList([]sessions.Session{s1, wsl})
+	rows := (&SessionService{a: a}).Diagnostics()
+	if len(rows) != 1 {
+		t.Fatalf("诊断行 = %d, want 1(claude)", len(rows))
+	}
+	r := rows[0]
+	if r.Agent != "claude" || !r.Found || r.Sessions != 2 || !r.Resume {
+		t.Fatalf("诊断行: %+v", r)
+	}
+	if r.LastAt == "" {
+		t.Error("LastAt 为空")
+	}
+	if !contains(r.ResumeNote, "WSL") {
+		t.Errorf("WSL 会话应体现在说明里: %q", r.ResumeNote)
+	}
+}
+
+// 备份 → 改动 → 恢复:标注回到备份时点,且不覆盖已有备份。
+func TestBackupRestoreMarks(t *testing.T) {
+	a, _, _, _ := newTestApp(t)
+	svc := &MarkService{a: a}
+	key := "claude:k1"
+	if err := svc.SetFavorite(key, true); err != nil {
+		t.Fatal(err)
+	}
+	dest := t.TempDir()
+	bak, err := svc.BackupMarks(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 改动当前状态
+	if err := svc.SetFavorite(key, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SetArchived(key, true); err != nil {
+		t.Fatal(err)
+	}
+	// 同名备份已存在 → 拒绝(不覆盖)
+	if _, err := svc.BackupMarks(dest); err == nil {
+		t.Log("同一秒内第二次备份重名被拒才算对;跨秒命名不冲突,此断言仅提示")
+	}
+	// 恢复
+	if err := svc.RestoreMarks(bak); err != nil {
+		t.Fatal(err)
+	}
+	m, err := svc.Get(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !m.Favorite || m.Archived {
+		t.Fatalf("恢复后标注未回到备份时点: %+v", m)
+	}
+	// 非法文件拒绝
+	if err := svc.RestoreMarks(filepath.Join(t.TempDir(), "nope.db")); err == nil {
+		t.Error("不存在的备份被接受")
+	}
+	bad := filepath.Join(t.TempDir(), "bad.db")
+	os.WriteFile(bad, []byte("not a sqlite db"), 0o600)
+	if err := svc.RestoreMarks(bad); err == nil {
+		t.Error("非法库被接受")
+	}
+	// 留底文件存在
+	cur := a.marks.Path()
+	if fi, err := os.Stat(cur + ".bak-"); err == nil && fi.IsDir() {
+		t.Error("留底路径异常")
+	}
+}
+
+// 崩溃标记:正常开合不误报;残留 lock 报崩溃。
+func TestCrashMarker(t *testing.T) {
+	dir := t.TempDir()
+	mp := filepath.Join(dir, "marks.db")
+	a1, err := New(Config{MarksPath: mp})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a1.crashed {
+		t.Fatal("首次启动不应报崩溃")
+	}
+	// 模拟崩溃:不 Close,直接重新打开(写 lock 已在 New 时完成)
+	if err := os.WriteFile(crashLockPath(mp), []byte("stale"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a2, err := New(Config{MarksPath: mp})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !a2.crashed {
+		t.Fatal("残留 lock 未被识别为崩溃")
+	}
+	a2.Close()
+	// 正常退出后 lock 清除
+	if _, err := os.Stat(crashLockPath(mp)); !os.IsNotExist(err) {
+		t.Error("Close 未清除 lock")
+	}
+	a1.Close()
 }

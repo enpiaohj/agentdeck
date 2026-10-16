@@ -45,6 +45,7 @@ type App struct {
 	messages map[string]int        // agent:id → 消息数，后台补齐
 	msgReady bool
 	loaded   bool
+	crashed  bool // 上次进程未正常退出(启动时检测残留 lock)
 
 	warmOnce sync.Once
 	search   *searchState
@@ -70,7 +71,7 @@ func New(cfg Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	a := &App{cfg: cfg, marks: m, search: newSearchState(cfg.IndexPath)}
+	a := &App{cfg: cfg, marks: m, search: newSearchState(cfg.IndexPath), crashed: checkCrash(cfg.MarksPath)}
 	return a, nil
 }
 
@@ -88,10 +89,11 @@ func indexDefaultPath() (string, error) {
 	return filepath.Join(dir, "index.db"), nil
 }
 
-// Close 关闭标注库与索引库。
+// Close 关闭标注库与索引库,并清除崩溃标记(正常退出)。
 func (a *App) Close() {
 	a.search.close()
 	a.marks.Close()
+	clearCrash(a.cfg.MarksPath)
 }
 
 // 服务构造器:cmd 装配用(字段未导出,强制经此创建)。

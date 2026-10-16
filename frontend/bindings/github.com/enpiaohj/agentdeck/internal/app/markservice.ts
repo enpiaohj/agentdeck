@@ -16,12 +16,29 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 import * as $models from "./models.js";
 
 /**
+ * BackupMarks 把标注库在线备份到 destDir(VACUUM INTO 一致性快照),
+ * 返回备份文件全路径。目标已存在同名文件时报错,不覆盖已有备份。
+ */
+export function BackupMarks(destDir: string): $CancellablePromise<string> {
+    return $Call.ByID(770649241, destDir);
+}
+
+/**
  * Get 单个会话的标注。
  */
 export function Get(key: string): $CancellablePromise<$models.Mark> {
     return $Call.ByID(421388745, key).then(($result: any) => {
         return $$createType0($result);
     });
+}
+
+/**
+ * RestoreMarks 从备份文件恢复标注库:校验 schema → 关闭当前库 →
+ * 现库自动备份为 .bak → 覆盖 → 重开 → 刷新缓存并广播。失败时保留
+ * 现库不动(先校验后动手,半途失败不破坏当前数据,对齐 TC-11)。
+ */
+export function RestoreMarks(src: string): $CancellablePromise<void> {
+    return $Call.ByID(1810022883, src);
 }
 
 export function SetArchived(key: string, v: boolean): $CancellablePromise<void> {
