@@ -8,6 +8,8 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -48,7 +50,7 @@ type App struct {
 	search   *searchState
 }
 
-// New 打开标注库并返回装配根。索引不在此建——Rebuild 触发后台构建。
+// New 打开标注库并返回装配根。索引不在此建——Rebuild 触发后台重建。
 func New(cfg Config) (*App, error) {
 	if cfg.MarksPath == "" {
 		p, err := marks.DefaultPath()
@@ -57,12 +59,33 @@ func New(cfg Config) (*App, error) {
 		}
 		cfg.MarksPath = p
 	}
+	if cfg.IndexPath == "" {
+		p, err := indexDefaultPath()
+		if err != nil {
+			return nil, err
+		}
+		cfg.IndexPath = p
+	}
 	m, err := marks.Open(cfg.MarksPath)
 	if err != nil {
 		return nil, err
 	}
 	a := &App{cfg: cfg, marks: m, search: newSearchState(cfg.IndexPath)}
 	return a, nil
+}
+
+// indexDefaultPath 是索引库的默认落盘位置:%LOCALAPPDATA%\AgentDeck\
+// index.db(缓存性质的用户数据,Local 而非 Roaming)。
+func indexDefaultPath() (string, error) {
+	base, err := os.UserCacheDir() // Windows 上即 %LOCALAPPDATA%
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(base, "AgentDeck")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "index.db"), nil
 }
 
 // Close 关闭标注库与索引库。
