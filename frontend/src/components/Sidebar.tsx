@@ -13,7 +13,7 @@ import {
   StarRegular,
 } from '@fluentui/react-icons'
 import { useEffect, useState } from 'react'
-import type { AgentView, IndexStatus } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
+import type { AgentView, IndexStatus, ProjectView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import { useIndexStatus } from '../hooks/useIndexStatus'
 import { agentLabel } from '../util'
@@ -22,6 +22,7 @@ export type SidebarFilter = {
   agent?: string
   favorites?: boolean
   archived?: boolean
+  project?: string // 归一化项目路径,选中后列表按项目过滤
 }
 
 const useStyles = makeStyles({
@@ -53,6 +54,13 @@ const useStyles = makeStyles({
   count: { marginLeft: 'auto', color: tokens.colorNeutralForeground3, fontSize: '12px' },
   spacer: { flex: 1 },
   status: { padding: '10px 12px', fontSize: '12px', color: tokens.colorNeutralForeground3 },
+  sectionTitle: {
+    padding: '10px 12px 4px',
+    fontSize: '11px',
+    fontWeight: 600,
+    color: tokens.colorNeutralForeground3,
+  },
+  projectScroll: { flex: 1, overflowY: 'auto', minHeight: 0 },
 })
 
 type Props = {
@@ -62,11 +70,12 @@ type Props = {
   onFilter: (f: SidebarFilter) => void
 }
 
-function isAll(f: SidebarFilter) { return !f.agent && !f.favorites && !f.archived }
+function isAll(f: SidebarFilter) { return !f.agent && !f.favorites && !f.archived && !f.project }
 
 export function Sidebar({ collapsed, onToggle, filter, onFilter }: Props) {
   const styles = useStyles()
   const agents = useAgents()
+  const projects = useProjects()
   const status = useIndexStatus()
 
   const pick = (f: SidebarFilter) => () => onFilter(f)
@@ -122,6 +131,23 @@ export function Sidebar({ collapsed, onToggle, filter, onFilter }: Props) {
           <span className={styles.count}>{a.count}</span>
         </button>
       ))}
+      <div className={styles.sectionTitle}>项目(按会话数)</div>
+      <div className={styles.projectScroll}>
+        {projects.map((p) => (
+          <button
+            key={p.path}
+            className={`${styles.item} ${filter.project === p.path ? styles.itemActive : ''}`}
+            onClick={pick({ project: p.path })}
+            title={`${p.path}(${p.favorites} 收藏)`}
+          >
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {p.drive ? `${p.drive} ` : ''}{p.name}
+            </span>
+            <span className={styles.count}>{p.count}</span>
+          </button>
+        ))}
+        {projects.length === 0 ? <div className={styles.status}>暂无项目</div> : null}
+      </div>
       <div className={styles.spacer} />
       <div className={styles.status}>
         <IndexBadge status={status} />
@@ -155,4 +181,13 @@ function useAgents(): AgentView[] {
     sessionService.Agents().then(setAgents).catch(() => {})
   }, [])
   return agents
+}
+
+// 项目聚合(按会话数排序,来自后端 Projects())。
+function useProjects(): ProjectView[] {
+  const [ps, setPs] = useState<ProjectView[]>([])
+  useEffect(() => {
+    sessionService.Projects().then(setPs).catch(() => {})
+  }, [])
+  return ps
 }

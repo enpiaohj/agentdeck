@@ -153,7 +153,7 @@ function useRows(filter: SidebarFilter, listVersion?: number): RowsState {
         agent: filter.agent ?? '',
         favorites: filter.favorites ?? false,
         archived: filter.archived ?? false,
-        project: '',
+        project: filter.project ?? '',
         tag: '',
         search: '',
       })
