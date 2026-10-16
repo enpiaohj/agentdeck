@@ -1,4 +1,11 @@
 // 时间与徽标的展示辅助。
+export function fmtTime(rfc3339: string): string {
+  if (!rfc3339) return '时间未知'
+  const t = new Date(rfc3339)
+  if (isNaN(t.getTime())) return '时间未知'
+  return t.toLocaleString('zh-CN')
+}
+
 export function relTime(rfc3339: string): string {
   if (!rfc3339) return '时间未知'
   const t = new Date(rfc3339)

@@ -1,14 +1,21 @@
-// 中栏:会话列表。按 Sidebar 过滤条件加载,点击选中进详情。
-// 行内操作:收藏星切换;归档视图内「恢复」;消息数补齐后自动重拉。
+// 中栏:会话列表。按 Sidebar 过滤条件加载;按日分组(今天/昨天/本周/更早);
+// 行内收藏切换;多选后浮动操作条(批量收藏/归档,均为可逆操作)。
 import {
   makeStyles,
   tokens,
   Text,
   Spinner,
   Button,
+  Checkbox,
 } from '@fluentui/react-components'
-import { StarFilled, StarRegular, ArchiveArrowBackRegular } from '@fluentui/react-icons'
-import { useCallback, useEffect, useState } from 'react'
+import {
+  StarFilled,
+  StarRegular,
+  ArchiveRegular,
+  ArchiveArrowBackRegular,
+  CheckmarkCircleRegular,
+} from '@fluentui/react-icons'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Events } from '@wailsio/runtime'
 import type { SessionView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
@@ -17,11 +24,21 @@ import { agentLabel, relTime } from '../util'
 import type { SidebarFilter } from './Sidebar'
 
 const useStyles = makeStyles({
-  wrap: { height: '100%', display: 'flex', flexDirection: 'column' },
-  rows: { flex: 1, overflowY: 'auto', overflowX: 'hidden' },
+  wrap: { height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' },
+  rows: { flex: 1, overflowY: 'auto', overflowX: 'hidden', paddingBottom: '56px' },
+  groupTitle: {
+    padding: '10px 14px 4px',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: tokens.colorNeutralForeground3,
+    position: 'sticky',
+    top: 0,
+    backgroundColor: tokens.colorNeutralBackground1,
+    zIndex: 1,
+  },
   row: {
     display: 'flex',
-    flexDirection: 'column',
+    alignItems: 'flex-start',
     gap: '4px',
     padding: '10px 14px',
     borderBottom: `1px solid ${tokens.colorNeutralStroke3}`,
@@ -29,6 +46,7 @@ const useStyles = makeStyles({
     ':hover': { backgroundColor: tokens.colorNeutralBackground1Hover },
   },
   rowActive: { backgroundColor: tokens.colorNeutralBackground2 },
+  rowBody: { display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0 },
   titleLine: { display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 },
   title: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 },
   starBtn: {
@@ -37,7 +55,7 @@ const useStyles = makeStyles({
     flexShrink: 0,
   },
   starOn: { color: tokens.colorStatusWarningForeground3 },
-  meta: { display: 'flex', gap: '10px', fontSize: '12px', color: tokens.colorNeutralForeground3 },
+  meta: { display: 'flex', gap: '10px', fontSize: '12px', color: tokens.colorNeutralForeground3, flexWrap: 'wrap' },
   agentTag: {
     fontSize: '11px',
     padding: '1px 6px',
@@ -46,7 +64,36 @@ const useStyles = makeStyles({
     color: tokens.colorBrandForeground2,
     flexShrink: 0,
   },
+  tagChip: {
+    fontSize: '11px',
+    padding: '1px 6px',
+    borderRadius: '4px',
+    backgroundColor: tokens.colorNeutralBackground4,
+    color: tokens.colorNeutralForeground2,
+  },
+  sourceTag: {
+    fontSize: '11px',
+    padding: '1px 6px',
+    borderRadius: '4px',
+    backgroundColor: tokens.colorPalettePurpleBackground2,
+    color: tokens.colorPalettePurpleForeground2,
+    flexShrink: 0,
+  },
   center: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '8px' },
+  bulkBar: {
+    position: 'absolute',
+    bottom: '12px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 14px',
+    borderRadius: '8px',
+    backgroundColor: tokens.colorNeutralBackground3,
+    boxShadow: tokens.shadow8,
+    zIndex: 10,
+  },
 })
 
 type Props = {
@@ -56,9 +103,27 @@ type Props = {
   listVersion?: number // 详情页标注变化后 +1,触发重拉
 }
 
+// 按日分组的标题(概念图:今天/昨天/…)。
+function dayGroup(rfc3339: string): string {
+  if (!rfc3339) return '时间未知'
+  const t = new Date(rfc3339)
+  if (isNaN(t.getTime())) return '时间未知'
+  const now = new Date()
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const days = Math.floor((midnight - new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime()) / 86400000)
+  if (days <= 0) return '今天'
+  if (days === 1) return '昨天'
+  if (days < 7) return '本周'
+  if (days < 30) return '本月'
+  return '更早'
+}
+const GROUP_ORDER = ['今天', '昨天', '本周', '本月', '更早', '时间未知']
+
 export function SessionList({ filter, selectedKey, onSelect, listVersion }: Props) {
   const styles = useStyles()
   const { rows, loading, error, reload } = useRows(filter, listVersion)
+  const [checked, setChecked] = useState<Set<string>>(new Set())
+  const [busy, setBusy] = useState(false)
 
   const toggleStar = (s: SessionView) => (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -69,6 +134,29 @@ export function SessionList({ filter, selectedKey, onSelect, listVersion }: Prop
     e.stopPropagation()
     markService.SetArchived(s.key, false).then(reload).catch(() => {})
   }
+
+  // 批量操作:逐个调用后端(均为可逆动作,完成后清选并重拉)。
+  const bulk = (op: (key: string) => Promise<void>) => async () => {
+    if (checked.size === 0 || busy) return
+    setBusy(true)
+    try {
+      for (const key of checked) await op(key)
+    } finally {
+      setBusy(false)
+      setChecked(new Set())
+      reload()
+    }
+  }
+
+  const groups = useMemo(() => {
+    const g = new Map<string, SessionView[]>()
+    for (const s of rows) {
+      const d = dayGroup(s.last)
+      if (!g.has(d)) g.set(d, [])
+      g.get(d)!.push(s)
+    }
+    return GROUP_ORDER.filter((k) => g.has(k)).map((k) => [k, g.get(k)!] as const)
+  }, [rows])
 
   if (error) {
     return (
@@ -83,7 +171,7 @@ export function SessionList({ filter, selectedKey, onSelect, listVersion }: Prop
     return (
       <div className={styles.wrap}>
         <div className={styles.center}>
-          <Spinner size="small" />
+          <Spinner size="tiny" />
           <Text size={300}>正在扫描本机会话…</Text>
         </div>
       </div>
@@ -94,12 +182,12 @@ export function SessionList({ filter, selectedKey, onSelect, listVersion }: Prop
       <div className={styles.wrap}>
         <div className={styles.center}>
           <Text size={400} weight="semibold">
-            {filter.archived ? '没有归档的会话' : '这里还没有会话'}
+            {filter.archived ? '没有归档的会话' : filter.favorites ? '还没有收藏的会话' : '这里还没有会话'}
           </Text>
           <Text size={300} style={{ color: tokens.colorNeutralForeground3 }}>
             {filter.archived
               ? '在会话详情中选择「归档」,即可从这里找到并恢复'
-              : '支持的 Agent 产生会话后,重启应用即可看到'}
+              : '支持的 Agent 产生会话后,点顶部刷新即可看到'}
           </Text>
         </div>
       </div>
@@ -108,35 +196,78 @@ export function SessionList({ filter, selectedKey, onSelect, listVersion }: Prop
   return (
     <div className={styles.wrap}>
       <div className={styles.rows}>
-        {rows.map((s) => (
-          <div
-            key={s.key}
-            className={`${styles.row} ${selectedKey === s.key ? styles.rowActive : ''}`}
-            onClick={() => onSelect(s)}
-          >
-            <div className={styles.titleLine}>
-              <span className={styles.agentTag}>{agentLabel(s.agent)}</span>
-              <Text className={styles.title} size={300}>{s.title || '(无标题)'}</Text>
-              <button
-                className={`${styles.starBtn} ${s.favorite ? styles.starOn : ''}`}
-                onClick={toggleStar(s)}
-                title={s.favorite ? '取消收藏' : '收藏'}
+        {groups.map(([day, list]) => (
+          <div key={day}>
+            <div className={styles.groupTitle}>{day}({list.length})</div>
+            {list.map((s) => (
+              <div
+                key={s.key}
+                className={`${styles.row} ${selectedKey === s.key ? styles.rowActive : ''}`}
+                onClick={() => onSelect(s)}
               >
-                {s.favorite ? <StarFilled fontSize={14} /> : <StarRegular fontSize={14} />}
-              </button>
-            </div>
-            <div className={styles.meta}>
-              <span>{relTime(s.last)}</span>
-              <span>{s.messages} 条消息</span>
-              <span>{s.project || '项目未知'}</span>
-              {!s.resume ? <span style={{ color: tokens.colorPaletteYellowForeground1 }}>仅可查看历史</span> : null}
-              {filter.archived ? (
-                <Button size="small" icon={<ArchiveArrowBackRegular />} onClick={unarchive(s)}>恢复</Button>
-              ) : null}
-            </div>
+                <Checkbox
+                  checked={checked.has(s.key)}
+                  onChange={(_e, d) => {
+                    const k = s.key
+                    setChecked((prev) => {
+                      const n = new Set(prev)
+                      if (d.checked) n.add(k)
+                      else n.delete(k)
+                      return n
+                    })
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={`选择会话 ${s.title}`}
+                />
+                <div className={styles.rowBody}>
+                  <div className={styles.titleLine}>
+                    <span className={styles.agentTag}>{agentLabel(s.agent)}</span>
+                    {s.source === 'wsl' ? <span className={styles.sourceTag}>WSL</span> : null}
+                    {s.source === 'gateway' ? <span className={styles.sourceTag}>网关</span> : null}
+                    <Text className={styles.title} size={300}>{s.title || '(无标题)'}</Text>
+                    <button
+                      className={`${styles.starBtn} ${s.favorite ? styles.starOn : ''}`}
+                      onClick={toggleStar(s)}
+                      title={s.favorite ? '取消收藏' : '收藏'}
+                    >
+                      {s.favorite ? <StarFilled fontSize={14} /> : <StarRegular fontSize={14} />}
+                    </button>
+                  </div>
+                  <div className={styles.meta}>
+                    <span>{relTime(s.last)}</span>
+                    <span>{s.messages} 条消息</span>
+                    <span>{s.project || '项目未知'}</span>
+                    {s.tags.map((t) => <span key={t} className={styles.tagChip}>{t}</span>)}
+                    {!s.resume ? <span style={{ color: tokens.colorPaletteYellowForeground1 }}>仅可查看历史</span> : null}
+                    {filter.archived ? (
+                      <Button size="small" icon={<ArchiveArrowBackRegular />} onClick={unarchive(s)}>恢复</Button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         ))}
       </div>
+      {checked.size > 0 ? (
+        <div className={styles.bulkBar}>
+          <CheckmarkCircleRegular />
+          <Text size={300}>已选 {checked.size} 项</Text>
+          <Button
+            size="small"
+            icon={<StarRegular />}
+            disabled={busy}
+            onClick={bulk((k) => markService.SetFavorite(k, true))}
+          >收藏</Button>
+          <Button
+            size="small"
+            icon={<ArchiveRegular />}
+            disabled={busy}
+            onClick={bulk((k) => markService.SetArchived(k, true))}
+          >归档</Button>
+          <Button size="small" disabled={busy} onClick={() => setChecked(new Set())}>取消</Button>
+        </div>
+      ) : null}
     </div>
   )
 }

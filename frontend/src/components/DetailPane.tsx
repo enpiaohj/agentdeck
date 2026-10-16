@@ -6,6 +6,8 @@ import {
   Button,
   Spinner,
   Input,
+  Textarea,
+  Tooltip,
 } from '@fluentui/react-components'
 import {
   DismissRegular,
@@ -22,7 +24,7 @@ import type { SessionView, TranscriptView } from '../../bindings/github.com/enpi
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import * as resumeService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/resumeservice'
 import * as markService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/markservice'
-import { agentLabel, relTime } from '../util'
+import { agentLabel, fmtTime, relTime } from '../util'
 
 const useStyles = makeStyles({
   wrap: { height: '100%', width: '480px', display: 'flex', flexDirection: 'column', backgroundColor: tokens.colorNeutralBackground1 },
@@ -36,7 +38,13 @@ const useStyles = makeStyles({
   headTop: { display: 'flex', alignItems: 'flex-start', gap: '8px' },
   title: { flex: 1, minWidth: 0, overflowWrap: 'anywhere' },
   metaGrid: { display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '2px 10px', fontSize: '12px', color: tokens.colorNeutralForeground3 },
-  actions: { display: 'flex', gap: '8px', marginTop: '4px' },
+  noteBox: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    marginTop: '4px',
+  },
+  actions: { display: 'flex', gap: '8px', marginTop: '4px', flexWrap: 'wrap' },
   tagRow: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '2px' },
   tagChip: {
     display: 'inline-flex',
@@ -93,7 +101,12 @@ function Loaded({ session, onClose, onChanged }: { session: SessionView; onClose
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(false)
   const [tagDraft, setTagDraft] = useState('')
+  const [noteDraft, setNoteDraft] = useState(session.note)
   const [exportMsg, setExportMsg] = useState('')
+
+  const saveNote = () => {
+    markService.SetNote(session.key, noteDraft).then(onChanged).catch(() => {})
+  }
 
   const exportMd = () => {
     Dialogs.OpenFile({
@@ -159,11 +172,14 @@ function Loaded({ session, onClose, onChanged }: { session: SessionView; onClose
           <Button appearance="subtle" icon={<DismissRegular />} onClick={onClose} title="收起" />
         </div>
         <div className={styles.metaGrid}>
-          <span>Agent</span><span>{agentLabel(session.agent)}</span>
+          <span>Agent</span><span>{agentLabel(session.agent)}{session.source === 'wsl' ? '(WSL)' : ''}</span>
+          <span>会话标识</span><span style={{ overflowWrap: 'anywhere' }}>{session.key}</span>
+          <span>创建时间</span><span>{fmtTime(session.created)}</span>
           <span>最后活动</span><span>{relTime(session.last)}</span>
           <span>消息数</span><span>{session.messages}</span>
           <span>项目</span><span>{session.project || '项目未知'}</span>
           {session.cwd ? (<><span>工作目录</span><span style={{ overflowWrap: 'anywhere' }}>{session.cwd}</span></>) : null}
+          {session.source_path ? (<><span>源路径</span><span style={{ overflowWrap: 'anywhere' }}>{session.source_path}</span></>) : null}
           {session.tokens > 0 ? (<><span>Token</span><span>{session.tokens.toLocaleString()}</span></>) : null}
         </div>
         <div className={styles.tagRow}>
@@ -183,6 +199,19 @@ function Loaded({ session, onClose, onChanged }: { session: SessionView; onClose
             style={{ width: 140 }}
           />
         </div>
+        <div className={styles.noteBox}>
+          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>备注</Text>
+          <Textarea
+            size="small"
+            placeholder="为这个会话记点什么(只存本机标注库)…"
+            value={noteDraft}
+            onChange={(_, d) => setNoteDraft(d.value)}
+            rows={noteDraft ? 3 : 1}
+          />
+          {noteDraft !== session.note ? (
+            <Button size="small" appearance="primary" onClick={saveNote}>保存备注</Button>
+          ) : null}
+        </div>
         <div className={styles.actions}>
           {session.resume ? (
             <>
@@ -201,6 +230,12 @@ function Loaded({ session, onClose, onChanged }: { session: SessionView; onClose
             {session.archived ? '取消归档' : '归档'}
           </Button>
           <Button size="small" onClick={exportMd} title="导出会话为 Markdown 文件">导出 Markdown</Button>
+          <Tooltip content="v1.1 提供,当前版本未实现" relationship="description">
+            <Button size="small" disabled>交接其他 Agent(v1.1)</Button>
+          </Tooltip>
+          <Tooltip content="v1.1 提供,当前版本未实现" relationship="description">
+            <Button size="small" disabled>生成摘要(v1.1)</Button>
+          </Tooltip>
         </div>
         {exportMsg ? <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{exportMsg}</Text> : null}
       </div>
