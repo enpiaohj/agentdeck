@@ -131,6 +131,24 @@ MSIX 实测不符，见前四份中的实测报告。
    换行符转换会一次改动 200+ 个文件，gofmt 也会整文件报差异。批量转换用
    二进制方式做，不要用 `sed`。
 
+10. **WebView2 会缓存 `index.html`，且 `assets/assets` 是只增目录**：改前端后
+    直接 `go build` 可能打包出「新 exe 跑旧页面」的假象（旧 js 仍在目录里可达）。
+    新增/删除前端文件后必须**先清空 `cmd/agentdeck-desktop/assets/assets`
+    再复制 `frontend/dist`**，已固化在 `frontend/scripts/rebuild.ps1`。
+
+11. **UI 自检截图必须满足两个条件**，否则看到的是假象：
+    - **DPI 感知**（`SetProcessDPIAware()`）：否则 `GetWindowRect` 返回虚拟化
+      坐标，截出来只有左上角一块，看着像「布局溢出」。
+    - **抢到前台**（`SetForegroundWindow` 前先发一次 ALT 键解除系统限制，
+      并轮询 `GetForegroundWindow` 确认）：否则抓到的是压在应用上的终端画面。
+    - GDI 位图是 **BGRA**，不换通道蓝色会显示成橙色。WebView2 走
+      DirectComposition，`PrintWindow` 抓不全，用屏幕 DC `BitBlt`。
+    工具：`frontend/scripts/rebuild.ps1`（构建+重启+截图）、`uishot.py`、
+    `crop.py`（放大局部比对）、`uiclick.py`（模拟点击）。
+
+12. **`go` / `gofmt` 不在默认 PATH**，工具链在 `C:\Program Files\Go\bin`。
+    PowerShell 里先 `$env:Path += ";C:\Program Files\Go\bin"` 再调用。
+
 ## 安全约定
 
 - 只读访问上游存储，绝不 `DELETE` / `UPDATE` / `INSERT` 上游数据库

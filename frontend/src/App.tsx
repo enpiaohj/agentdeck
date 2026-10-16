@@ -15,8 +15,13 @@ import {
   AppsFilled,
   DismissRegular,
   ChevronDoubleRightRegular,
+  SubtractRegular,
+  SquareRegular,
+  SquareMultipleRegular,
 } from '@fluentui/react-icons'
-import { useCallback, useEffect, useState } from 'react'
+import { Window } from '@wailsio/runtime'
+import { Events } from '@wailsio/runtime'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTheme } from './hooks/useTheme'
 import { Sidebar, type SidebarFilter } from './components/Sidebar'
 import { SessionList } from './components/SessionList'
@@ -37,9 +42,12 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorNeutralBackground1,
   },
   // 四栏:导航 | 会话列表 | 消息流(自适应)| 会话信息
+  // gridTemplateRows 必须显式 minmax(0,1fr):隐式行按内容定高,子列一旦
+  // 撑高就会把消息流底部操作条与信息面板底部操作区挤出视口。
   main: {
     display: 'grid',
     gridTemplateColumns: 'auto auto minmax(0, 1fr) auto',
+    gridTemplateRows: 'minmax(0, 1fr)',
     flex: 1,
     minHeight: 0,
     minWidth: 0,
@@ -54,21 +62,21 @@ const useStyles = makeStyles({
     borderBottom: `1px solid ${tokens.colorNeutralStroke3}`,
     minWidth: 0,
   },
-  brand: { display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 },
+  brand: { display: 'flex', alignItems: 'center', gap: '11px', flexShrink: 0 },
   brandMark: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '34px',
-    height: '34px',
-    ...shorthands.borderRadius('9px'),
+    width: '38px',
+    height: '38px',
+    ...shorthands.borderRadius('10px'),
     background: `linear-gradient(140deg, ${tokens.colorBrandBackground2}, ${tokens.colorBrandBackground})`,
     color: tokens.colorNeutralForegroundOnBrand,
     boxShadow: tokens.shadow4,
   },
-  brandText: { display: 'flex', flexDirection: 'column', lineHeight: 1.25 },
-  brandTitle: { fontSize: '16px', fontWeight: 700, letterSpacing: '-0.01em' },
-  brandSub: { fontSize: '11px', color: tokens.colorNeutralForeground3 },
+  brandText: { display: 'flex', flexDirection: 'column', lineHeight: 1.3 },
+  brandTitle: { fontSize: '19px', fontWeight: 700, letterSpacing: '-0.01em' },
+  brandSub: { fontSize: '12px', color: tokens.colorNeutralForeground2 },
   searchSlot: {
     flex: 1,
     minWidth: 0,
@@ -80,10 +88,10 @@ const useStyles = makeStyles({
     ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
     ...shorthands.borderRadius('10px'),
     backgroundColor: tokens.colorNeutralBackground1,
-    padding: '9px 14px',
+    padding: '10px 14px',
     cursor: 'text',
     color: tokens.colorNeutralForeground3,
-    fontSize: '13.5px',
+    fontSize: '14px',
     boxShadow: tokens.shadow2,
     ':hover': { ...shorthands.borderColor(tokens.colorNeutralStroke1Hover) },
   },
@@ -98,6 +106,38 @@ const useStyles = makeStyles({
     flexShrink: 0,
   },
   right: { display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 },
+  // 自绘窗口控制(无边框窗口;拖拽用 Wails v3 的 --wails-draggable 属性)
+  winControls: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+    marginLeft: '6px',
+    alignSelf: 'stretch',
+  },
+  winBtn: {
+    width: '34px',
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shorthands.borderRadius('4px'),
+    color: tokens.colorNeutralForeground2,
+    ':hover': { backgroundColor: tokens.colorNeutralBackground3Hover },
+  },
+  winBtnClose: {
+    width: '34px',
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shorthands.borderRadius('4px'),
+    color: tokens.colorNeutralForeground2,
+    ':hover': { backgroundColor: '#C42B1C', color: '#ffffff' },
+  },
   crashed: {
     display: 'flex',
     alignItems: 'center',
@@ -140,6 +180,40 @@ export function App() {
   const [view, setView] = useState<'sessions' | 'diagnostics'>('sessions')
   const [crashed, setCrashed] = useState(false)
   const [jumpPart, setJumpPart] = useState(-1)
+  const [maximised, setMaximised] = useState(false)
+
+  // 当前选中会话 key 的引用:事件回调里需要最新值,又不希望因 selected
+  // 每次更新而重订阅事件。
+  const selectedRef = useRef<string | null>(null)
+  selectedRef.current = selected?.key ?? null
+
+  // 选中会话的快照刷新。消息数由后台补齐(事件 sessions:messages)、收藏/
+  // 标签/备注由信息面板改动,两者都不走列表重载路径;不显式重取的话,
+  // 信息面板与消息流头部的数字会一直停在打开那一刻的旧值(消息数恒为 0)。
+  const refreshSelected = useCallback(() => {
+    const k = selectedRef.current
+    if (!k) return
+    sessionService.Get(k).then((v) => { if (v) setSelected(v) }).catch(() => {})
+  }, [])
+
+  useEffect(() => { refreshSelected() }, [refreshSelected, listVersion])
+
+  useEffect(() => {
+    const off = Events.On('sessions:messages', () => refreshSelected())
+    return () => { off() }
+  }, [refreshSelected])
+
+  // 无边框窗口:跟踪最大化状态以切换按钮图标
+  useEffect(() => {
+    Window.IsMaximised().then(setMaximised).catch(() => {})
+  }, [])
+
+  const toggleMaximise = async () => {
+    const isMax = await Window.IsMaximised().catch(() => false)
+    if (isMax) await Window.Restore().catch(() => {})
+    else await Window.Maximise().catch(() => {})
+    setMaximised(!isMax)
+  }
 
   useEffect(() => {
     sessionService.LastCrashed().then(setCrashed).catch(() => {})
@@ -181,7 +255,8 @@ export function App() {
   return (
     <FluentProvider theme={themeName === 'dark' ? webDarkTheme : webLightTheme}>
       <div className={styles.outer}>
-        <div className={styles.topbar}>
+        {/* 无边框窗口:顶栏整体为拖拽区,交互控件标 no-drag */}
+        <div className={styles.topbar} style={{ '--wails-draggable': 'drag' } as React.CSSProperties}>
           <div className={styles.brand}>
             <span className={styles.brandMark}><AppsFilled fontSize={19} /></span>
             <span className={styles.brandText}>
@@ -193,13 +268,14 @@ export function App() {
             className={styles.searchSlot}
             role="button"
             aria-label="搜索会话内容"
+            style={{ '--wails-draggable': 'no-drag' } as React.CSSProperties}
             onClick={() => { setView('sessions'); setPaletteOpen(true) }}
           >
             <SearchRegular fontSize={15} />
             <span className={styles.searchText}>搜索会话、内容、命令…</span>
             <span className={styles.kbd}>Ctrl K</span>
           </div>
-          <div className={styles.right}>
+          <div className={styles.right} style={{ '--wails-draggable': 'no-drag' } as React.CSSProperties}>
             <Tooltip content="重新扫描本机会话" relationship="description">
               <Button
                 appearance="primary"
@@ -214,6 +290,17 @@ export function App() {
                 onClick={() => setView(view === 'diagnostics' ? 'sessions' : 'diagnostics')}
               />
             </Tooltip>
+          </div>
+          <div className={styles.winControls} style={{ '--wails-draggable': 'no-drag' } as React.CSSProperties}>
+            <button className={styles.winBtn} onClick={() => Window.Minimise()} title="最小化" aria-label="最小化">
+              <SubtractRegular fontSize={13} />
+            </button>
+            <button className={styles.winBtn} onClick={() => void toggleMaximise()} title="最大化 / 还原" aria-label="最大化或还原">
+              {maximised ? <SquareMultipleRegular fontSize={13} /> : <SquareRegular fontSize={12} />}
+            </button>
+            <button className={styles.winBtnClose} onClick={() => Window.Close()} title="关闭" aria-label="关闭">
+              <DismissRegular fontSize={14} />
+            </button>
           </div>
         </div>
         {crashed ? (

@@ -86,6 +86,9 @@ func main() {
 		Height:    initH,
 		MinWidth:  minW,
 		MinHeight: minH,
+		// 无边框:标题栏由前端自绘(顶栏品牌区即拖拽区,右侧为窗口控制按钮),
+		// 以便整屏都是应用自身的内容层级。
+		Frameless: true,
 	})
 	e.win = win
 

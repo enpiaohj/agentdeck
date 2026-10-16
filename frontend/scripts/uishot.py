@@ -18,8 +18,6 @@ def main():
     u32.SetProcessDPIAware()
 
     import subprocess
-    si = subprocess.STARTUPINFO()
-    # 通过 powershell 单行拿到句柄最省事:避免 Python 端 EnumWindows
     r = subprocess.run(
         ["powershell", "-NoProfile", "-Command",
          "(Get-Process agentdeck-desktop).MainWindowHandle.ToString()"],
@@ -28,15 +26,49 @@ def main():
     if not hwnd:
         raise SystemExit("no main window")
 
+    import time
+    # 等窗口可见(刚 Start-Process 时窗口可能还没建出来)
+    for _ in range(24):
+        if u32.IsWindowVisible(hwnd):
+            break
+        time.sleep(0.25)
+
     u32.ShowWindow(hwnd, 9)  # SW_RESTORE
     if rw > 0 and rh > 0:
         u32.MoveWindow(hwnd, 0, 0, rw, rh, True)
-        import time; time.sleep(0.8)
-    u32.SetForegroundWindow(hwnd)
-    import time; time.sleep(0.6)
+        time.sleep(0.8)
+
+    # 置前台。Windows 限制后台进程抢前台:直接 SetForegroundWindow 会静默失败,
+    # 抓到的就是压在应用上的终端画面。发一次 ALT 键解除限制后再抢,并轮询确认。
+    VK_MENU, KEYUP = 0x12, 0x0002
+    for _ in range(12):
+        u32.keybd_event(VK_MENU, 0, 0, 0)
+        u32.keybd_event(VK_MENU, 0, KEYUP, 0)
+        u32.SetForegroundWindow(hwnd)
+        time.sleep(0.25)
+        if u32.GetForegroundWindow() == hwnd:
+            break
+    else:
+        raise SystemExit("window not foreground; abort to avoid capturing another window")
+    time.sleep(0.5)
 
     rect = wt.RECT()
     u32.GetWindowRect(hwnd, ctypes.byref(rect))
+
+    # 点一下顶栏品牌区(无效区):让焦点离开备注输入框,顺带收掉输入法候选条
+    # ——否则截图里会叠一层输入法浮窗。
+    u32.SetCursorPos(rect.left + 300, rect.top + 90)
+    u32.mouse_event(0x0002, 0, 0, 0, 0)  # LEFTDOWN
+    u32.mouse_event(0x0004, 0, 0, 0, 0)  # LEFTUP
+    # 再补一次 ESC + 把该窗口的输入语言切到英文:中文输入法的悬浮工具条会
+    # 一直挂在窗口上(截图里叠在最上层),切语言后自动收起。
+    u32.keybd_event(0x1B, 0, 0, 0)
+    u32.keybd_event(0x1B, 0, 0x0002, 0)
+    hkl = u32.LoadKeyboardLayoutW("00000409", 1)
+    if hkl:
+        u32.PostMessageW(hwnd, 0x0050, 1, hkl)  # WM_INPUTLANGCHANGEREQUEST
+    time.sleep(0.4)
+
     w, h = rect.right - rect.left, rect.bottom - rect.top
     if w <= 0 or h <= 0:
         raise SystemExit(f"bad rect {w}x{h}")

@@ -24,6 +24,8 @@ import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/in
 import * as resumeService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/resumeservice'
 import { agentMeta, fmtTime } from '../util'
 import { AgentAvatar } from './AgentAvatar'
+import { highlight } from '../highlight'
+import { useTheme } from '../hooks/useTheme'
 
 const useStyles = makeStyles({
   wrap: {
@@ -31,6 +33,7 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     minWidth: 0,
+    minHeight: 0,
     backgroundColor: tokens.colorNeutralBackground1,
   },
   // ---- 头部:标题 + chips ----
@@ -116,6 +119,18 @@ const useStyles = makeStyles({
     fontSize: '12px',
     color: tokens.colorNeutralForeground2,
   },
+  // 语言徽标(概念图:代码块标题栏左侧的小色块)
+  langBadge: {
+    fontSize: '10.5px',
+    fontWeight: 700,
+    letterSpacing: '0.02em',
+    padding: '1px 5px',
+    ...shorthands.borderRadius('4px'),
+    backgroundColor: tokens.colorBrandBackground2,
+    color: tokens.colorBrandForeground2,
+    flexShrink: 0,
+  },
+  codeName: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   codeCopy: {
     marginLeft: 'auto',
     border: 'none',
@@ -156,24 +171,13 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground2,
   },
   thinkingSummary: { cursor: 'pointer', fontSize: '12px', color: tokens.colorNeutralForeground3 },
-  toolBlock: {
-    backgroundColor: tokens.colorNeutralBackground3,
-    ...shorthands.borderRadius('8px'),
-    padding: '10px 12px',
-    fontFamily: 'Cascadia Code, Consolas, monospace',
-    fontSize: '12px',
-    lineHeight: 1.6,
-    whiteSpace: 'pre-wrap',
-    overflowWrap: 'anywhere',
-    maxHeight: '340px',
-    overflowY: 'auto',
-  },
   hit: { backgroundColor: tokens.colorBrandBackground2, ...shorthands.borderRadius('8px'), padding: '8px 10px', margin: '-8px -10px' },
-  // ---- 底部操作条 ----
+  // ---- 底部操作条(概念图:居中一排胶囊按钮)----
   bottom: {
     padding: '10px 24px 14px',
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: '8px',
     flexWrap: 'wrap',
     borderTop: `1px solid ${tokens.colorNeutralStroke3}`,
@@ -223,6 +227,7 @@ export function MessagePane({ session, jumpPart, onOpenInfo }: Props) {
 
 function Loaded({ session, jumpPart, onOpenInfo }: { session: SessionView; jumpPart: number; onOpenInfo: () => void }) {
   const styles = useStyles()
+  const theme = useTheme()
   const m = agentMeta(session.agent)
   const [tr, setTr] = useState<TranscriptView | null>(null)
   const [err, setErr] = useState('')
@@ -342,9 +347,9 @@ function Loaded({ session, jumpPart, onOpenInfo }: { session: SessionView; jumpP
                         <div className={styles.text} style={{ marginTop: 6 }}>{p.text}</div>
                       </details>
                     ) : isToolish ? (
-                      <div className={styles.toolBlock}>{p.text}</div>
+                      <CodeArea raw={p.text} styles={styles} theme={theme} head="" scroll />
                     ) : (
-                      renderRichText(p.text, styles)
+                      renderRichText(p.text, styles, theme)
                     )}
                   </div>
               </div>
@@ -377,17 +382,17 @@ function Loaded({ session, jumpPart, onOpenInfo }: { session: SessionView; jumpP
   )
 }
 
-// ---- Markdown 轻解析:围栏代码块(带文件名/language 头 + 行号)与普通文本 ----
+// ---- Markdown 轻解析:围栏代码块(带文件名/language 头 + 行号 + 高亮)与普通文本 ----
 
 type Styles = ReturnType<typeof useStyles>
 
-function renderRichText(text: string, styles: Styles) {
+function renderRichText(text: string, styles: Styles, theme: 'light' | 'dark') {
   if (!text.includes('```')) return <div className={styles.text}>{text}</div>
   const chunks = text.split('```')
   return (
     <>
       {chunks.map((chunk, i) =>
-        i % 2 === 1 ? <CodeBlock key={i} raw={chunk} styles={styles} /> : (
+        i % 2 === 1 ? <CodeArea key={i} raw={chunk} styles={styles} theme={theme} /> : (
           chunk.trim() ? <div key={i} className={styles.text}>{chunk.trim()}</div> : null
         ),
       )}
@@ -395,17 +400,47 @@ function renderRichText(text: string, styles: Styles) {
   )
 }
 
-function CodeBlock({ raw, styles }: { raw: string; styles: Styles }) {
+// CodeArea:等宽代码区(标题栏 + 语言徽标 + 行号槽 + 关键字/字符串/注释/数字着色 + 复制)。
+// head 显式给空串表示"无标题"(工具输出),此时标题栏只显示占位标签与复制。
+function CodeArea({ raw, styles, theme, head, scroll }: {
+  raw: string
+  styles: Styles
+  theme: 'light' | 'dark'
+  head?: string
+  scroll?: boolean
+}) {
   const [copied, setCopied] = useState(false)
-  const lines = raw.replace(/^\n+|\n+$/g, '').split('\n')
-  // 首行若是语言标识/文件名(无空格、无常见代码符号),当作标题栏
-  const first = lines[0] ?? ''
-  const hasHead = /^[\w./@-]{1,60}$/.test(first.trim())
-  const head = hasHead ? first.trim() : ''
-  const code = (hasHead ? lines.slice(1) : lines).join('\n')
+
+  // head 未显式给出时:围栏首行若像语言标识/文件名(无空格),当作标题行
+  let title = head
+  let body = raw.replace(/^\n+|\n+$/g, '')
+  if (title === undefined) {
+    const lines = body.split('\n')
+    const first = (lines[0] ?? '').trim()
+    if (/^[\w./@-]{1,60}$/.test(first)) {
+      title = first
+      body = lines.slice(1).join('\n')
+    } else {
+      title = ''
+    }
+  }
+  // 首行是纯语言词 → 只作徽标,不再重复显示成文件名
+  let lang = ''
+  let name = title
+  if (title) {
+    const lower = title.toLowerCase()
+    const ext = lower.includes('.') ? lower.slice(lower.lastIndexOf('.') + 1) : ''
+    if (!lower.includes('.') && !lower.includes('/') && LANG_ALIAS[lower]) {
+      lang = LANG_ALIAS[lower]
+      name = ''
+    } else {
+      lang = LANG_ALIAS[ext] ?? ''
+    }
+  }
+  const lines = body.split('\n')
 
   const copy = () => {
-    navigator.clipboard?.writeText(code).then(() => {
+    navigator.clipboard?.writeText(body).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     }).catch(() => {})
@@ -414,18 +449,33 @@ function CodeBlock({ raw, styles }: { raw: string; styles: Styles }) {
   return (
     <div className={styles.codeBlock}>
       <div className={styles.codeHead}>
-        <span>{head || 'code'}</span>
+        {lang ? <span className={styles.langBadge}>{lang}</span> : null}
+        {name ? <span className={styles.codeName}>{name}</span> : <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>输出</Text>}
         <button className={styles.codeCopy} onClick={copy}>
           {copied ? <CheckmarkRegular fontSize={12} /> : <CopyRegular fontSize={12} />}
           {copied ? '已复制' : '复制'}
         </button>
       </div>
-      <div className={styles.codeBody}>
+      <div className={styles.codeBody} style={scroll ? { maxHeight: 360, overflowY: 'auto' } : undefined}>
         <div className={styles.gutter}>
-          {code.split('\n').map((_, i) => <div key={i}>{i + 1}</div>)}
+          {lines.map((_, i) => <div key={i}>{i + 1}</div>)}
         </div>
-        <div className={styles.codeText}>{code}</div>
+        <div className={styles.codeText}>
+          {lines.map((l, i) => <div key={i}>{l ? highlight(l, theme) : ' '}</div>)}
+        </div>
       </div>
     </div>
   )
+}
+
+// 语言/扩展名 → 标题栏徽标文字(概念图里的 [JS] / [GO] 小色块)。
+const LANG_ALIAS: Record<string, string> = {
+  js: 'JS', mjs: 'JS', cjs: 'JS', javascript: 'JS',
+  jsx: 'JSX', ts: 'TS', tsx: 'TSX', typescript: 'TS',
+  go: 'GO', py: 'PY', python: 'PY', rb: 'RB', rs: 'RS', java: 'JAVA',
+  kt: 'KT', swift: 'SWIFT', cs: 'C#', cpp: 'C++', cc: 'C++', c: 'C', h: 'C',
+  sh: 'SH', bash: 'SH', zsh: 'SH', shell: 'SH', ps1: 'PS', powershell: 'PS',
+  json: 'JSON', jsonc: 'JSON', yml: 'YAML', yaml: 'YAML', toml: 'TOML', ini: 'INI',
+  md: 'MD', markdown: 'MD', sql: 'SQL', html: 'HTML', htm: 'HTML', css: 'CSS',
+  scss: 'SCSS', xml: 'XML', diff: 'DIFF', patch: 'DIFF', txt: 'TXT', text: 'TXT',
 }

@@ -34,10 +34,11 @@ import { AgentAvatar } from './AgentAvatar'
 const useStyles = makeStyles({
   wrap: {
     height: '100%',
-    width: '310px',
+    width: '330px',
     display: 'flex',
     flexDirection: 'column',
     minWidth: 0,
+    minHeight: 0,
     backgroundColor: tokens.colorNeutralBackground1,
     borderLeft: `1px solid ${tokens.colorNeutralStroke3}`,
   },
@@ -67,14 +68,15 @@ const useStyles = makeStyles({
     marginLeft: 'auto', border: 'none', background: 'transparent', cursor: 'pointer',
     fontSize: '12px', color: tokens.colorBrandForeground1, padding: 0,
   },
-  titleRow: { display: 'flex', alignItems: 'flex-start', gap: '8px' },
-  paneTitle: { flex: 1, minWidth: 0, fontSize: '14px', lineHeight: 1.4, overflowWrap: 'anywhere', fontWeight: 600 },
-  agentRow: {
-    display: 'flex', alignItems: 'center', gap: '8px',
-    ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke3),
-    ...shorthands.borderRadius('6px'),
-    padding: '6px 10px',
+  titleRow: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '8px',
+    paddingBottom: '12px',
+    borderBottom: `1px solid ${tokens.colorNeutralStroke3}`,
   },
+  paneTitle: { flex: 1, minWidth: 0, fontSize: '14px', lineHeight: 1.4, overflowWrap: 'anywhere', fontWeight: 600 },
+  agentRow: { display: 'flex', alignItems: 'center', gap: '8px' },
   kv: { display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr)', gap: '6px 10px', fontSize: '12.5px' },
   k: { color: tokens.colorNeutralForeground3 },
   v: { color: tokens.colorNeutralForeground1, overflowWrap: 'anywhere' },
@@ -102,10 +104,21 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3,
     lineHeight: 1.6,
   },
-  actions: { display: 'flex', flexDirection: 'column', gap: '8px' },
-  actionRow: { display: 'flex', gap: '8px' },
-  actionBtn: { flex: 1 },
-  grayed: { opacity: 0.5 },
+  // foot:操作区固定在面板底部,不随元数据滚动
+  foot: {
+    flexShrink: 0,
+    padding: '12px 16px 14px',
+    borderTop: `1px solid ${tokens.colorNeutralStroke3}`,
+    backgroundColor: tokens.colorNeutralBackground1,
+  },
+  // 操作区两列网格:与概念图一致(主操作成对,长文案整行)。
+  // 列必须 minmax(0,1fr):1fr 不能小于内容的 min-content,按钮文案会把
+  // 网格撑出面板右边界(实测按钮跑出窗口)。
+  actions: { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px' },
+  actionFull: { gridColumn: 'span 2', minWidth: 0 },
+  actionCell: { minWidth: 0 },
+  actionBtn: { width: '100%', minWidth: 0 },
+  grayed: { opacity: 0.5, display: 'block', minWidth: 0 },
   empty: {
     padding: '72px 24px 24px',
     textAlign: 'center',
@@ -307,47 +320,51 @@ export function InfoPane({ session, onChanged, onClose }: Props) {
         </div>
 
         <div className={styles.section}>
-          <span className={styles.sectionTitle}>操作</span>
+          <span className={styles.sectionTitle}>更多操作</span>
           <div className={styles.actions}>
-            <div className={styles.actionRow}>
-              {session.resume ? (
-                <>
-                  <Button
-                    className={styles.actionBtn} size="small" icon={<OpenRegular />}
-                    onClick={() => void resumeService.OpenInTerminal(session.key)}
-                  >在终端中打开</Button>
-                  <Button
-                    className={styles.actionBtn} size="small" appearance="primary" icon={<ArrowSyncRegular />}
-                    onClick={() => void resumeService.OpenInTerminal(session.key)}
-                  >恢复此会话</Button>
-                </>
-              ) : (
-                <Text size={200} style={{ color: tokens.colorPaletteYellowForeground1 }}>
-                  该会话不可恢复,仅可查看历史
-                </Text>
-              )}
-            </div>
-            <Button size="small" icon={<CopyRegular />} onClick={() => void resumeService.CopyToClipboard(session.key)}>
-              复制恢复命令
+            <Button size="small" icon={<ArrowDownloadRegular />} style={{ width: '100%' }} onClick={exportMd}>
+              导出为 Markdown
             </Button>
-            <Button size="small" icon={<ArrowDownloadRegular />} onClick={exportMd}>导出为 Markdown</Button>
-            <Button size="small" icon={<DocumentTextRegular />} onClick={toggleArchive}>
-              {session.archived ? '取消归档' : '归档(不删源文件)'}
+            <Button size="small" icon={<DocumentTextRegular />} style={{ width: '100%' }} onClick={toggleArchive}>
+              {session.archived ? '取消归档' : '归档'}
             </Button>
             <Tooltip content="v1.1 提供,当前版本未实现" relationship="description">
-              <span className={styles.grayed}>
+              <span className={styles.grayed + ' ' + styles.actionFull}>
                 <Button size="small" disabled style={{ width: '100%' }}>交接到其他 Agent</Button>
               </span>
             </Tooltip>
-            <Tooltip content="本工具不做物理删除,源会话文件只增不改;如需隐藏请用归档" relationship="description">
-              <span className={styles.grayed}>
+            <Tooltip content="本工具不做物理删除,源会话文件只增不改;归档只是列表过滤" relationship="description">
+              <span className={styles.grayed + ' ' + styles.actionFull}>
                 <Button size="small" disabled icon={<DeleteRegular />} style={{ width: '100%' }}>删除会话(不提供)</Button>
               </span>
             </Tooltip>
           </div>
         </div>
+      </div>
 
-        {msg ? <Text size={200} style={{ color: tokens.colorNeutralForeground3, overflowWrap: 'anywhere' }}>{msg}</Text> : null}
+      {/* 底部固定区:只留最常用的恢复动作,不随元数据滚走 */}
+      <div className={styles.foot}>
+        <div className={styles.actions}>
+          {session.resume ? (
+            <>
+              <Button size="small" icon={<OpenRegular />} style={{ width: '100%' }}
+                onClick={() => void resumeService.OpenInTerminal(session.key)}>在终端中打开</Button>
+              <Button size="small" appearance="primary" icon={<ArrowSyncRegular />} style={{ width: '100%' }}
+                onClick={() => void resumeService.OpenInTerminal(session.key)}>恢复此会话</Button>
+              <Button size="small" className={styles.actionFull} icon={<CopyRegular />}
+                onClick={() => void resumeService.CopyToClipboard(session.key)}>复制恢复命令</Button>
+            </>
+          ) : (
+            <>
+              <Text size={200} className={styles.actionFull} style={{ color: tokens.colorPaletteYellowForeground1 }}>
+                该会话不可恢复,仅可查看历史
+              </Text>
+              <Button size="small" className={styles.actionFull} icon={<CopyRegular />}
+                onClick={() => void resumeService.CopyToClipboard(session.key)}>复制恢复命令</Button>
+            </>
+          )}
+          {msg ? <Text size={200} className={styles.actionFull} style={{ color: tokens.colorNeutralForeground3, overflowWrap: 'anywhere' }}>{msg}</Text> : null}
+        </div>
       </div>
     </div>
   )

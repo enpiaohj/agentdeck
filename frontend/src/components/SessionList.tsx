@@ -34,6 +34,7 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     position: 'relative',
     minWidth: 0,
+    minHeight: 0,
     backgroundColor: tokens.colorNeutralBackground1,
     borderRight: `1px solid ${tokens.colorNeutralStroke3}`,
   },
@@ -43,7 +44,7 @@ const useStyles = makeStyles({
     gap: '8px',
     padding: '12px 14px 8px',
   },
-  headTitle: { fontSize: '15px', fontWeight: 600 },
+  headTitle: { fontSize: '16px', fontWeight: 600 },
   headBtn: {
     marginLeft: 'auto',
     border: 'none',
@@ -67,20 +68,27 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3,
   },
   groupCount: { color: tokens.colorNeutralForeground4, fontWeight: 400 },
+  // 行 = 卡片(概念图):圆角、细边框、行间留白;选中为蓝色淡底 + 左侧色条。
   row: {
     position: 'relative',
     display: 'flex',
     gap: '8px',
-    margin: '0 8px 2px',
-    padding: '9px 10px 9px 8px',
+    margin: '0 10px 6px',
+    padding: '10px 12px 10px 9px',
+    ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke3),
     ...shorthands.borderRadius('8px'),
-    ...shorthands.borderLeft('3px', 'solid', 'transparent'),
+    borderLeftWidth: '3px',
+    borderLeftColor: 'transparent',
+    backgroundColor: tokens.colorNeutralBackground1,
     cursor: 'pointer',
-    ':hover': { backgroundColor: tokens.colorNeutralBackground1Hover },
+    ':hover': {
+      backgroundColor: tokens.colorNeutralBackground1Hover,
+      ...shorthands.borderColor(tokens.colorNeutralStroke1),
+    },
   },
   rowActive: {
     backgroundColor: tokens.colorBrandBackground2,
-    ...shorthands.borderLeft('3px', 'solid', tokens.colorBrandBackground),
+    borderLeftColor: tokens.colorBrandBackground,
     ':hover': { backgroundColor: tokens.colorBrandBackground2Hover },
   },
   rowBody: { display: 'flex', flexDirection: 'column', gap: '5px', flex: 1, minWidth: 0 },
@@ -94,6 +102,7 @@ const useStyles = makeStyles({
     ':hover': { color: tokens.colorStatusWarningForeground3 },
   },
   starOn: { color: tokens.colorStatusWarningForeground3 },
+  titleOn: { color: tokens.colorBrandForeground1 },
   meta: { display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 },
   agentName: { fontSize: '12px', color: tokens.colorNeutralForeground2, flexShrink: 0 },
   chip: {
@@ -255,7 +264,7 @@ export function SessionList({ filter, selectedKey, onSelect, listVersion }: Prop
                     </span>
                     <div className={styles.rowBody}>
                       <div className={styles.titleLine}>
-                        <Text className={styles.title}>{s.title || '(无标题)'}</Text>
+                        <Text className={styles.title + (active ? ' ' + styles.titleOn : '')}>{s.title || '(无标题)'}</Text>
                         <button
                           className={styles.starBtn + (s.favorite ? ' ' + styles.starOn : '')}
                           onClick={toggleStar(s)}
