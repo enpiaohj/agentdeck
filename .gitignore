@@ -1,0 +1,47 @@
+# ---- Go ----
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/bin/
+/dist/
+build/bin/
+
+# Go 工作区
+go.work
+go.work.sum
+
+# ---- 开发期临时目录 ----
+# 侦察、实验、上游源码克隆（体积大，不入库）
+_probe/
+*.tmp
+*.log
+
+# ---- 编辑器 / IDE ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---- 操作系统 ----
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ---- 本地环境 ----
+.env
+.env.local
+*.local.json
+
+# ---- 发布快照中的大文件 ----
+# releases/ 保留 source/ 与 CHANGELOG.md，二进制产物上传 GitHub Releases
+releases/**/*.exe
+releases/**/*.msi
+releases/**/*.zip
+releases/**/*.tar.gz
+releases/**/*.dmg
+releases/**/*.pkg
