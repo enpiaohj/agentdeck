@@ -17,6 +17,7 @@ import {
   TagRegular,
 } from '@fluentui/react-icons'
 import { useCallback, useEffect, useState } from 'react'
+import { Dialogs } from '@wailsio/runtime'
 import type { SessionView, TranscriptView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import * as resumeService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/resumeservice'
@@ -92,6 +93,25 @@ function Loaded({ session, onClose, onChanged }: { session: SessionView; onClose
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(false)
   const [tagDraft, setTagDraft] = useState('')
+  const [exportMsg, setExportMsg] = useState('')
+
+  const exportMd = () => {
+    Dialogs.OpenFile({
+      CanChooseDirectories: true,
+      CanChooseFiles: false,
+      CanCreateDirectories: true,
+      Title: '选择 Markdown 导出目录',
+      ButtonText: '在此导出',
+    })
+      .then((dir) => {
+        if (!dir || typeof dir !== 'string') return
+        sessionService.ExportMarkdown(session.key, dir).then(
+          (p) => setExportMsg(`已导出:${p}`),
+          (e) => setExportMsg(`导出失败:${shortErr(e)}`),
+        )
+      })
+      .catch(() => {})
+  }
 
   const load = useCallback(() => {
     setLoading(true)
@@ -180,7 +200,9 @@ function Loaded({ session, onClose, onChanged }: { session: SessionView; onClose
           >
             {session.archived ? '取消归档' : '归档'}
           </Button>
+          <Button size="small" onClick={exportMd} title="导出会话为 Markdown 文件">导出 Markdown</Button>
         </div>
+        {exportMsg ? <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{exportMsg}</Text> : null}
       </div>
       <div className={styles.body}>
         {loading ? (
@@ -191,12 +213,21 @@ function Loaded({ session, onClose, onChanged }: { session: SessionView; onClose
             <Button size="small" icon={<ArrowClockwiseRegular />} onClick={load}>重试</Button>
           </div>
         ) : tr ? (
-          tr.parts.map((p, i) => (
-            <div key={i} className={styles.part}>
-              <span className={styles.roleTag}>{roleLabel(p.role, p.kind)}{p.model ? ` · ${p.model}` : ''}</span>
-              {p.text}
-            </div>
-          ))
+          tr.parts.map((p, i) =>
+            p.kind === 'thinking' || p.role === 'thinking' ? (
+              <details key={i} className={styles.part}>
+                <summary className={styles.roleTag} style={{ cursor: 'pointer' }}>
+                  {roleLabel(p.role, p.kind)}(思考过程,点击展开){p.model ? ` · ${p.model}` : ''}
+                </summary>
+                {p.text}
+              </details>
+            ) : (
+              <div key={i} className={styles.part}>
+                <span className={styles.roleTag}>{roleLabel(p.role, p.kind)}{p.model ? ` · ${p.model}` : ''}</span>
+                {p.text}
+              </div>
+            ),
+          )
         ) : null}
       </div>
     </div>
