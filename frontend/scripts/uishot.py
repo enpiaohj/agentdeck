@@ -18,9 +18,12 @@ def main():
     u32.SetProcessDPIAware()
 
     import subprocess
+    # 按进程名通配:发布产物改名成 AgentDeck-v0.1.0-win-x64.exe 后,进程名与
+    # 开发构建的 agentdeck-desktop 不同(进程名取自 exe 文件名)。
     r = subprocess.run(
         ["powershell", "-NoProfile", "-Command",
-         "(Get-Process agentdeck-desktop).MainWindowHandle.ToString()"],
+         "(Get-Process | Where-Object { $_.ProcessName -like 'agentdeck*' -and $_.MainWindowHandle -ne 0 }"
+         " | Select-Object -First 1 -Expand MainWindowHandle)"],
         capture_output=True, text=True)
     hwnd = int(r.stdout.strip())
     if not hwnd:

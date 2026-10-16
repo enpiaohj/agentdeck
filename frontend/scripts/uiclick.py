@@ -9,7 +9,8 @@ u32 = ctypes.windll.user32
 u32.SetProcessDPIAware()
 
 r = subprocess.run(["powershell", "-NoProfile", "-Command",
-                    "(Get-Process agentdeck-desktop).MainWindowHandle.ToString()"],
+                    "(Get-Process | Where-Object { $_.ProcessName -like 'agentdeck*' -and $_.MainWindowHandle -ne 0 }"
+                    " | Select-Object -First 1 -Expand MainWindowHandle)"],
                    capture_output=True, text=True)
 hwnd = int(r.stdout.strip())
 import ctypes.wintypes as wt
