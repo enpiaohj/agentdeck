@@ -23,7 +23,7 @@ import type { SessionView } from '../../bindings/github.com/enpiaohj/agentdeck/i
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import * as markService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/markservice'
 import { agentMeta, relTime } from '../util'
-import { AgentAvatar } from './AgentAvatar'
+import { AgentMark } from '../icons/AgentMark'
 import type { SidebarFilter } from './Sidebar'
 
 const useStyles = makeStyles({
@@ -196,7 +196,7 @@ export function SessionList({ filter, selectedKey, onSelect, listVersion }: Prop
     return GROUP_ORDER.filter((k) => g.has(k)).map((k) => [k, g.get(k)!] as const)
   }, [rows])
 
-  const listTitle = filter.archived ? '归档会话' : filter.favorites ? '收藏会话' : filter.project ? `项目 · ${filter.project}` : filter.agent ? `Agent · ${filter.agent}` : '会话列表'
+  const listTitle = filter.archived ? '归档会话' : filter.favorites ? '收藏会话' : filter.project ? `项目 · ${filter.project}` : filter.agent ? `Agent · ${agentMeta(filter.agent).label}` : '会话列表'
 
   return (
     <div className={styles.wrap}>
@@ -274,7 +274,7 @@ export function SessionList({ filter, selectedKey, onSelect, listVersion }: Prop
                         </button>
                       </div>
                       <div className={styles.meta}>
-                        <AgentAvatar agent={s.agent} size={14} />
+                        <AgentMark agent={s.agent} size={14} />
                         <span className={styles.agentName}>{m.label}</span>
                         {s.project ? <span className={styles.chip}>{s.project}</span> : null}
                         {s.tags.slice(0, 2).map((t) => <span key={t} className={styles.chip}>{t}</span>)}

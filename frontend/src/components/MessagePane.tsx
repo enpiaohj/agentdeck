@@ -23,7 +23,7 @@ import type { SessionView, TranscriptView } from '../../bindings/github.com/enpi
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import * as resumeService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/resumeservice'
 import { agentMeta, fmtTime } from '../util'
-import { AgentAvatar } from './AgentAvatar'
+import { AgentMark } from '../icons/AgentMark'
 import { highlight } from '../highlight'
 import { useTheme } from '../hooks/useTheme'
 
@@ -299,7 +299,7 @@ function Loaded({ session, jumpPart, onOpenInfo }: { session: SessionView; jumpP
           {session.tags.map((t) => <span key={t} className={styles.chip}>{t}</span>)}
           <span className={styles.chipAdd}>+ 标签</span>
           <span className={styles.chip + ' ' + styles.chipAgent}>
-            <AgentAvatar agent={session.agent} size={14} />
+            <AgentMark agent={session.agent} size={14} />
             {m.label}
           </span>
         </div>
@@ -329,7 +329,7 @@ function Loaded({ session, jumpPart, onOpenInfo }: { session: SessionView; jumpP
                     {isUser ? (
                       <span className={styles.userAvatar}><PersonRegular fontSize={18} /></span>
                     ) : (
-                      <AgentAvatar agent={session.agent} size={30} />
+                      <AgentMark agent={session.agent} size={30} />
                     )}
                   </div>
                   <div className={styles.msgBody}>

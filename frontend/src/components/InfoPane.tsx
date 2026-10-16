@@ -29,7 +29,7 @@ import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/in
 import * as resumeService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/resumeservice'
 import * as markService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/markservice'
 import { agentMeta, fmtTime, relTime } from '../util'
-import { AgentAvatar } from './AgentAvatar'
+import { AgentMark } from '../icons/AgentMark'
 
 const useStyles = makeStyles({
   wrap: {
@@ -232,7 +232,7 @@ export function InfoPane({ session, onChanged, onClose }: Props) {
         </div>
 
         <div className={styles.agentRow}>
-          <AgentAvatar agent={session.agent} size={18} />
+          <AgentMark agent={session.agent} size={18} />
           <Text size={300}>{m.label}{session.source === 'wsl' ? '(WSL)' : ''}</Text>
           <ChevronDownRegular fontSize={12} style={{ marginLeft: 'auto', color: tokens.colorNeutralForeground3 }} />
         </div>

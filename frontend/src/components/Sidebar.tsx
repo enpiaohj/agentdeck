@@ -19,7 +19,7 @@ import type { AgentView, IndexStatus, ProjectView } from '../../bindings/github.
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import { useIndexStatus } from '../hooks/useIndexStatus'
 import { agentMeta } from '../util'
-import { AgentAvatar } from './AgentAvatar'
+import { AgentMark } from '../icons/AgentMark'
 
 export type SidebarFilter = {
   agent?: string
@@ -149,7 +149,7 @@ export function Sidebar({ collapsed, onToggle, filter, onFilter, onOpenDiagnosti
             title={`${agentMeta(a.agent).label}(${a.count})`}
             style={{ justifyContent: 'center' }}
           >
-            <AgentAvatar agent={a.agent} size={18} />
+            <AgentMark agent={a.agent} size={18} />
           </button>
         ))}
       </nav>
@@ -186,7 +186,7 @@ export function Sidebar({ collapsed, onToggle, filter, onFilter, onOpenDiagnosti
           onClick={pick({ agent: a.agent })}
           title={`${agentMeta(a.agent).label} · ${a.count} 个会话`}
         >
-          <AgentAvatar agent={a.agent} size={18} />
+          <AgentMark agent={a.agent} size={18} />
           {agentMeta(a.agent).label}
           <span className={styles.count}>{a.count}</span>
         </button>

@@ -12,7 +12,6 @@ import {
   SearchRegular,
   ArrowClockwiseRegular,
   PulseRegular,
-  AppsFilled,
   DismissRegular,
   ChevronDoubleRightRegular,
   SubtractRegular,
@@ -23,6 +22,7 @@ import { Window } from '@wailsio/runtime'
 import { Events } from '@wailsio/runtime'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTheme } from './hooks/useTheme'
+import { AppMark } from './icons/AppMark'
 import { Sidebar, type SidebarFilter } from './components/Sidebar'
 import { SessionList } from './components/SessionList'
 import { MessagePane } from './components/MessagePane'
@@ -63,17 +63,6 @@ const useStyles = makeStyles({
     minWidth: 0,
   },
   brand: { display: 'flex', alignItems: 'center', gap: '11px', flexShrink: 0 },
-  brandMark: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '38px',
-    height: '38px',
-    ...shorthands.borderRadius('10px'),
-    background: `linear-gradient(140deg, ${tokens.colorBrandBackground2}, ${tokens.colorBrandBackground})`,
-    color: tokens.colorNeutralForegroundOnBrand,
-    boxShadow: tokens.shadow4,
-  },
   brandText: { display: 'flex', flexDirection: 'column', lineHeight: 1.3 },
   brandTitle: { fontSize: '19px', fontWeight: 700, letterSpacing: '-0.01em' },
   brandSub: { fontSize: '12px', color: tokens.colorNeutralForeground2 },
@@ -258,7 +247,7 @@ export function App() {
         {/* 无边框窗口:顶栏整体为拖拽区,交互控件标 no-drag */}
         <div className={styles.topbar} style={{ '--wails-draggable': 'drag' } as React.CSSProperties}>
           <div className={styles.brand}>
-            <span className={styles.brandMark}><AppsFilled fontSize={19} /></span>
+            <AppMark size={38} />
             <span className={styles.brandText}>
               <span className={styles.brandTitle}>AgentDeck</span>
               <span className={styles.brandSub}>All your coding agents. One deck.</span>
