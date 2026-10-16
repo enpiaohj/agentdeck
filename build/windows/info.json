@@ -1,10 +1,12 @@
 {
 	"fixed": {
-		"file_version": "0.1.1"
+		"file_version": "0.1.2",
+		"product_version": "0.1.2"
 	},
 	"info": {
 		"0409": {
-			"ProductVersion": "0.1.1",
+			"ProductVersion": "0.1.2",
+			"FileVersion": "0.1.2.0",
 			"CompanyName": "AgentDeck",
 			"FileDescription": "跨 Agent 历史会话工作台",
 			"LegalCopyright": "© 2026 AgentDeck",
