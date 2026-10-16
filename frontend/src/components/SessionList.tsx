@@ -13,21 +13,21 @@ import {
   StarRegular,
   ArchiveRegular,
   ArchiveArrowBackRegular,
-  CheckmarkCircleRegular,
 } from '@fluentui/react-icons'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Events } from '@wailsio/runtime'
 import type { SessionView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import * as markService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/markservice'
-import { agentLabel, relTime } from '../util'
+import { fmtTime, relTime } from '../util'
+import { AgentAvatar } from './AgentAvatar'
 import type { SidebarFilter } from './Sidebar'
 
 const useStyles = makeStyles({
   wrap: { height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' },
   rows: { flex: 1, overflowY: 'auto', overflowX: 'hidden', paddingBottom: '56px' },
   groupTitle: {
-    padding: '10px 14px 4px',
+    padding: '14px 16px 6px',
     fontSize: '12px',
     fontWeight: 600,
     color: tokens.colorNeutralForeground3,
@@ -39,59 +39,55 @@ const useStyles = makeStyles({
   row: {
     display: 'flex',
     alignItems: 'flex-start',
-    gap: '4px',
-    padding: '10px 14px',
-    borderBottom: `1px solid ${tokens.colorNeutralStroke3}`,
+    gap: '10px',
+    margin: '0 8px',
+    padding: '10px 8px',
+    borderRadius: '8px',
     cursor: 'pointer',
     ':hover': { backgroundColor: tokens.colorNeutralBackground1Hover },
   },
   rowActive: { backgroundColor: tokens.colorNeutralBackground2 },
   rowBody: { display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0 },
-  titleLine: { display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 },
-  title: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 },
+  titleLine: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 },
+  title: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontWeight: 500 },
   starBtn: {
     border: 'none', background: 'transparent', cursor: 'pointer',
-    display: 'flex', alignItems: 'center', padding: '2px', color: tokens.colorNeutralForeground3,
-    flexShrink: 0,
+    display: 'flex', alignItems: 'center', padding: '2px', borderRadius: '4px',
+    color: tokens.colorNeutralForeground4, flexShrink: 0,
+    ':hover': { color: tokens.colorStatusWarningForeground3 },
   },
   starOn: { color: tokens.colorStatusWarningForeground3 },
-  meta: { display: 'flex', gap: '10px', fontSize: '12px', color: tokens.colorNeutralForeground3, flexWrap: 'wrap' },
-  agentTag: {
-    fontSize: '11px',
-    padding: '1px 6px',
-    borderRadius: '4px',
-    backgroundColor: tokens.colorBrandBackground2,
-    color: tokens.colorBrandForeground2,
-    flexShrink: 0,
-  },
+  meta: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px', color: tokens.colorNeutralForeground3, flexWrap: 'wrap' },
+  time: { marginLeft: 'auto', flexShrink: 0, fontVariantNumeric: 'tabular-nums' },
   tagChip: {
     fontSize: '11px',
-    padding: '1px 6px',
+    padding: '0 6px',
     borderRadius: '4px',
     backgroundColor: tokens.colorNeutralBackground4,
     color: tokens.colorNeutralForeground2,
   },
   sourceTag: {
     fontSize: '11px',
-    padding: '1px 6px',
+    padding: '0 6px',
     borderRadius: '4px',
     backgroundColor: tokens.colorPalettePurpleBackground2,
     color: tokens.colorPalettePurpleForeground2,
     flexShrink: 0,
   },
+  noResume: { color: tokens.colorPaletteYellowForeground1 },
   center: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '8px' },
   bulkBar: {
     position: 'absolute',
-    bottom: '12px',
+    bottom: '14px',
     left: '50%',
     transform: 'translateX(-50%)',
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
     padding: '8px 14px',
-    borderRadius: '8px',
+    borderRadius: '10px',
     backgroundColor: tokens.colorNeutralBackground3,
-    boxShadow: tokens.shadow8,
+    boxShadow: tokens.shadow16,
     zIndex: 10,
   },
 })
@@ -198,32 +194,33 @@ export function SessionList({ filter, selectedKey, onSelect, listVersion }: Prop
       <div className={styles.rows}>
         {groups.map(([day, list]) => (
           <div key={day}>
-            <div className={styles.groupTitle}>{day}({list.length})</div>
+            <div className={styles.groupTitle}>{day} · {list.length}</div>
             {list.map((s) => (
               <div
                 key={s.key}
-                className={`${styles.row} ${selectedKey === s.key ? styles.rowActive : ''}`}
+                className={`sessionRow ${styles.row} ${selectedKey === s.key ? styles.rowActive : ''}`}
                 onClick={() => onSelect(s)}
+                title={fmtTime(s.last)}
               >
-                <Checkbox
-                  checked={checked.has(s.key)}
-                  onChange={(_e, d) => {
-                    const k = s.key
-                    setChecked((prev) => {
-                      const n = new Set(prev)
-                      if (d.checked) n.add(k)
-                      else n.delete(k)
-                      return n
-                    })
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  aria-label={`选择会话 ${s.title}`}
-                />
+                <span className="rowCheck" data-checked={checked.has(s.key) ? 'true' : 'false'}>
+                  <Checkbox
+                    checked={checked.has(s.key)}
+                    onChange={(_e, d) => {
+                      const k = s.key
+                      setChecked((prev) => {
+                        const n = new Set(prev)
+                        if (d.checked) n.add(k)
+                        else n.delete(k)
+                        return n
+                      })
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={`选择会话 ${s.title}`}
+                  />
+                </span>
+                <AgentAvatar agent={s.agent} size={20} />
                 <div className={styles.rowBody}>
                   <div className={styles.titleLine}>
-                    <span className={styles.agentTag}>{agentLabel(s.agent)}</span>
-                    {s.source === 'wsl' ? <span className={styles.sourceTag}>WSL</span> : null}
-                    {s.source === 'gateway' ? <span className={styles.sourceTag}>网关</span> : null}
                     <Text className={styles.title} size={300}>{s.title || '(无标题)'}</Text>
                     <button
                       className={`${styles.starBtn} ${s.favorite ? styles.starOn : ''}`}
@@ -235,13 +232,18 @@ export function SessionList({ filter, selectedKey, onSelect, listVersion }: Prop
                   </div>
                   <div className={styles.meta}>
                     <span>{relTime(s.last)}</span>
+                    <span>·</span>
                     <span>{s.messages} 条消息</span>
+                    <span>·</span>
                     <span>{s.project || '项目未知'}</span>
+                    {s.source === 'wsl' ? <span className={styles.sourceTag}>WSL</span> : null}
+                    {s.source === 'gateway' ? <span className={styles.sourceTag}>网关</span> : null}
                     {s.tags.map((t) => <span key={t} className={styles.tagChip}>{t}</span>)}
-                    {!s.resume ? <span style={{ color: tokens.colorPaletteYellowForeground1 }}>仅可查看历史</span> : null}
+                    {!s.resume ? <span className={styles.noResume}>仅可查看历史</span> : null}
                     {filter.archived ? (
                       <Button size="small" icon={<ArchiveArrowBackRegular />} onClick={unarchive(s)}>恢复</Button>
                     ) : null}
+                    <span className={styles.time}>{dayGroup(s.last) === '今天' ? new Date(s.last).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                   </div>
                 </div>
               </div>
@@ -251,8 +253,7 @@ export function SessionList({ filter, selectedKey, onSelect, listVersion }: Prop
       </div>
       {checked.size > 0 ? (
         <div className={styles.bulkBar}>
-          <CheckmarkCircleRegular />
-          <Text size={300}>已选 {checked.size} 项</Text>
+          <Text size={300} weight="semibold">已选 {checked.size} 项</Text>
           <Button
             size="small"
             icon={<StarRegular />}

@@ -11,7 +11,8 @@ import { SearchRegular, DismissRegular } from '@fluentui/react-icons'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SearchReply } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as searchService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/searchservice'
-import { agentLabel, relTime } from '../util'
+import { agentMeta, relTime } from '../util'
+import { AgentAvatar } from './AgentAvatar'
 
 const useStyles = makeStyles({
   overlay: {
@@ -144,7 +145,8 @@ export function SearchPalette({ open, onClose, onJump }: Props) {
                 reply.hits.map((h, i) => (
                   <div key={h.part + i} className={styles.hit} onClick={() => onJump(h.key, partIndexOf(h.part))}>
                     <div className={styles.hitTitle}>
-                      <span className={styles.agentTag}>{agentLabel(h.agent)}</span>
+                      <AgentAvatar agent={h.agent} size={16} />
+                      <span className={styles.agentTag}>{agentMeta(h.agent).label}</span>
                       <Text size={300} weight="semibold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {h.title || '(无标题)'}
                       </Text>

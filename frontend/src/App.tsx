@@ -1,5 +1,20 @@
-import { FluentProvider, makeStyles, tokens, webDarkTheme, webLightTheme, Text, Button, Tooltip } from '@fluentui/react-components'
-import { SearchRegular, ArrowClockwiseRegular, DoctorRegular } from '@fluentui/react-icons'
+import {
+  FluentProvider,
+  makeStyles,
+  shorthands,
+  tokens,
+  webDarkTheme,
+  webLightTheme,
+  Text,
+  Button,
+  Tooltip,
+} from '@fluentui/react-components'
+import {
+  SearchRegular,
+  ArrowClockwiseRegular,
+  DoctorRegular,
+  AppsFilled,
+} from '@fluentui/react-icons'
 import { useCallback, useEffect, useState } from 'react'
 import { useTheme } from './hooks/useTheme'
 import { Sidebar, type SidebarFilter } from './components/Sidebar'
@@ -16,36 +31,61 @@ const useStyles = makeStyles({
   topbar: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '6px 12px',
+    gap: '12px',
+    padding: '8px 16px',
     borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
     backgroundColor: tokens.colorNeutralBackground2,
   },
-  searchBtn: {
+  brand: { display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 },
+  brandMark: {
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
-    border: `1px solid ${tokens.colorNeutralStroke1}`,
-    background: tokens.colorNeutralBackground1,
+    justifyContent: 'center',
+    width: '24px',
+    height: '24px',
     borderRadius: '6px',
-    padding: '5px 10px',
-    cursor: 'pointer',
-    color: tokens.colorNeutralForeground3,
-    fontSize: '13px',
-    minWidth: '280px',
+    background: `linear-gradient(135deg, ${tokens.colorBrandBackground}, ${tokens.colorBrandBackgroundPressed})`,
+    color: tokens.colorNeutralForegroundOnBrand,
   },
-  title: { fontWeight: 600, fontSize: '14px' },
+  searchSlot: {
+    flex: 1,
+    maxWidth: '560px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    margin: '0 auto',
+    ...shorthands.borderWidth('1px'),
+    ...shorthands.borderStyle('solid'),
+    ...shorthands.borderColor(tokens.colorNeutralStroke1),
+    background: tokens.colorNeutralBackground1,
+    ...shorthands.borderRadius('18px'),
+    padding: '6px 14px',
+    cursor: 'text',
+    color: tokens.colorNeutralForeground4,
+    fontSize: '13px',
+    ':hover': { ...shorthands.borderColor(tokens.colorNeutralStroke1Hover) },
+  },
+  kbd: {
+    marginLeft: 'auto',
+    fontSize: '11px',
+    color: tokens.colorNeutralForeground4,
+    ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
+    ...shorthands.borderRadius('4px'),
+    padding: '0 5px',
+    backgroundColor: tokens.colorNeutralBackground2,
+  },
+  right: { display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 },
   listWrap: { minWidth: 0, borderRight: `1px solid ${tokens.colorNeutralStroke2}`, overflow: 'hidden' },
   detailWrap: { minWidth: 0, overflow: 'hidden' },
   crashed: {
-    padding: '6px 12px',
+    padding: '6px 16px',
     fontSize: '12px',
     backgroundColor: tokens.colorStatusWarningBackground2,
     color: tokens.colorStatusWarningForeground1,
   },
 })
 
-// 三栏布局:顶栏(Ctrl+K/刷新)/左导航(可折叠)/中列表/右详情(可收起)。
+// 三栏布局:顶栏(品牌/搜索/动作)/左导航(可折叠)/中列表/右详情(可收起)。
 export function App() {
   const themeName = useTheme()
   const styles = useStyles()
@@ -94,25 +134,32 @@ export function App() {
     <FluentProvider theme={themeName === 'dark' ? webDarkTheme : webLightTheme}>
       <div className={styles.outer}>
         <div className={styles.topbar}>
-          <Text className={styles.title}>AgentDeck</Text>
-          <button className={styles.searchBtn} onClick={() => { setView('sessions'); setPaletteOpen(true) }}>
+          <div className={styles.brand}>
+            <span className={styles.brandMark}><AppsFilled fontSize={14} /></span>
+            <Text weight="semibold" size={400}>AgentDeck</Text>
+          </div>
+          <div
+            className={styles.searchSlot}
+            role="button"
+            aria-label="搜索会话内容"
+            onClick={() => { setView('sessions'); setPaletteOpen(true) }}
+          >
             <SearchRegular fontSize={14} />
-            搜索会话内容…
-            <span style={{ marginLeft: 'auto', fontSize: '11px' }}>Ctrl K</span>
-          </button>
-          <Tooltip content="重新加载会话列表" relationship="description">
-            <Button appearance="subtle" icon={<ArrowClockwiseRegular />} onClick={() => setListVersion((v) => v + 1)} />
-          </Tooltip>
-          <span style={{ flex: 1 }} />
-          <Tooltip content="能力诊断 / 备份恢复" relationship="description">
-            <Button
-              appearance="subtle"
-              icon={<DoctorRegular />}
-              onClick={() => setView(view === 'diagnostics' ? 'sessions' : 'diagnostics')}
-            >
-              诊断
-            </Button>
-          </Tooltip>
+            <span>搜索会话、内容…</span>
+            <span className={styles.kbd}>Ctrl K</span>
+          </div>
+          <div className={styles.right}>
+            <Tooltip content="重新加载会话列表" relationship="description">
+              <Button appearance="subtle" icon={<ArrowClockwiseRegular />} onClick={() => setListVersion((v) => v + 1)} />
+            </Tooltip>
+            <Tooltip content="能力诊断 / 备份恢复" relationship="description">
+              <Button
+                appearance="subtle"
+                icon={<DoctorRegular />}
+                onClick={() => setView(view === 'diagnostics' ? 'sessions' : 'diagnostics')}
+              />
+            </Tooltip>
+          </div>
         </div>
         {crashed ? (
           <div className={styles.crashed}>检测到上次未正常退出,数据已自动恢复;如界面异常可点「诊断 → 重建索引」</div>
