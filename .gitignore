@@ -18,6 +18,9 @@ go.work.sum
 # bindings 生成产物提交入库;依赖与构建产物不入库
 frontend/node_modules/
 frontend/dist/
+# embed 目录只装前端构建产物(构建时从 frontend/dist 拷入,见 Taskfile)
+cmd/agentdeck-desktop/assets/*
+!cmd/agentdeck-desktop/assets/.gitkeep
 
 # ---- 开发期临时目录 ----
 # 侦察、实验、上游源码克隆（体积大，不入库）

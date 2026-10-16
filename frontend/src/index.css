@@ -1,0 +1,7 @@
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+* { box-sizing: border-box; }

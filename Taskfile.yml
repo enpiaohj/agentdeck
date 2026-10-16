@@ -23,6 +23,8 @@ tasks:
     cmds:
       - task: bindings
       - task: frontend:build
+      # 平铺拷入 embed 目录:dist/index.html 落 assets 根,URL 结构不变
+      - pwsh -NoProfile -Command "Copy-Item -Recurse -Force frontend/dist/* cmd/agentdeck-desktop/assets/"
       - go build -tags production -o {{.BIN_DIR}}/{{.APP_NAME}}.exe ./cmd/agentdeck-desktop
 
   dev:
