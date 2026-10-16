@@ -78,8 +78,10 @@ MSIX 实测不符，见前四份中的实测报告。
 - 测试：`go test ./... -count=1`
 - 格式化：`gofmt -l cmd internal` 应为空
 
-当前基线：17 个包全部通过（`sessions` 约 18s，`proc` 约 15s，全套约 50s）。
-运行验证：`go run ./cmd/agentdeck -all` 应读出本机 600+ 条会话。
+当前基线：18 个包全部通过（`sessions` 约 18s，`proc` 约 15s，全套约 50s）。
+运行验证：`go run ./cmd/agentdeck -all` 应读出本机 600+ 条会话；
+`-search "查询"`（可配 `-agent`/`-all`）对所选会话正文建 FTS5 索引并
+全文检索，`-all -search` 实测索引 476 条会话正文。
 
 测试套件移植自 magpie 上游（约 16,000 行）。三处按本项目情况调整过，
 均在代码内注明原因：
@@ -110,8 +112,10 @@ MSIX 实测不符，见前四份中的实测报告。
    - Codex：`\\?\D:\Work\ExampleApp`（扩展长度前缀）
    - ZCode：`D:\Work\ExampleProject`（普通路径）
 
-5. **中文 FTS5 检索**：`unicode61` 与 `trigram` 对 2 字中文词均失效，
-   需 bigram 预分词或自注册 tokenizer。
+5. **中文 FTS5 检索**：`unicode61` 与 `trigram` 对 2 字中文词均失效。
+   已按 **bigram 预分词** 落地于 `internal/search`：索引侧与查询侧共用
+   `Segment`（CJK 相邻二字成词、词内短语保相邻、词间 AND），2 字中文
+   词可命中。改分词逻辑必须两侧同步，且分词契约变更 = 整库重建。
 
 6. **控制台代码页是 cp949**（区域 zh-CN）。向 stdout 写中文的 Go 程序需先调
    `SetConsoleOutputCP(65001)`，Python 子进程需 `sys.stdout.reconfigure(encoding='utf-8')`。

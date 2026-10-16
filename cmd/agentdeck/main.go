@@ -1,18 +1,25 @@
 // Command agentdeck 是 AgentDeck 的命令行入口。
 //
-// 当前处于 Phase 0：会话读取基线。本命令列出本机各 Agent 的历史会话，
-// 用于验证会话层的发现、解析与恢复命令构造是否正确。
+// 当前处于 Phase 0/1：会话读取基线 + 中文全文检索。本命令列出本机各
+// Agent 的历史会话；-search 对所选会话的正文建立 FTS5 索引并检索，
+// 用于验证检索层的发现、分词与命中是否正确。
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
+	"github.com/enpiaohj/agentdeck/internal/search"
 	"github.com/enpiaohj/agentdeck/internal/sessions"
 )
 
@@ -27,10 +34,12 @@ func main() {
 	useUTF8()
 
 	var (
-		jsonOut = flag.Bool("json", false, "以 JSON 输出")
-		limit   = flag.Int("limit", 20, "最多列出多少条（0 表示全部）")
-		agent   = flag.String("agent", "", "只看某个 agent，如 claude、claude-desktop、codex")
-		all     = flag.Bool("all", false, "列出全部会话（等同 -limit 0）")
+		jsonOut   = flag.Bool("json", false, "以 JSON 输出")
+		limit     = flag.Int("limit", 20, "最多列出多少条（0 表示全部）")
+		agent     = flag.String("agent", "", "只看某个 agent，如 claude、claude-desktop、codex")
+		all       = flag.Bool("all", false, "列出全部会话（等同 -limit 0）")
+		query     = flag.String("search", "", "对会话正文全文检索（范围随 -agent/-limit/-all），如 -search \"远程连接\"")
+		indexPath = flag.String("index", "", "全文索引库路径；缺省用内存索引，会话多时建议落盘")
 	)
 	flag.Parse()
 
@@ -51,6 +60,11 @@ func main() {
 			}
 		}
 		list = filtered
+	}
+
+	if *query != "" {
+		runSearch(list, *query, *indexPath)
+		return
 	}
 
 	if *jsonOut {
@@ -127,4 +141,113 @@ func repeat(s string, n int) string {
 		out = append(out, s...)
 	}
 	return string(out)
+}
+
+// runSearch 对所选会话的正文建立 FTS5 索引（internal/search，bigram
+// 预分词，索引侧与查询侧共用 Segment）并检索。索引是纯派生物：这里
+// 每次现建，不保留增量状态。
+func runSearch(list []sessions.Session, query, path string) {
+	ix, err := search.Open(path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "打开索引失败:", err)
+		os.Exit(1)
+	}
+	defer ix.Close()
+
+	titles := map[string]string{}
+	var docs []search.Doc
+	skipped := 0
+	for _, s := range list {
+		if !sessions.HasTranscript(s.Agent) || s.Path == "" {
+			continue
+		}
+		tr, err := sessions.TranscriptOf(s)
+		if err != nil {
+			skipped++
+			continue
+		}
+		for i, p := range tr.Parts {
+			// 与 sessions 包检索同一取舍：Agent 每次请求都带的系统上下文
+			// 与图片不是「说过的」内容，不收进索引
+			if p.Role == "system" || p.Kind == "context" || p.Kind == "image" {
+				continue
+			}
+			docs = append(docs, search.Doc{
+				Key:  s.Agent + "/" + s.ID + "#" + strconv.Itoa(i),
+				Text: p.Text,
+			})
+		}
+		titles[s.Agent+"/"+s.ID] = s.Title
+		if err := ix.Add(docs); err != nil {
+			fmt.Fprintf(os.Stderr, "索引 %s/%s 失败: %v\n", s.Agent, s.ID, err)
+			os.Exit(1)
+		}
+		docs = docs[:0]
+	}
+	if skipped > 0 {
+		fmt.Fprintf(os.Stderr, "（%d 条会话的正文读不出来，已跳过）\n", skipped)
+	}
+	fmt.Fprintf(os.Stderr, "已索引 %d 个会话的正文\n\n", len(titles))
+
+	rs, err := ix.Search(context.Background(), query, 20)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "检索失败:", err)
+		os.Exit(1)
+	}
+	if len(rs) == 0 {
+		fmt.Println("没有命中。")
+		return
+	}
+	fmt.Printf("「%s」命中 %d 处，按相关度显示：\n\n", query, len(rs))
+	for _, r := range rs {
+		title := ""
+		if i := strings.LastIndex(r.Key, "#"); i >= 0 {
+			title = titles[r.Key[:i]]
+		}
+		if title == "" {
+			title = "(无标题)"
+		}
+		fmt.Printf("  %s\n  %s\n    (相关度 %.2f) %s\n\n", truncate(title, 24), r.Key, r.Rank, excerpt(r.Text, query))
+	}
+}
+
+// excerpt 从原文上切命中词附近的一段（前 36 / 后 120 rune，与
+// sessions 包的 Hit 同一尺度），越界侧以 … 示意截断。片段从原文上切，
+// 不从分词后的串上切——后者与渲染的原文对不上。
+func excerpt(text, query string) string {
+	low := fold(text)
+	needle := sessions.NeedleOf(query)
+	at, n := -1, 0
+	for _, w := range strings.Fields(needle) {
+		if i := strings.Index(low, w); i >= 0 && (at < 0 || utf8.RuneCountInString(w) > n) {
+			at = len([]rune(low[:i]))
+			n = utf8.RuneCountInString(w)
+		}
+	}
+	runes := []rune(text)
+	if at < 0 {
+		if len(runes) > 120 {
+			return string(runes[:120]) + "…"
+		}
+		return text
+	}
+	from, to := max(0, at-36), min(len(runes), at+n+120)
+	out := string(runes[from:to])
+	if from > 0 {
+		out = "…" + strings.TrimLeft(out, " ")
+	}
+	if to < len(runes) {
+		out = strings.TrimRight(out, " ") + "…"
+	}
+	return out
+}
+
+// fold 逐 rune 小写，保持 rune 序号对齐，与 sessions 包同一做法。
+func fold(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		b.WriteRune(unicode.ToLower(r))
+	}
+	return b.String()
 }
