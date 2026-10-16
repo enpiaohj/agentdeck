@@ -14,6 +14,11 @@ build/bin/
 go.work
 go.work.sum
 
+# ---- 前端(Phase 2 桌面壳) ----
+# bindings 生成产物提交入库;依赖与构建产物不入库
+frontend/node_modules/
+frontend/dist/
+
 # ---- 开发期临时目录 ----
 # 侦察、实验、上游源码克隆（体积大，不入库）
 _probe/

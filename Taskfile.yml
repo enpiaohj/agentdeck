@@ -1,0 +1,31 @@
+version: '3'
+
+vars:
+  APP_NAME: agentdeck-desktop
+  BIN_DIR: bin
+
+tasks:
+  bindings:
+    desc: 生成 Go 服务层的前端 bindings(须从 main 包扫 services)
+    dir: cmd/agentdeck-desktop
+    cmds:
+      - wails3 generate bindings -d ../../frontend/bindings -ts
+
+  frontend:build:
+    desc: 构建前端产物
+    dir: frontend
+    cmds:
+      - npm install --no-audit --no-fund
+      - npm run build
+
+  build:
+    desc: 完整构建桌面应用(bindings → 前端 → Go)
+    cmds:
+      - task: bindings
+      - task: frontend:build
+      - go build -tags production -o {{.BIN_DIR}}/{{.APP_NAME}}.exe ./cmd/agentdeck-desktop
+
+  dev:
+    desc: 开发模式(前端热载)
+    cmds:
+      - wails3 dev

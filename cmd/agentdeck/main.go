@@ -16,8 +16,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/enpiaohj/agentdeck/internal/search"
 	"github.com/enpiaohj/agentdeck/internal/sessions"
@@ -222,46 +220,8 @@ func runSearch(list []sessions.Session, query, path string) {
 	}
 }
 
-// excerpt 从原文上切命中词附近的一段（前 36 / 后 120 rune，与
-// sessions 包的 Hit 同一尺度），越界侧以 … 示意截断。片段从原文上切，
-// 不从分词后的串上切——后者与渲染的原文对不上。定位按 Segment 的
-// 词元而非查询原文的字面子串：分词契约里标点只是分隔符，查询
-// D:/Work 命中的原文可能写作 D:\Work，字面是找不到的；
-// 取找得到的词元里最长的作锚，避开单字词元的噪声。
+// excerpt 切命中词附近的一段：逻辑在 internal/search.Excerpt（锚定用
+// Segment 词元、rune 对齐），CLI 与桌面壳共用同一实现。
 func excerpt(text, query string) string {
-	low := fold(text)
-	at, n := -1, 0
-	for _, tok := range search.Segment(query) {
-		if i := strings.Index(low, tok); i >= 0 {
-			if n0 := utf8.RuneCountInString(tok); n0 > n {
-				at, n = len([]rune(low[:i])), n0
-			}
-		}
-	}
-	runes := []rune(text)
-	if at < 0 {
-		if len(runes) > 120 {
-			return string(runes[:120]) + "…"
-		}
-		return text
-	}
-	from, to := max(0, at-36), min(len(runes), at+n+120)
-	out := string(runes[from:to])
-	if from > 0 {
-		out = "…" + strings.TrimLeft(out, " ")
-	}
-	if to < len(runes) {
-		out = strings.TrimRight(out, " ") + "…"
-	}
-	return out
-}
-
-// fold 逐 rune 小写，保持 rune 序号对齐，与 sessions 包同一做法。
-func fold(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for _, r := range s {
-		b.WriteRune(unicode.ToLower(r))
-	}
-	return b.String()
+	return search.Excerpt(text, query, 36, 120)
 }
