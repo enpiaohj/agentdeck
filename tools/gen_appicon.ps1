@@ -1,21 +1,36 @@
 # gen_appicon.ps1 -- draw the AgentDeck application icon and pack it.
 #
-# Design ("all your coding agents, one deck"): a rounded tile with an azure ->
-# indigo gradient, a soft top gloss and a bottom vignette, holding four white
-# panes of unequal width -- the app's four-column workspace -- with a spark in
-# the content pane marking the agent that is working.
+# The base is always the same: a rounded tile with an azure -> indigo gradient,
+# a soft top gloss and a bottom vignette (that part is the brand). What changes
+# between designs is the white mark in the middle:
 #
-# This is the first design drawn for the app and the one kept (chosen over a
-# two-card deck and a 2x2 grid: four panes of unequal width are what the
-# workspace actually looks like, and the widow/column rhythm still reads at
-# 32px). Everything is drawn here, at every size, so nothing is resampled and
-# the 16px entry stays crisp. The 256px render is copied into the frontend so
-# the in-app brand mark and the executable icon can never drift apart.
+#   rows   (current) the session list itself -- the row being worked on is a
+#          full card with the spark at its trailing edge, two quieter rows
+#          behind it. One bold white mass, so it still reads at 16px.
+#   deck   a hand of cards fanned about its centre, the middle one face up with
+#          the spark: "all your agents, one deck" taken literally. Prettier at
+#          256px, but at 32px the wings are only a soft halo.
+#   panes  the previous mark: four white bars of unequal width, the app's
+#          four-column workspace (kept because it can be regenerated for
+#          comparison).
+#
+# Designs that were drawn and dropped, for the record: a stack of three cards
+# (ghost layers are invisible below 64px), a white workspace plate with the
+# column gaps cut out of it (the gaps read as thin align-lines, not columns),
+# and two card fans (the wings swing out below the front card like a bow tie).
+#
+# Everything is drawn at every size, so nothing is resampled and the 16px entry
+# stays crisp. The 256px render is copied into the frontend so the in-app brand
+# mark and the executable icon can never drift apart.
 #
 # Usage:  powershell -NoProfile -ExecutionPolicy Bypass -File tools\gen_appicon.ps1
-# Output: build/appicon.png            1024px master
-#         build/windows/icon.ico       multi-size icon (256..16)
-#         frontend/public/appicon-256.png
+#         powershell ... -File tools\gen_appicon.ps1 -Design deck -Out _probe\x
+#         powershell ... -File tools\gen_appicon.ps1 -Sheet _probe\sheet
+# Output: <Out>/appicon.png          1024px master
+#         <Out>/windows/icon.ico     multi-size icon (256..16)
+#         <Out>/appicon-256.png
+#         frontend/public/appicon-256.png   (only when -Out is the default build)
+#         <Sheet>/<size>.png + <size>-zoom.png  (only with -Sheet, for review)
 #
 # After changing this file the linker resource must be regenerated:
 #     wails3 generate syso -icon build/windows/icon.ico -info build/windows/info.json `
@@ -24,16 +39,26 @@
 #
 # ASCII only on purpose: Windows PowerShell 5.1 reads .ps1 as the ANSI code page.
 
+param(
+  [ValidateSet('rows', 'deck', 'panes')][string]$Design = 'rows',
+  [string]$Out = '',
+  [string]$Sheet = ''
+)
+
 Add-Type -AssemblyName System.Drawing
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 if (-not $root) { $root = (Get-Location).Path }
 
-$buildDir = Join-Path $root 'build'
+$defaultOut = [string]::IsNullOrEmpty($Out)
+if ($defaultOut) { $Out = Join-Path $root 'build' }
+$buildDir = $Out
 $winDir   = Join-Path $buildDir 'windows'
 $pubDir   = Join-Path $root 'frontend\public'
-foreach ($d in @($buildDir, $winDir, $pubDir)) {
+$dirs = @($buildDir, $winDir)
+if ($defaultOut) { $dirs += $pubDir }
+foreach ($d in $dirs) {
   if (-not (Test-Path $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
 }
 
@@ -62,12 +87,122 @@ function New-SparkPath {
   return $p
 }
 
-# Pane / tile geometry in the 1024 design grid (see the design note above).
-$PANE_W = @(128.0, 176.0, 240.0, 176.0)   # nav | list | content | info
-$PANE_X = @(114.0, 276.0, 486.0, 760.0)
-$PANE_Y = 286.0
-$PANE_H = 452.0
-$PANE_R = 34.0
+# Shared brand base: gradient tile + gloss + vignette.
+function Add-Tile {
+  param($G, [double]$U)
+  $tile = New-RoundedPath (40 * $U) (40 * $U) (944 * $U) (944 * $U) (210 * $U)
+  $grad = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+    [System.Drawing.PointF]::new([float](64 * $U), [float](64 * $U)),
+    [System.Drawing.PointF]::new([float](960 * $U), [float](960 * $U)),
+    [System.Drawing.Color]::FromArgb(255, 92, 162, 255),
+    [System.Drawing.Color]::FromArgb(255, 26, 52, 190))
+  $G.FillPath($grad, $tile)
+
+  $G.SetClip($tile)
+  $gloss = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+    [System.Drawing.PointF]::new(0, [float](40 * $U)),
+    [System.Drawing.PointF]::new(0, [float](620 * $U)),
+    [System.Drawing.Color]::FromArgb(66, 255, 255, 255),
+    [System.Drawing.Color]::FromArgb(0, 255, 255, 255))
+  $G.FillRectangle($gloss, [float](40 * $U), [float](40 * $U), [float](944 * $U), [float](580 * $U))
+  $vig = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+    [System.Drawing.PointF]::new(0, [float](660 * $U)),
+    [System.Drawing.PointF]::new(0, [float](984 * $U)),
+    [System.Drawing.Color]::FromArgb(0, 12, 20, 60),
+    [System.Drawing.Color]::FromArgb(52, 12, 20, 60))
+  $G.FillRectangle($vig, [float](40 * $U), [float](660 * $U), [float](944 * $U), [float](324 * $U))
+  $G.ResetClip()
+
+  $grad.Dispose(); $gloss.Dispose(); $vig.Dispose(); $tile.Dispose()
+}
+
+# Soft drop shadow, two passes, to lift a white shape off the tile.
+function Add-Shadow {
+  param($G, [double]$U, $Rect, [double]$R, [double]$Dy)
+  $shadow = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(26, 8, 20, 70))
+  foreach ($d in @($Dy, $Dy * 2)) {
+    $p = New-RoundedPath ($Rect[0] * $U) (($Rect[1] + $d) * $U) ($Rect[2] * $U) ($Rect[3] * $U) ($R * $U)
+    $G.FillPath($shadow, $p)
+    $p.Dispose()
+  }
+  $shadow.Dispose()
+}
+
+function Add-MarkRows {
+  param($G, [double]$U)
+  # The session list itself: the row being worked on is a full card, the two
+  # below it are quieter rows, and the spark sits at the trailing edge of the
+  # active row -- where the app keeps its state marks.
+  $h = @(164.0, 108.0, 108.0)
+  $w = @(552.0, 448.0, 504.0)
+  $y = @(280.0, 490.0, 644.0)
+  # the lower rows sit in the tile's bottom vignette, so they need more white
+  # than they would on the flat gradient to still show at 16px
+  $a = @(255, 172, 132)
+  $r = @(82.0, 54.0, 54.0)
+  $x = 236.0
+  Add-Shadow $G $U @($x, $y[0], $w[0], $h[0]) $r[0] 7
+  for ($i = 0; $i -lt 3; $i++) {
+    $white = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb($a[$i], 255, 255, 255))
+    $p = New-RoundedPath ($x * $U) ($y[$i] * $U) ($w[$i] * $U) ($h[$i] * $U) ($r[$i] * $U)
+    $G.FillPath($white, $p)
+    $p.Dispose(); $white.Dispose()
+  }
+  $blue = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 46, 104, 226))
+  $spark = New-SparkPath (($x + $w[0] - 128) * $U) (($y[0] + $h[0] / 2) * $U) (64 * $U) (16 * $U)
+  $G.FillPath($blue, $spark)
+  $spark.Dispose(); $blue.Dispose()
+}
+
+function Add-MarkDeck {
+  param($G, [double]$U)
+  # A hand of cards, fanned about its centre so the wings come out symmetric,
+  # the middle one face up with the spark.
+  $cw = 404.0; $ch = 512.0
+  $cx = 512.0; $cy = 512.0
+  $r = 48.0
+  $cards = @(
+    @{ ang = -23.0; a = 148 },
+    @{ ang =  23.0; a = 148 },
+    @{ ang =   0.0; a = 255 }
+  )
+  foreach ($c in $cards) {
+    $G.TranslateTransform([float]($cx * $U), [float]($cy * $U))
+    $G.RotateTransform([float]$c.ang)
+    $G.TranslateTransform([float](-$cx * $U), [float](-$cy * $U))
+    if ($c.a -eq 255) { Add-Shadow $G $U @(($cx - $cw / 2), ($cy - $ch / 2), $cw, $ch) $r 7 }
+    $white = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb($c.a, 255, 255, 255))
+    $p = New-RoundedPath (($cx - $cw / 2) * $U) (($cy - $ch / 2) * $U) ($cw * $U) ($ch * $U) ($r * $U)
+    $G.FillPath($white, $p)
+    $p.Dispose(); $white.Dispose()
+    $G.ResetTransform()
+  }
+  $blue = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 46, 104, 226))
+  $spark = New-SparkPath ($cx * $U) ($cy * $U) (108 * $U) (26 * $U)
+  $G.FillPath($blue, $spark)
+  $spark.Dispose(); $blue.Dispose()
+}
+
+function Add-MarkPanes {
+  param($G, [double]$U)
+  # nav | list | content | info -- what the workspace column layout looks like
+  $w = @(128.0, 176.0, 240.0, 176.0)
+  $x = @(114.0, 276.0, 486.0, 760.0)
+  $y = 286.0
+  $h = 452.0
+  $r = 34.0
+  Add-Shadow $G $U @(114.0, $y, 822.0, $h) $r 6
+  $white = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::White)
+  for ($i = 0; $i -lt 4; $i++) {
+    $p = New-RoundedPath ($x[$i] * $U) ($y * $U) ($w[$i] * $U) ($h * $U) ($r * $U)
+    $G.FillPath($white, $p)
+    $p.Dispose()
+  }
+  $blue = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 46, 104, 226))
+  $spark = New-SparkPath ((($x[2] + $w[2] / 2)) * $U) ((($y + $h / 2)) * $U) (72 * $U) (17 * $U)
+  $G.FillPath($blue, $spark)
+  $spark.Dispose(); $blue.Dispose(); $white.Dispose()
+}
 
 function New-IconBitmap {
   param([int]$Size)
@@ -80,57 +215,13 @@ function New-IconBitmap {
   $g.Clear([System.Drawing.Color]::Transparent)
 
   $u = $Size / 1024.0   # design units -> pixels
-
-  # --- tile ---
-  $tile = New-RoundedPath (40 * $u) (40 * $u) (944 * $u) (944 * $u) (210 * $u)
-  $grad = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
-    [System.Drawing.PointF]::new([float](64 * $u), [float](64 * $u)),
-    [System.Drawing.PointF]::new([float](960 * $u), [float](960 * $u)),
-    [System.Drawing.Color]::FromArgb(255, 92, 162, 255),
-    [System.Drawing.Color]::FromArgb(255, 26, 52, 190))
-  $g.FillPath($grad, $tile)
-
-  $g.SetClip($tile)
-  # top gloss
-  $gloss = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
-    [System.Drawing.PointF]::new(0, [float](40 * $u)),
-    [System.Drawing.PointF]::new(0, [float](620 * $u)),
-    [System.Drawing.Color]::FromArgb(66, 255, 255, 255),
-    [System.Drawing.Color]::FromArgb(0, 255, 255, 255))
-  $g.FillRectangle($gloss, [float](40 * $u), [float](40 * $u), [float](944 * $u), [float](580 * $u))
-  # bottom vignette
-  $vig = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
-    [System.Drawing.PointF]::new(0, [float](660 * $u)),
-    [System.Drawing.PointF]::new(0, [float](984 * $u)),
-    [System.Drawing.Color]::FromArgb(0, 12, 20, 60),
-    [System.Drawing.Color]::FromArgb(52, 12, 20, 60))
-  $g.FillRectangle($vig, [float](40 * $u), [float](660 * $u), [float](944 * $u), [float](324 * $u))
-  $g.ResetClip()
-
-  # --- soft shadow lifting the pane row off the tile ---
-  $shadow = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(26, 8, 20, 70))
-  foreach ($dy in @(6.0, 12.0)) {
-    $sp = New-RoundedPath (114 * $u) (($PANE_Y + $dy) * $u) (822 * $u) ($PANE_H * $u) ($PANE_R * $u)
-    $g.FillPath($shadow, $sp)
-    $sp.Dispose()
-  }
-  $shadow.Dispose()
-
-  # --- four panes ---
-  $white = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::White)
-  for ($i = 0; $i -lt 4; $i++) {
-    $p = New-RoundedPath ($PANE_X[$i] * $u) ($PANE_Y * $u) ($PANE_W[$i] * $u) ($PANE_H * $u) ($PANE_R * $u)
-    $g.FillPath($white, $p)
-    $p.Dispose()
+  Add-Tile $g $u
+  switch ($Design) {
+    'rows'  { Add-MarkRows  $g $u }
+    'deck'  { Add-MarkDeck  $g $u }
+    'panes' { Add-MarkPanes $g $u }
   }
 
-  # --- spark, centred in the content pane ---
-  $blue = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 46, 104, 226))
-  $spark = New-SparkPath ((($PANE_X[2] + $PANE_W[2] / 2)) * $u) ((($PANE_Y + $PANE_H / 2)) * $u) (72 * $u) (17 * $u)
-  $g.FillPath($blue, $spark)
-
-  $spark.Dispose(); $blue.Dispose(); $white.Dispose()
-  $grad.Dispose(); $gloss.Dispose(); $vig.Dispose(); $tile.Dispose()
   $g.Dispose()
   return $bmp
 }
@@ -146,6 +237,11 @@ foreach ($s in $sizes) {
   $bmp.Dispose(); $ms.Dispose()
 }
 [System.IO.File]::WriteAllBytes((Join-Path $pubDir 'appicon-256.png'), $pngs[256])
+if (-not $defaultOut) {
+  # a candidate run keeps its own 256px copy beside its master; in the build
+  # dir the frontend's copy above is the only 256px file there is
+  [System.IO.File]::WriteAllBytes((Join-Path $buildDir 'appicon-256.png'), $pngs[256])
+}
 
 $master = New-IconBitmap 1024
 $master.Save((Join-Path $buildDir 'appicon.png'), [System.Drawing.Imaging.ImageFormat]::Png)
@@ -174,6 +270,28 @@ $bw.Flush()
 [System.IO.File]::WriteAllBytes((Join-Path $winDir 'icon.ico'), $ms.ToArray())
 $bw.Dispose(); $ms.Dispose()
 
+# --- review sheet: single sizes, plus nearest-neighbour zooms of the small ones ---
+if (-not [string]::IsNullOrEmpty($Sheet)) {
+  if (-not (Test-Path $Sheet)) { New-Item -ItemType Directory -Force -Path $Sheet | Out-Null }
+  foreach ($s in @(256, 64, 48, 32, 16)) {
+    $bmp = New-IconBitmap $s
+    $bmp.Save((Join-Path $Sheet ("{0}.png" -f $s)), [System.Drawing.Imaging.ImageFormat]::Png)
+    if ($s -le 64) {
+      $big = [System.Drawing.Bitmap]::new((256), (256), [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+      $bg = [System.Drawing.Graphics]::FromImage($big)
+      $bg.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::NearestNeighbor
+      $bg.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::Half
+      $bg.Clear([System.Drawing.Color]::Transparent)
+      $bg.DrawImage($bmp, 0, 0, 256, 256)
+      $bg.Dispose()
+      $big.Save((Join-Path $Sheet ("{0}-zoom.png" -f $s)), [System.Drawing.Imaging.ImageFormat]::Png)
+      $big.Dispose()
+    }
+    $bmp.Dispose()
+  }
+}
+
+Write-Host ("design:   {0}" -f $Design)
 Write-Host ("icon:     {0} ({1} bytes; sizes {2})" -f (Join-Path $winDir 'icon.ico'), (Get-Item (Join-Path $winDir 'icon.ico')).Length, ($order -join ','))
 Write-Host ("master:   {0}" -f (Join-Path $buildDir 'appicon.png'))
-Write-Host ("frontend: {0}" -f (Join-Path $pubDir 'appicon-256.png'))
+Write-Host ("frontend: {0}" -f $(if ($defaultOut) { Join-Path $pubDir 'appicon-256.png' } else { '(not written)' }))

@@ -25,14 +25,36 @@
 
 ## 3. 应用图标(自己画的)
 
-`tools/gen_appicon.ps1` 用 GDI+ 现画,不依赖任何素材:
+`tools/gen_appicon.ps1` 用 GDI+ 现画,不依赖任何素材。底色三层是品牌固定部分:
+蓝色渐变(azure → indigo)圆角方片、顶部一层高光、底部一层暗角。中间的白色
+图形有三版,用 `-Design` 切换:
 
-- 蓝色渐变(azure → indigo)圆角方片,顶部一层高光、底部一层暗角;
-- 中间一块白色工作台,三条分隔线切成四栏——就是本应用的四栏布局
-  (导航 | 会话列表 | 消息流 | 会话信息);
-- 内容栏中央一枚四角星,表示「有 Agent 正在工作」。
+| 设计 | 图形 | 含义 |
+| --- | --- | --- |
+| `rows`(当前) | 一张实心卡片 + 下面两行更淡的行,卡片右端一枚四角星 | 会话列表本身:正在工作的那一行是完整卡片,星就是「有 Agent 正在工作」 |
+| `deck` | 三张以中心为轴摊开的卡片,中间那张正面朝上带星 | 「All your agents. One deck.」的字面表达 |
+| `panes` | 四根不等宽的白条 | 本应用的四栏布局(导航｜会话列表｜消息流｜会话信息) |
 
-每个尺寸都单独绘制(不从大图缩放),所以 16px 那一档不会糊。输出:
+**为什么用 rows**:16~32px 是最常出现的尺寸(任务栏、资源管理器),这一档里
+只能容下一个白色主体。rows 只有一个实心白块 + 一个亮点,32px 仍读得出「列表 +
+某一行在工作」;deck 的扇形侧翼在 32px 只剩一圈柔光,panes 在 32px 会读成
+表格/窗口图标(通用、不指向本产品)。
+
+画过又放弃的:三张错位卡片的「层叠」(错位层在 64px 以下完全看不见)、
+把四栏从一块白板上「挖」出来(缝太细,读成对齐线而不是栏)、两张旋转卡片
+(侧卡下角会甩到前面卡的下面,像蝴蝶结)。
+
+每个尺寸都单独绘制(不从大图缩放),所以 16px 那一档不会糊。切换设计只需:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\gen_appicon.ps1 -Design deck
+wails3 generate syso -icon build/windows/icon.ico -info build/windows/info.json `
+  -manifest build/windows/wails.exe.manifest -arch amd64 `
+  -out cmd/agentdeck-desktop/resource_windows_amd64.syso
+```
+
+加上 `-Sheet _probe\sheet` 会额外输出 256/64/48/32/16 各档单图与小尺寸的
+最近邻放大图,用来比对小尺寸下还看不看得出图形。输出:
 
 ```
 build/appicon.png             1024px 母版
