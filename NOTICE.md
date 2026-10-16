@@ -38,17 +38,20 @@
 ### 未移植
 
 - `internal/provider`（58,948 行）：magpie 的模型路由与定价体系。AgentDeck
-  仅自写最小替代（`internal/provider/provider.go`，约 100 行），覆盖会话层
-  实际用到的 7 个符号。
-- `internal/gui`、`internal/gateway`、`internal/plugin`、`internal/update` 等
-  模型路由网关相关包。
+  仅自写最小替代（`internal/provider/provider.go`，约 130 行），覆盖会话层
+  实际用到的 7 个符号，外加移植中补上的 `SetModelPrice` 与 effort/window
+  后缀剥离。
+- `internal/gui`、`internal/gateway`、`internal/plugin`、`internal/update`、
+  `internal/agent`、`internal/library`、`internal/backup`、`internal/middleware`
+  等模型路由网关与 Agent 管理相关包。
 
-### 移植方式说明
+### 测试
 
-移植为**一次性源码搬运**，不跟随上游更新。上游的缺陷修复与新 Agent 支持
-需自行评估后手动引入。
+上游的 `*_test.go` 与 `testdata/` 一并移植（约 16,000 行测试 + 126 个夹具），
+作为「移植后行为不变」的回归资产。当前 17 个包全部通过。
 
-移植的代码在语义上可能与上游当前版本存在差异；上游的测试文件未一并移植。
+按本项目情况调整过 4 处，均在代码内注明原因，详见 `CLAUDE.md` 的
+「测试与验证」一节。
 
 ## Go 依赖
 

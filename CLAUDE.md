@@ -68,8 +68,21 @@ releases/     正式发布快照（vX.Y.Z/）
 
 - 静态检查：`go vet ./...`
 - 编译：`go build ./...`
-- 测试：`go test ./...`（移植的测试文件尚未引入）
-- 格式化：`gofmt -l .` 应为空
+- 测试：`go test ./... -count=1`
+- 格式化：`gofmt -l cmd internal` 应为空
+
+当前基线：17 个包全部通过（`sessions` 约 18s，`proc` 约 15s，全套约 50s）。
+运行验证：`go run ./cmd/agentdeck -all` 应读出本机 600+ 条会话。
+
+测试套件移植自 magpie 上游（约 16,000 行）。三处按本项目情况调整过，
+均在代码内注明原因：
+
+| 文件 | 改动 | 原因 |
+| --- | --- | --- |
+| `sessions/price_test.go` | 移除 `TestPriceOfAfterProviderRename` | 依赖 magpie 的 provider 注册表与改名键迁移，AgentDeck 未移植 provider 体系 |
+| `sessions/cursor_snapshot_test.go` | `TMPDIR` 改为 `isolateTemp()`，同时设 `TMP`/`TEMP` | 上游只设 `TMPDIR`，Windows 上 `os.TempDir()` 不读它，测试会污染系统临时目录并使断言失效 |
+| `sqlitedb/sqlitedb_test.go` | Windows 上跳过 `TestSQLiteSurvivesMalformedEnv` | Windows 内核在 `fork/exec` 阶段拒绝无 `=` 的环境变量，该场景无法构造 |
+| `agentenv/agentenv_test.go` | 新增 `upstreamReaders` 表（36 项） | 这些环境变量的唯一读取者都在未移植的包（`agent`/`gateway`/`library`/`provider`）里；变量名保留，因为 `Vars` 是沙箱清理清单 |
 
 未执行的验证必须如实标注，不得写成「通过」。
 
@@ -95,6 +108,17 @@ releases/     正式发布快照（vX.Y.Z/）
 
 6. **控制台代码页是 cp949**（区域 zh-CN）。向 stdout 写中文的 Go 程序需先调
    `SetConsoleOutputCP(65001)`，Python 子进程需 `sys.stdout.reconfigure(encoding='utf-8')`。
+
+7. **Windows 内核拒绝无 `=` 的环境变量**。`os/exec` 传这类条目会直接返回
+   "The parameter is incorrect"，子进程起不来。因此 `sqlitedb` 的 `wellFormed`
+   防护在 Windows 上无法实测，只能靠 macOS/Linux 验证。
+
+8. **Go 在 Windows 上 `os.TempDir()` 读 `TMP`/`TEMP`，不读 `TMPDIR`**。
+   测试要隔离临时目录必须三个变量一起设（见 `sessions` 包的 `isolateTemp`）。
+
+9. **移植的源码在磁盘上是 CRLF**，而 `.gitattributes` 声明 `*.go text eol=lf`。
+   换行符转换会一次改动 200+ 个文件，gofmt 也会整文件报差异。批量转换用
+   二进制方式做，不要用 `sed`。
 
 ## 安全约定
 
