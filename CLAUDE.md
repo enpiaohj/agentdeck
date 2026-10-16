@@ -78,7 +78,8 @@ MSIX 实测不符，见前四份中的实测报告。
 - 测试：`go test ./... -count=1`
 - 格式化：`gofmt -l cmd internal` 应为空
 
-当前基线：18 个包全部通过（`sessions` 约 18s，`proc` 约 15s，全套约 50s）。
+当前基线：21 个包全部通过（`sessions` 约 14s，`settings` 约 14s，`proc` 约 12s，
+全套约 50s）。
 运行验证：`go run ./cmd/agentdeck -all` 应读出本机 600+ 条会话；
 `-search "查询"`（可配 `-agent`/`-all`）对所选会话正文建 FTS5 索引并
 全文检索，`-all -search` 实测索引 476 条会话正文。
@@ -164,6 +165,19 @@ MSIX 实测不符，见前四份中的实测报告。
       `git archive HEAD | tar -x -C <dst> --exclude=releases`
       （v0.1.1 用不带 `--exclude` 的写法导出是 1216 个文件 / 11 MB，排除后
       608 个 / 5.4 MB）。
+
+14. **版本号散在 `build/windows/` 两个文件的五处，只改一处会各说各话**：
+    - `info.json`：`fixed.file_version`、`fixed.product_version`（不写这项，
+      固定信息块的 dwProductVersion 就是 0.0.0.0，与字符串 ProductVersion 矛盾）、
+      `info.0409.ProductVersion`、`info.0409.FileVersion`（不写这项，字符串表里
+      就没有 `FileVersion` 键，资源管理器改读固定块来显示「文件版本」）。
+    - `wails.exe.manifest`：`assemblyIdentity version`，写的是 exe 内嵌**应用清单**
+      的版本，与 VERSIONINFO 无关，资源管理器不显示它，但 `grep -a` 能从 exe 里
+      刮出旧版本号。v0.1.1 就是只提了 `info.json`，清单里残留 `0.1.0`。
+    - 两个文件都改完**必须重跑** `wails3 generate syso`（见 `tools/gen_appicon.ps1`
+      顶部注释里的完整命令），否则 syso 里还是旧值；`go build` 不会自己重生成。
+    - 验证：`(Get-Item exe).VersionInfo` 看版本资源、资源管理器「详细信息」看用户
+      实际看到的两个版本号、`grep -a -o -E 'assemblyIdentity[^>]*' exe` 看清单。
 
 ## 安全约定
 
