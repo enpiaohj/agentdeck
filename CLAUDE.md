@@ -153,8 +153,13 @@ MSIX 实测不符，见前四份中的实测报告。
     - **任何从仓库根递归扫源码的检查都要跳过 `releases/`**，否则会扫到副本里的
       历史：v0.1.0 发布提交一入库，`go test ./...` 就变红
       （`TestNoCommandBypassesProc`、`TestOnlyThisPackageReachesSQLite` 报的是副本里的
-      代码；`TestVarsAreRead` 更隐蔽——副本里的同名变量会让它「恰好」通过，等于
-      把约束悄悄放宽）。新增这类全仓扫描测试时，跳过清单里要有 `releases`。
+      代码）。这两条是**按文件逐个判定**的，副本里每个文件都要重新过一遍判定，
+      所以副本必然把它们打红。`TestVarsAreRead` 是**按名字是否存在判定**的，副本
+      影响不到它：副本是同一提交树的逐字节复制，每个文件在原路径同样存在，副本
+      提供不了 live 树没有的读取者（`go test ./internal/agentenv -run
+      TestVarsAreRead` 在跳过 `releases/` 的当前代码上照样 PASS）。v0.1.1 的
+      CHANGELOG 与提交 `19e64eb` 把这条也写成「副本让它恰好通过」，那是错的推断，
+      已发布快照按不可变原则未改。新增这类全仓扫描测试时，跳过清单里要有 `releases`。
     - **导出快照时必须排除 `releases/`**，否则把上一版快照整个套进来：
       `git archive HEAD | tar -x -C <dst> --exclude=releases`
       （v0.1.1 用不带 `--exclude` 的写法导出是 1216 个文件 / 11 MB，排除后
