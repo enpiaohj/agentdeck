@@ -319,8 +319,12 @@ func (h *hermesDB) metadata(q hermesQuery, sid string, s *state) (hermesUsage, e
 
 type hermesMessage struct {
 	role, content, tools string
-	at                   float64
-	id                   int64
+	// toolName is the tool a result row answers for (transcript_hermes);
+	// thinking is what a reply reasoned in, of the two columns Hermes may
+	// keep it in. The summary reader (parseHermes) reads neither.
+	toolName, thinking string
+	at                 float64
+	id                 int64
 }
 
 func (h *hermesDB) eachMessage(q hermesQuery, sid string, fn func(hermesMessage)) error {
@@ -339,9 +343,22 @@ func (h *hermesDB) eachMessage(q hermesQuery, sid string, fn func(hermesMessage)
 		}
 		return "NULL"
 	}
+	// What a reply reasoned in: Hermes keeps it in reasoning_content, in an
+	// older column named reasoning, or in neither (a fallback of '' keeps
+	// the column list the same whichever schema this is).
+	reasoning := "''"
+	switch {
+	case h.messages["reasoning_content"] && h.messages["reasoning"]:
+		reasoning = "COALESCE(NULLIF(COALESCE(reasoning_content, ''), ''), COALESCE(reasoning, ''))"
+	case h.messages["reasoning_content"]:
+		reasoning = "COALESCE(reasoning_content, '')"
+	case h.messages["reasoning"]:
+		reasoning = "COALESCE(reasoning, '')"
+	}
 	query := "SELECT " + strings.Join([]string{
 		column("role"), column("content"), column("tool_calls"),
 		column("tool_call_id"), column("tool_name"), column("display_kind"),
+		reasoning,
 	}, ", ") + ", " + hermesExpr(h.messages, "timestamp", "0") +
 		", " + hermesExpr(h.messages, "active", "1") +
 		", " + hermesExpr(h.messages, "id", "rowid") +
@@ -374,11 +391,13 @@ func (h *hermesDB) eachMessage(q hermesQuery, sid string, fn func(hermesMessage)
 		var key identity
 		var m hermesMessage
 		var displayKind sql.NullString
+		var thinking string
 		var active int
-		if err := rows.Scan(&key.role, &key.content, &key.tools, &key.toolID, &key.toolName, &displayKind, &key.at, &active, &m.id); err != nil {
+		if err := rows.Scan(&key.role, &key.content, &key.tools, &key.toolID, &key.toolName, &displayKind, &thinking, &key.at, &active, &m.id); err != nil {
 			return err
 		}
 		m.role, m.content, m.tools, m.at = key.role.String, key.content.String, key.tools.String, key.at
+		m.toolName, m.thinking = key.toolName.String, thinking
 		if m.role == "user" && key.content.Valid {
 			key.content.String = hermesDisplayContent(m.content, displayKind.String)
 		}

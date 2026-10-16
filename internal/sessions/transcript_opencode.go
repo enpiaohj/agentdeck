@@ -7,11 +7,14 @@ import (
 
 // openCodeTranscript reads the conversation in message order from the same
 // store the listing chose, including while a v1 to v2 migration is underway.
-func openCodeTranscript(s Session, add func(bool, Part) bool) error {
+// files are the sessions of the agent asking: OpenCode's, or ZCode's, which
+// keeps its sessions in OpenCode's tables in a database of its own
+// (zcodeFiles).
+func openCodeTranscript(s Session, files []file, add func(bool, Part) bool) error {
 	dbReadMu.Lock()
 	defer dbReadMu.Unlock()
 	defer closeDBs()
-	for _, f := range openCodeFiles() {
+	for _, f := range files {
 		if f.sid != s.ID {
 			continue
 		}

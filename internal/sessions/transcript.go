@@ -30,7 +30,8 @@ var ErrNoTranscript = errors.New("this agent's conversations can't be shown")
 // transcript.
 func HasTranscript(agent string) bool {
 	switch agent {
-	case "claude", "qoder", "qoder-cn", "codex", "pi", "omp", "cursor", "opencode", "kimi":
+	case "claude", "claude-desktop", "qoder", "qoder-cn", "codex", "pi", "omp",
+		"cursor", "opencode", "zcode", "workbuddy", "hermes", "kimi":
 		return true
 	}
 	return false
@@ -67,15 +68,22 @@ func readTranscript(s Session, add func(bool, Part) bool) error {
 }
 
 // readTranscriptOf is readTranscript decoding only the lines keep says yes
-// to, where a line stands alone (Claude's, Codex's, Kimi's); Pi's lines are a tree,
-// read whole.
+// to, where a line stands alone (Claude's, Codex's, Kimi's, WorkBuddy's);
+// Pi's lines are a tree, read whole, and OpenCode's, ZCode's and Hermes's
+// rows and a Cursor session's events come from their store.
 func readTranscriptOf(s Session, keep func([]byte) bool, add func(bool, Part) bool) error {
 	whole := Call{Agent: s.Agent, File: s.Path, To: math.MaxInt64}
 	switch s.Agent {
 	case "opencode":
-		return openCodeTranscript(s, add)
+		return openCodeTranscript(s, openCodeFiles(), add)
+	case "zcode":
+		return openCodeTranscript(s, zcodeFiles(), add)
 	case "cursor":
 		return cursorTranscript(s.Path, add)
+	case "workbuddy":
+		return workBuddyTranscript(s.Path, add)
+	case "hermes":
+		return hermesTranscript(s, add)
 	case "codex":
 		return codexContentOf(whole, keep, add)
 	case "pi", "omp":
@@ -83,6 +91,8 @@ func readTranscriptOf(s Session, keep func([]byte) bool, add func(bool, Part) bo
 	case "kimi":
 		return kimiTranscript(s.Path, keep, add)
 	default:
+		// Claude Code's lines: Claude's, and Desktop's own Code and Cowork
+		// sessions, which are Claude Code's files in the Desktop's home
 		return claudeContentOf(whole, keep, add)
 	}
 }

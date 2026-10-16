@@ -475,15 +475,29 @@ func parseOpenCode(f file) *state {
 		return msgs[i].ID < msgs[j].ID
 	})
 	s.saw(ms(info.Time.Created), f.main)
+	// whether a reply is one row: OpenCode 1 and ZCode write a message a row,
+	// OpenCode 2 writes a turn's steps as rows of their own, so its rows are
+	// not counted as replies (the count would be the steps', not the replies')
+	perMessage := true
+	if _, v2 := f.oc.(ocV2DB); v2 {
+		perMessage = false
+	}
 	for _, m := range msgs {
 		at := ms(m.Time.Created)
 		s.saw(at, f.main)
 		switch m.Role {
 		case "user":
-			if typed := m.Semantics == nil || m.Semantics.Origin == "" || m.Semantics.Origin == "real_user"; typed && f.main && s.Title == "" && s.First == "" {
-				ocTitle(s, f.oc.parts(m.ID))
+			typed := m.Semantics == nil || m.Semantics.Origin == "" || m.Semantics.Origin == "real_user"
+			if typed && f.main {
+				s.day(dateOf(at)).Prompts++
+				if s.Title == "" && s.First == "" {
+					ocTitle(s, f.oc.parts(m.ID))
+				}
 			}
 		case "assistant":
+			if perMessage && f.main {
+				s.day(dateOf(at)).Replies++
+			}
 			if done := ms(m.Time.Completed); !done.IsZero() {
 				s.saw(done, f.main)
 				at = done

@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 )
@@ -43,4 +44,50 @@ func (s zcDB) info(sid string) (ocInfo, bool) {
 		i.Title = ""
 	}
 	return i, err == nil
+}
+
+// messages and parts are ocDB's with the row's own id written into it: ZCode
+// keeps a message's id in the column of that name, not in the document as
+// OpenCode does, and a message's parts are asked for by that id, so a
+// document read without it (ocDB.messages) would leave every part unread.
+func (s zcDB) messages(sid string) [][]byte {
+	rows, err := s.db.Query(`SELECT id, data FROM message WHERE session_id = ? ORDER BY id`, sid)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out [][]byte
+	for rows.Next() {
+		var id string
+		var b []byte
+		if rows.Scan(&id, &b) != nil {
+			continue
+		}
+		if doc := docWithID(id, b); doc != nil {
+			out = append(out, doc)
+		}
+	}
+	return out
+}
+
+func (s zcDB) parts(mid string) [][]byte {
+	return s.rows(`SELECT data FROM part WHERE message_id = ? ORDER BY id`, mid)
+}
+
+// docWithID is a document of an object with its id said first, "" if the id
+// cannot be written into it.
+func docWithID(id string, doc []byte) []byte {
+	if len(doc) == 0 || doc[0] != '{' {
+		return nil
+	}
+	quoted, err := json.Marshal(id)
+	if err != nil {
+		return nil
+	}
+	out := make([]byte, 0, len(doc)+len(quoted)+6)
+	out = append(out, `{"id":`...)
+	out = append(out, quoted...)
+	out = append(out, ',')
+	out = append(out, doc[1:]...)
+	return out
 }

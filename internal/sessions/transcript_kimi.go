@@ -200,7 +200,7 @@ func kimiMessageParts(l kimiLine, names map[string]string) []Part {
 }
 
 // kimiArgs is a call's arguments: an OpenAI-style call has them as a string
-// of JSON.
+// of JSON (WorkBuddy writes its calls the same way and reads them here too).
 func kimiArgs(raw json.RawMessage) string {
 	var s string
 	if json.Unmarshal(raw, &s) == nil {
