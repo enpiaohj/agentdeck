@@ -149,6 +149,17 @@ MSIX 实测不符，见前四份中的实测报告。
 12. **`go` / `gofmt` 不在默认 PATH**，工具链在 `C:\Program Files\Go\bin`。
     PowerShell 里先 `$env:Path += ";C:\Program Files\Go\bin"` 再调用。
 
+13. **`releases/vX.Y.Z/source/` 是源码冻结副本，不是当前源码树**，两处必须当心：
+    - **任何从仓库根递归扫源码的检查都要跳过 `releases/`**，否则会扫到副本里的
+      历史：v0.1.0 发布提交一入库，`go test ./...` 就变红
+      （`TestNoCommandBypassesProc`、`TestOnlyThisPackageReachesSQLite` 报的是副本里的
+      代码；`TestVarsAreRead` 更隐蔽——副本里的同名变量会让它「恰好」通过，等于
+      把约束悄悄放宽）。新增这类全仓扫描测试时，跳过清单里要有 `releases`。
+    - **导出快照时必须排除 `releases/`**，否则把上一版快照整个套进来：
+      `git archive HEAD | tar -x -C <dst> --exclude=releases`
+      （v0.1.1 用不带 `--exclude` 的写法导出是 1216 个文件 / 11 MB，排除后
+      608 个 / 5.4 MB）。
+
 ## 安全约定
 
 - 只读访问上游存储，绝不 `DELETE` / `UPDATE` / `INSERT` 上游数据库
