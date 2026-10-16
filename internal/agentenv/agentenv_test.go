@@ -40,8 +40,11 @@ func TestVarsAreRead(t *testing.T) {
 			return err
 		}
 		if d.IsDir() {
+			// releases/ holds frozen copies of this tree (the source snapshot of
+			// each release); counting a name read only there would say a name is
+			// still read when the live tree has no reader for it.
 			switch d.Name() {
-			case ".git", "dist", "node_modules", "agentenv":
+			case ".git", "dist", "node_modules", "agentenv", "releases":
 				return fs.SkipDir
 			}
 			return nil

@@ -89,7 +89,10 @@ func TestOnlyThisPackageReachesSQLite(t *testing.T) {
 			return err
 		}
 		if d.IsDir() {
-			if path != root && (strings.HasPrefix(d.Name(), ".") || d.Name() == "node_modules" || d.Name() == "testdata" || path == self) {
+			// releases/ holds frozen copies of this tree (the source snapshot of
+			// each release). They are not this tree, and scanning them would
+			// report every release's own history back at us.
+			if path != root && (strings.HasPrefix(d.Name(), ".") || d.Name() == "node_modules" || d.Name() == "testdata" || path == filepath.Join(root, "releases") || path == self) {
 				return filepath.SkipDir
 			}
 			return nil

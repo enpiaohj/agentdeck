@@ -21,7 +21,10 @@ func TestNoCommandBypassesProc(t *testing.T) {
 			return err
 		}
 		if d.IsDir() {
-			if path != root && (strings.HasPrefix(d.Name(), ".") || d.Name() == "node_modules" || path == filepath.Join(root, "internal", "proc") || path == filepath.Join(root, "internal", "testenv")) {
+			// releases/ holds frozen copies of this tree (the source snapshot of
+			// each release). They are not this tree, and scanning them would
+			// report every release's own history back at us.
+			if path != root && (strings.HasPrefix(d.Name(), ".") || d.Name() == "node_modules" || path == filepath.Join(root, "releases") || path == filepath.Join(root, "internal", "proc") || path == filepath.Join(root, "internal", "testenv")) {
 				return filepath.SkipDir
 			}
 			return nil
