@@ -1,6 +1,8 @@
 html, body, #root {
   height: 100%;
+  width: 100%;
   margin: 0;
+  overflow: hidden; /* 桌面壳固定视口,禁止页面级滚动 */
   font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei", sans-serif;
   -webkit-font-smoothing: antialiased;
 }

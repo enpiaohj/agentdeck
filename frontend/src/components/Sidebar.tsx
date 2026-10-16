@@ -11,6 +11,8 @@ import {
   ChevronDoubleRightRegular,
   AppsRegular,
   StarRegular,
+  FolderRegular,
+  SettingsRegular,
 } from '@fluentui/react-icons'
 import { useEffect, useState } from 'react'
 import type { AgentView, IndexStatus, ProjectView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
@@ -54,8 +56,9 @@ const useStyles = makeStyles({
     ':hover': { backgroundColor: tokens.colorNeutralBackground3Hover },
   },
   itemActive: {
-    backgroundColor: tokens.colorNeutralBackground3,
+    backgroundColor: tokens.colorNeutralBackground1,
     fontWeight: 600,
+    boxShadow: tokens.shadow2,
     ':before': {
       content: '""',
       position: 'absolute',
@@ -80,9 +83,19 @@ const useStyles = makeStyles({
   spacer: { flex: 1 },
   status: { padding: '10px 14px', fontSize: '11px', color: tokens.colorNeutralForeground3, borderTop: `1px solid ${tokens.colorNeutralStroke3}` },
   sectionTitle: {
-    padding: '12px 18px 4px',
+    padding: '14px 18px 4px',
     fontSize: '11px',
     fontWeight: 600,
+    letterSpacing: '0.02em',
+    color: tokens.colorNeutralForeground3,
+  },
+  foot: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 14px',
+    borderTop: `1px solid ${tokens.colorNeutralStroke3}`,
+    fontSize: '11px',
     color: tokens.colorNeutralForeground3,
   },
   projectScroll: { flex: 1, overflowY: 'auto', minHeight: 0 },
@@ -105,7 +118,7 @@ type Props = {
 
 function isAll(f: SidebarFilter) { return !f.agent && !f.favorites && !f.archived && !f.project }
 
-export function Sidebar({ collapsed, onToggle, filter, onFilter }: Props) {
+export function Sidebar({ collapsed, onToggle, filter, onFilter, onOpenDiagnostics }: Props) {
   const styles = useStyles()
   const agents = useAgents()
   const projects = useProjects()
@@ -179,7 +192,7 @@ export function Sidebar({ collapsed, onToggle, filter, onFilter }: Props) {
         </button>
       ))}
 
-      <div className={styles.sectionTitle}>项目(按会话数)</div>
+      <div className={styles.sectionTitle}>工作区</div>
       <div className={styles.projectScroll}>
         {projects.map((p) => (
           <button
@@ -188,6 +201,7 @@ export function Sidebar({ collapsed, onToggle, filter, onFilter }: Props) {
             onClick={pick({ project: p.path })}
             title={`${p.path}(${p.favorites} 收藏)`}
           >
+            <FolderRegular fontSize={16} style={{ flexShrink: 0, color: tokens.colorNeutralForeground3 }} />
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {p.drive ? `${p.drive} ` : ''}{p.name}
             </span>
@@ -196,7 +210,18 @@ export function Sidebar({ collapsed, onToggle, filter, onFilter }: Props) {
         ))}
         {projects.length === 0 ? <div className={styles.status}>暂无项目</div> : null}
       </div>
-      <div className={styles.status}>
+      <div className={styles.foot}>
+        {onOpenDiagnostics ? (
+          <button
+            className={styles.item}
+            style={{ width: 'auto', margin: 0, padding: '4px 6px' }}
+            onClick={onOpenDiagnostics}
+            title="能力诊断 / 备份恢复"
+          >
+            <SettingsRegular fontSize={15} />
+            设置
+          </button>
+        ) : null}
         <IndexBadge status={status} />
       </div>
     </nav>

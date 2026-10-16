@@ -53,3 +53,6 @@ releases/**/*.zip
 releases/**/*.tar.gz
 releases/**/*.dmg
 releases/**/*.pkg
+
+# Python 脚本缓存(开发脚本)
+__pycache__/

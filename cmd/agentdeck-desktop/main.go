@@ -59,12 +59,33 @@ func main() {
 		},
 	})
 
+	// 窗口初始尺寸按屏幕工作区自适应(逻辑像素):设计基准 1280×800、
+	// 最小 960×600,但小屏(如 200% DPI 笔记本逻辑宽仅 ~720)按屏缩减,
+	// 否则窗口被系统钳制到屏宽、三栏布局横向溢出视口。
+	initW, initH := 1280, 800
+	minW, minH := 960, 600
+	if sw, sh := workAreaLogical(); sw > 0 && sh > 0 {
+		if initW > sw {
+			initW = sw
+		}
+		if initH > sh {
+			initH = sh
+		}
+		if minW > sw {
+			minW = sw
+		}
+		if minH > sh {
+			minH = sh
+		}
+	}
 	win := wails.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:     "AgentDeck",
-		Width:     1280,
-		Height:    800,
-		MinWidth:  960,
-		MinHeight: 600,
+		X:         -1, // 居中
+		Y:         -1,
+		Width:     initW,
+		Height:    initH,
+		MinWidth:  minW,
+		MinHeight: minH,
 	})
 	e.win = win
 
