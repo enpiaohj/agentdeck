@@ -65,7 +65,7 @@ const useStyles = makeStyles({
 type Props = {
   open: boolean
   onClose: () => void
-  onJump: (key: string) => void
+  onJump: (key: string, partIndex: number) => void
 }
 
 export function SearchPalette({ open, onClose, onJump }: Props) {
@@ -142,7 +142,7 @@ export function SearchPalette({ open, onClose, onJump }: Props) {
                 <div className={styles.empty}>没有找到与「{q}」相关的会话内容</div>
               ) : (
                 reply.hits.map((h, i) => (
-                  <div key={h.part + i} className={styles.hit} onClick={() => onJump(h.key)}>
+                  <div key={h.part + i} className={styles.hit} onClick={() => onJump(h.key, partIndexOf(h.part))}>
                     <div className={styles.hitTitle}>
                       <span className={styles.agentTag}>{agentLabel(h.agent)}</span>
                       <Text size={300} weight="semibold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -164,4 +164,12 @@ export function SearchPalette({ open, onClose, onJump }: Props) {
       </div>
     </div>
   )
+}
+
+// doc key 形如 "agent:id#n",n 与 transcript 分段同序;-1 = 无定位。
+function partIndexOf(docKey: string): number {
+  const i = docKey.lastIndexOf('#')
+  if (i < 0) return -1
+  const n = Number(docKey.slice(i + 1))
+  return Number.isFinite(n) ? n : -1
 }

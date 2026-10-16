@@ -18,7 +18,7 @@ import {
   StarRegular,
   TagRegular,
 } from '@fluentui/react-icons'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Dialogs } from '@wailsio/runtime'
 import type { SessionView, TranscriptView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
@@ -72,6 +72,10 @@ const useStyles = makeStyles({
     lineHeight: 1.55,
   },
   roleTag: { fontSize: '11px', color: tokens.colorNeutralForeground3, marginBottom: '4px', display: 'block' },
+  partHit: {
+    outline: `2px solid ${tokens.colorBrandStroke1}`,
+    backgroundColor: tokens.colorBrandBackground,
+  },
   center: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' },
 })
 
@@ -79,9 +83,10 @@ type Props = {
   session: SessionView | null
   onClose: () => void
   onChanged: () => void // 标注变化后让列表重拉
+  jumpPart?: number // 搜索命中定位到 transcript 第 n 段(-1/undefined = 不定位)
 }
 
-export function DetailPane({ session, onClose, onChanged }: Props) {
+export function DetailPane({ session, onClose, onChanged, jumpPart }: Props) {
   const styles = useStyles()
   if (!session) {
     return (
@@ -92,10 +97,10 @@ export function DetailPane({ session, onClose, onChanged }: Props) {
       </div>
     )
   }
-  return <Loaded key={session.key} session={session} onClose={onClose} onChanged={onChanged} />
+  return <Loaded key={session.key} session={session} onClose={onClose} onChanged={onChanged} jumpPart={jumpPart ?? -1} />
 }
 
-function Loaded({ session, onClose, onChanged }: { session: SessionView; onClose: () => void; onChanged: () => void }) {
+function Loaded({ session, onClose, onChanged, jumpPart }: { session: SessionView; onClose: () => void; onChanged: () => void; jumpPart: number }) {
   const styles = useStyles()
   const [tr, setTr] = useState<TranscriptView | null>(null)
   const [err, setErr] = useState('')
@@ -103,6 +108,14 @@ function Loaded({ session, onClose, onChanged }: { session: SessionView; onClose
   const [tagDraft, setTagDraft] = useState('')
   const [noteDraft, setNoteDraft] = useState(session.note)
   const [exportMsg, setExportMsg] = useState('')
+  const hitRef = useRef<HTMLElement | null>(null)
+
+  // 搜索定位:transcript 就绪后滚到命中段并高亮(TC-03)
+  useEffect(() => {
+    if (jumpPart >= 0 && tr && !loading) {
+      hitRef.current?.scrollIntoView({ block: 'center' })
+    }
+  }, [jumpPart, tr, loading])
 
   const saveNote = () => {
     markService.SetNote(session.key, noteDraft).then(onChanged).catch(() => {})
@@ -248,21 +261,28 @@ function Loaded({ session, onClose, onChanged }: { session: SessionView; onClose
             <Button size="small" icon={<ArrowClockwiseRegular />} onClick={load}>重试</Button>
           </div>
         ) : tr ? (
-          tr.parts.map((p, i) =>
-            p.kind === 'thinking' || p.role === 'thinking' ? (
-              <details key={i} className={styles.part}>
+          tr.parts.map((p, i) => {
+            const hit = i === jumpPart
+            const setHitRef = (el: HTMLElement | null) => { if (hit) hitRef.current = el }
+            return p.kind === 'thinking' || p.role === 'thinking' ? (
+              <details
+                key={i}
+                ref={setHitRef}
+                className={styles.part + (hit ? ' ' + styles.partHit : '')}
+                open={hit ? true : undefined}
+              >
                 <summary className={styles.roleTag} style={{ cursor: 'pointer' }}>
                   {roleLabel(p.role, p.kind)}(思考过程,点击展开){p.model ? ` · ${p.model}` : ''}
                 </summary>
                 {p.text}
               </details>
             ) : (
-              <div key={i} className={styles.part}>
+              <div key={i} ref={setHitRef} className={styles.part + (hit ? ' ' + styles.partHit : '')}>
                 <span className={styles.roleTag}>{roleLabel(p.role, p.kind)}{p.model ? ` · ${p.model}` : ''}</span>
                 {p.text}
               </div>
-            ),
-          )
+            )
+          })
         ) : null}
       </div>
     </div>

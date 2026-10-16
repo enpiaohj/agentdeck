@@ -57,6 +57,7 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [view, setView] = useState<'sessions' | 'diagnostics'>('sessions')
   const [crashed, setCrashed] = useState(false)
+  const [jumpPart, setJumpPart] = useState(-1) // 搜索命中定位到 transcript 第 n 段
 
   useEffect(() => {
     sessionService.LastCrashed().then(setCrashed).catch(() => {})
@@ -68,10 +69,11 @@ export function App() {
     setDetailOpen(true)
   }
 
-  // 搜索结果跳转:按 key 取最新视图并打开详情
-  const onJump = useCallback((key: string) => {
+  // 搜索结果跳转:按 key 取最新视图并打开详情,定位到命中消息段
+  const onJump = useCallback((key: string, partIndex: number) => {
     setPaletteOpen(false)
     setView('sessions')
+    setJumpPart(partIndex)
     sessionService.Get(key).then((v) => { if (v) onSelect(v) }).catch(() => {})
   }, [])
 
@@ -134,7 +136,7 @@ export function App() {
           {view === 'sessions' ? (
             detailOpen ? (
               <div className={styles.detailWrap}>
-                <DetailPane session={selected} onClose={() => setDetailOpen(false)} onChanged={() => setListVersion((v) => v + 1)} />
+                <DetailPane session={selected} onClose={() => setDetailOpen(false)} onChanged={() => setListVersion((v) => v + 1)} jumpPart={jumpPart} />
               </div>
             ) : (
               <button
