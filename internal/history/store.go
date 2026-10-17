@@ -1,5 +1,6 @@
 // Package history owns AgentDeck's permanent conversation library. It is not
-// an index/cache: there is deliberately no expiry, pruning or delete operation.
+// an index/cache: there is deliberately no automatic expiry or pruning. Explicit
+// user-requested deletion is handled separately with recovery backups.
 package history
 
 import (
