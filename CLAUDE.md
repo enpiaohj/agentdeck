@@ -147,6 +147,10 @@ MSIX 实测不符，见前四份中的实测报告。
       DirectComposition，`PrintWindow` 抓不全，用屏幕 DC `BitBlt`。
     工具：`frontend/scripts/rebuild.ps1`（构建+重启+截图）、`uishot.py`、
     `crop.py`（放大局部比对）、`uiclick.py`（模拟点击）。
+    **检查弹窗必须用 `uishot-passive.py` / `uiclick-passive.py`**：`uishot.py`
+    会点标题栏以收起输入法浮条，而那个点击会把打开的弹窗一起关掉。
+    本机 DPI 是 192（200%），窗口 2560×1448 物理像素；截图按物理像素存，
+    点击坐标要用 `截图坐标 × 1.28` 换算后再加到 `GetWindowRect` 的 left/top 上。
 
 12. **`go` / `gofmt` 不在默认 PATH**，工具链在 `C:\Program Files\Go\bin`。
     PowerShell 里先 `$env:Path += ";C:\Program Files\Go\bin"` 再调用。
@@ -179,6 +183,18 @@ MSIX 实测不符，见前四份中的实测报告。
       顶部注释里的完整命令），否则 syso 里还是旧值；`go build` 不会自己重生成。
     - 验证：`(Get-Item exe).VersionInfo` 看版本资源、资源管理器「详细信息」看用户
       实际看到的两个版本号、`grep -a -o -E 'assemblyIdentity[^>]*' exe` 看清单。
+
+15. **Codex `state_5.sqlite` 自带 5 个维护 trigger**（`created_at_ms` /
+    `updated_at_ms` / `recency_at` 的 `AFTER INSERT` 与 `AFTER UPDATE OF`），
+    只响应 INSERT / UPDATE，**DELETE 时不会触发**。删除守卫按 DDL 识别它们
+    （单个 `BEGIN…END`、写回已知表）；新增 trigger、表、列、外键仍 fail closed。
+    改这段守卫时注意 Go 的 `regexp` **不支持反向引用**，trigger 头要拆成分组解析；
+    写入表扫描只能看 `BEGIN` 之后——头部的 `UPDATE OF col` 不是写入。
+
+16. **`wails3 generate bindings` 必须从 `cmd/agentdeck-desktop` 运行**，参数是
+    `-d ../../frontend/bindings -ts`（见 `Taskfile.yml`）。在仓库根跑会报
+    "no Go files"；加 `-clean` 更会把已有 bindings 清空且不重新生成，
+    需要用 `git checkout -- frontend/bindings` 恢复。
 
 ## 安全约定
 
