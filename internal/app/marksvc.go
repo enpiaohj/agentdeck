@@ -1,5 +1,16 @@
 package app
 
+import "fmt"
+
+func (a *App) checkDeletedMark(key string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.deleted[key] {
+		return fmt.Errorf("会话已删除，未写入标注")
+	}
+	return nil
+}
+
 // MarkService 是用户标注(收藏/归档/标签/备注)的门面:key 校验在
 // marks 包,这里负责写后刷新装配缓存并推 sessions:changed 事件。
 type MarkService struct{ a *App }
@@ -7,6 +18,9 @@ type MarkService struct{ a *App }
 func (s *MarkService) SetFavorite(key string, v bool) error {
 	s.a.dataMu.Lock()
 	defer s.a.dataMu.Unlock()
+	if err := s.a.checkDeletedMark(key); err != nil {
+		return err
+	}
 	if err := s.a.marks.SetFavorite(s.a.markKey(key), v); err != nil {
 		return err
 	}
@@ -17,6 +31,9 @@ func (s *MarkService) SetFavorite(key string, v bool) error {
 func (s *MarkService) SetArchived(key string, v bool) error {
 	s.a.dataMu.Lock()
 	defer s.a.dataMu.Unlock()
+	if err := s.a.checkDeletedMark(key); err != nil {
+		return err
+	}
 	if err := s.a.marks.SetArchived(s.a.markKey(key), v); err != nil {
 		return err
 	}
@@ -27,6 +44,9 @@ func (s *MarkService) SetArchived(key string, v bool) error {
 func (s *MarkService) SetTags(key string, tags []string) error {
 	s.a.dataMu.Lock()
 	defer s.a.dataMu.Unlock()
+	if err := s.a.checkDeletedMark(key); err != nil {
+		return err
+	}
 	if err := s.a.marks.SetTags(s.a.markKey(key), tags); err != nil {
 		return err
 	}
@@ -37,6 +57,9 @@ func (s *MarkService) SetTags(key string, tags []string) error {
 func (s *MarkService) SetNote(key, note string) error {
 	s.a.dataMu.Lock()
 	defer s.a.dataMu.Unlock()
+	if err := s.a.checkDeletedMark(key); err != nil {
+		return err
+	}
 	if err := s.a.marks.SetNote(s.a.markKey(key), note); err != nil {
 		return err
 	}

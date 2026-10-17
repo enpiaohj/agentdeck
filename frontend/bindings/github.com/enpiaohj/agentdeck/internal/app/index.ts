@@ -16,6 +16,8 @@ export {
     AgentView,
     BackupInfo,
     ClaudeImportReport,
+    DeletePreview,
+    DeleteReport,
     DiagRow,
     Filter,
     IndexStatus,

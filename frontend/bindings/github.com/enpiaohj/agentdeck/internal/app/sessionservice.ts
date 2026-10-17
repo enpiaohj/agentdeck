@@ -27,12 +27,18 @@ export function BackupData(destDir: string, preferences: string): $CancellablePr
     return $Call.ByID(2829633546, destDir, preferences);
 }
 
+export function DeleteSessions(token: string): $CancellablePromise<$models.DeleteReport> {
+    return $Call.ByID(3531059678, token).then(($result: any) => {
+        return $$createType2($result);
+    });
+}
+
 /**
  * Diagnostics 逐 Agent 汇报发现与恢复能力(即时验证,非缓存表)。
  */
 export function Diagnostics(): $CancellablePromise<$models.DiagRow[]> {
     return $Call.ByID(4237459432).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType4($result);
     });
 }
 
@@ -49,7 +55,7 @@ export function ExportMarkdown(key: string, destDir: string): $CancellablePromis
  */
 export function Get(key: string): $CancellablePromise<$models.SessionView | null> {
     return $Call.ByID(2633753760, key).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType6($result);
     });
 }
 
@@ -59,13 +65,13 @@ export function Get(key: string): $CancellablePromise<$models.SessionView | null
  */
 export function ImportClaudeHistory(path: string, account: string): $CancellablePromise<$models.ClaudeImportReport> {
     return $Call.ByID(1797313045, path, account).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType7($result);
     });
 }
 
 export function InspectBackup(src: string): $CancellablePromise<$models.BackupInfo> {
     return $Call.ByID(1962923398, src).then(($result: any) => {
-        return $$createType7($result);
+        return $$createType8($result);
     });
 }
 
@@ -78,7 +84,7 @@ export function LastCrashed(): $CancellablePromise<boolean> {
 
 export function LibraryStatus(): $CancellablePromise<$models.LibraryStatus> {
     return $Call.ByID(2993559161).then(($result: any) => {
-        return $$createType8($result);
+        return $$createType9($result);
     });
 }
 
@@ -87,7 +93,16 @@ export function LibraryStatus(): $CancellablePromise<$models.LibraryStatus> {
  */
 export function List(f: $models.Filter): $CancellablePromise<$models.SessionView[]> {
     return $Call.ByID(2411886668, f).then(($result: any) => {
-        return $$createType9($result);
+        return $$createType10($result);
+    });
+}
+
+/**
+ * The token binds confirmation to the exact selection and native fingerprints.
+ */
+export function PreviewDeleteSessions(keys: string[], includeChildren: boolean): $CancellablePromise<$models.DeletePreview> {
+    return $Call.ByID(3571029474, keys, includeChildren).then(($result: any) => {
+        return $$createType11($result);
     });
 }
 
@@ -96,7 +111,7 @@ export function List(f: $models.Filter): $CancellablePromise<$models.SessionView
  */
 export function Projects(): $CancellablePromise<$models.ProjectView[]> {
     return $Call.ByID(2744492366).then(($result: any) => {
-        return $$createType11($result);
+        return $$createType13($result);
     });
 }
 
@@ -110,8 +125,15 @@ export function Refresh(): $CancellablePromise<void> {
 
 export function RestoreData(src: string, currentPreferences: string): $CancellablePromise<$models.RestoreReport> {
     return $Call.ByID(2278399566, src, currentPreferences).then(($result: any) => {
-        return $$createType12($result);
+        return $$createType14($result);
     });
+}
+
+/**
+ * Undo takes an opaque token, never a caller-supplied filesystem path.
+ */
+export function RestoreDeletedSessions(token: string): $CancellablePromise<string> {
+    return $Call.ByID(510262758, token);
 }
 
 /**
@@ -119,7 +141,7 @@ export function RestoreData(src: string, currentPreferences: string): $Cancellab
  */
 export function ScanProgress(): $CancellablePromise<$models.ScanProgress> {
     return $Call.ByID(2378428406).then(($result: any) => {
-        return $$createType13($result);
+        return $$createType15($result);
     });
 }
 
@@ -128,7 +150,7 @@ export function ScanProgress(): $CancellablePromise<$models.ScanProgress> {
  */
 export function SearchIn(key: string, needle: string): $CancellablePromise<$models.SearchHitView | null> {
     return $Call.ByID(2754701431, key, needle).then(($result: any) => {
-        return $$createType15($result);
+        return $$createType17($result);
     });
 }
 
@@ -137,7 +159,7 @@ export function SearchIn(key: string, needle: string): $CancellablePromise<$mode
  */
 export function Transcript(key: string): $CancellablePromise<$models.TranscriptView | null> {
     return $Call.ByID(4281957278, key).then(($result: any) => {
-        return $$createType17($result);
+        return $$createType19($result);
     });
 }
 
@@ -148,26 +170,28 @@ export function Transcript(key: string): $CancellablePromise<$models.TranscriptV
  */
 export function TranscriptWindow(key: string, at: number, before: boolean): $CancellablePromise<$models.TranscriptView | null> {
     return $Call.ByID(3007435842, key, at, before).then(($result: any) => {
-        return $$createType17($result);
+        return $$createType19($result);
     });
 }
 
 // Private type creation functions
 const $$createType0 = $models.AgentView.createFrom;
 const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = $models.DiagRow.createFrom;
-const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = $models.SessionView.createFrom;
-const $$createType5 = $Create.Nullable($$createType4);
-const $$createType6 = $models.ClaudeImportReport.createFrom;
-const $$createType7 = $models.BackupInfo.createFrom;
-const $$createType8 = $models.LibraryStatus.createFrom;
-const $$createType9 = $Create.Array($$createType4);
-const $$createType10 = $models.ProjectView.createFrom;
-const $$createType11 = $Create.Array($$createType10);
-const $$createType12 = $models.RestoreReport.createFrom;
-const $$createType13 = $models.ScanProgress.createFrom;
-const $$createType14 = $models.SearchHitView.createFrom;
-const $$createType15 = $Create.Nullable($$createType14);
-const $$createType16 = $models.TranscriptView.createFrom;
+const $$createType2 = $models.DeleteReport.createFrom;
+const $$createType3 = $models.DiagRow.createFrom;
+const $$createType4 = $Create.Array($$createType3);
+const $$createType5 = $models.SessionView.createFrom;
+const $$createType6 = $Create.Nullable($$createType5);
+const $$createType7 = $models.ClaudeImportReport.createFrom;
+const $$createType8 = $models.BackupInfo.createFrom;
+const $$createType9 = $models.LibraryStatus.createFrom;
+const $$createType10 = $Create.Array($$createType5);
+const $$createType11 = $models.DeletePreview.createFrom;
+const $$createType12 = $models.ProjectView.createFrom;
+const $$createType13 = $Create.Array($$createType12);
+const $$createType14 = $models.RestoreReport.createFrom;
+const $$createType15 = $models.ScanProgress.createFrom;
+const $$createType16 = $models.SearchHitView.createFrom;
 const $$createType17 = $Create.Nullable($$createType16);
+const $$createType18 = $models.TranscriptView.createFrom;
+const $$createType19 = $Create.Nullable($$createType18);

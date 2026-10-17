@@ -107,6 +107,96 @@ export class ClaudeImportReport {
     }
 }
 
+export class DeletePreview {
+    "token": string;
+    "sessions": number;
+    "native_files": number;
+    "children": number;
+    "titles": string[];
+    "paths": string[];
+    "bytes": number;
+
+    /** Creates a new DeletePreview instance. */
+    constructor($$source: Partial<DeletePreview> = {}) {
+        if (!("token" in $$source)) {
+            this["token"] = "";
+        }
+        if (!("sessions" in $$source)) {
+            this["sessions"] = 0;
+        }
+        if (!("native_files" in $$source)) {
+            this["native_files"] = 0;
+        }
+        if (!("children" in $$source)) {
+            this["children"] = 0;
+        }
+        if (!("titles" in $$source)) {
+            this["titles"] = [];
+        }
+        if (!("paths" in $$source)) {
+            this["paths"] = [];
+        }
+        if (!("bytes" in $$source)) {
+            this["bytes"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DeletePreview instance from a string or object.
+     */
+    static createFrom($$source: any = {}): DeletePreview {
+        const $$createField4_0 = $$createType0;
+        const $$createField5_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("titles" in $$parsedSource) {
+            $$parsedSource["titles"] = $$createField4_0($$parsedSource["titles"]);
+        }
+        if ("paths" in $$parsedSource) {
+            $$parsedSource["paths"] = $$createField5_0($$parsedSource["paths"]);
+        }
+        return new DeletePreview($$parsedSource as Partial<DeletePreview>);
+    }
+}
+
+export class DeleteReport {
+    "deleted_keys": string[];
+    "backup_path": string;
+    "undo_token": string;
+    "message": string;
+
+    /** Creates a new DeleteReport instance. */
+    constructor($$source: Partial<DeleteReport> = {}) {
+        if (!("deleted_keys" in $$source)) {
+            this["deleted_keys"] = [];
+        }
+        if (!("backup_path" in $$source)) {
+            this["backup_path"] = "";
+        }
+        if (!("undo_token" in $$source)) {
+            this["undo_token"] = "";
+        }
+        if (!("message" in $$source)) {
+            this["message"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DeleteReport instance from a string or object.
+     */
+    static createFrom($$source: any = {}): DeleteReport {
+        const $$createField0_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("deleted_keys" in $$parsedSource) {
+            $$parsedSource["deleted_keys"] = $$createField0_0($$parsedSource["deleted_keys"]);
+        }
+        return new DeleteReport($$parsedSource as Partial<DeleteReport>);
+    }
+}
+
 /**
  * DiagRow 是一个 Agent 的能力诊断行。设计文档 §3/§11.3:能力由运行时
  * 上报,UI 呈现证据、状态及验证时间——Found/Sessions/LastAt 即证据,

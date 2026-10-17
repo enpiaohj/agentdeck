@@ -45,6 +45,12 @@ func (a *App) readConversation(sess sessions.Session) (sessions.Transcript, bool
 	if a.closing {
 		return sessions.Transcript{}, false, "", fmt.Errorf("程序正在关闭，未开始新的会话读取")
 	}
+	a.mu.Lock()
+	deleted := a.deleted[sess.Agent+":"+sess.ID]
+	a.mu.Unlock()
+	if deleted {
+		return sessions.Transcript{}, false, "", fmt.Errorf("此会话已被手动删除")
+	}
 	var tr sessions.Transcript
 	var err error
 	if !sess.Retained {

@@ -12,6 +12,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -54,6 +55,10 @@ type App struct {
 	captureErrors map[string]string
 	closing       bool // guarded by captureMu
 	readNative    func(sessions.Session) (sessions.Transcript, error)
+	deletePlans   map[string]*deleteJob                  // guarded by dataMu
+	deleteUndos   map[string]*deleteJob                  // guarded by dataMu
+	deleted       map[string]bool                        // guarded by mu
+	nativeDelete  func(*sessions.NativeDeletePlan) error // fault injection for rollback tests
 
 	mu          sync.Mutex
 	list        []sessions.Session // 装配缓存：sessions.List(All) 的快照
@@ -109,7 +114,13 @@ func New(cfg Config) (*App, error) {
 		m.Close()
 		return nil, fmt.Errorf("打开永久会话库失败: %w", err)
 	}
-	a := &App{cfg: cfg, marks: m, history: h, search: newSearchState(cfg.IndexPath), crashed: checkCrash(cfg.MarksPath), captureErrors: map[string]string{}, readNative: sessions.TranscriptForRetention}
+	deleted, err := loadDeletedKeys(cfg.LibraryPath)
+	if err != nil {
+		m.Close()
+		h.Close()
+		return nil, fmt.Errorf("读取删除恢复状态失败：%w", err)
+	}
+	a := &App{cfg: cfg, marks: m, history: h, search: newSearchState(cfg.IndexPath), crashed: checkCrash(cfg.MarksPath), captureErrors: map[string]string{}, readNative: sessions.TranscriptForRetention, deleted: deleted}
 	return a, nil
 }
 
@@ -189,6 +200,7 @@ func (a *App) ensure() {
 		sess.Retained, sess.ReadOnly, sess.Resume = true, true, ""
 		list = append(list, sess)
 	}
+	list = slices.DeleteFunc(list, func(sess sessions.Session) bool { return a.deleted[sess.Agent+":"+sess.ID] })
 	sort.SliceStable(list, func(i, j int) bool { return list[i].Last.After(list[j].Last) })
 	byKey := make(map[string]sessions.Session, len(list))
 	for _, s := range list {
