@@ -56,3 +56,8 @@ releases/**/*.pkg
 
 # Python 脚本缓存(开发脚本)
 __pycache__/
+
+# ---- 本地构建缓存 ----
+# GOCACHE 曾被指到仓库根下，留下 271 MB 的构建缓存；仓库里不该有它
+.tmp-go-cache/
+.tmp/
