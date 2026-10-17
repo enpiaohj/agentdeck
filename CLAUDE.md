@@ -182,7 +182,17 @@ MSIX 实测不符，见前四份中的实测报告。
 
 ## 安全约定
 
-- 只读访问上游存储，绝不 `DELETE` / `UPDATE` / `INSERT` 上游数据库
+- **默认只读访问上游存储**：发现、读取、索引、导出全链路不写入上游。
+- **唯一例外是手动删除会话**（`internal/sessions/native_delete*.go` +
+  `internal/app/delete_service.go`）：仅对用户显式选择、预览确认、备份成功的
+  对象写入；涉及 Codex `state_5.sqlite` 时在单个事务里 `DELETE` 相关行。
+  改动这条路径必须保持以下不变量，测试里都有对应用例：
+  - 只对 `codex` / `claude` / `claude-desktop` 的本机原生或保留会话开放，
+    WSL / 网关 / 导入来源一律拒绝
+  - 预览返回 token 绑定选择与内容哈希；执行前重新校验，源文件变了就整批拒绝
+  - 先写备份（原始文件 + 保留版本 + 数据库行快照）再删；备份失败不删
+  - 绝不 `RemoveAll` 目录，只删确认过的文件与索引条目
+  - 未知数据库 schema 直接拒绝，不猜测着改
 - 会话内容视为不可信输入：恢复参数（session-id、cwd）必须白名单校验
 - 不得在日志、诊断包、提交中泄露凭据文件内容
   （`~/.claude/.credentials.json`、`~/.codex/auth.json` 等）
