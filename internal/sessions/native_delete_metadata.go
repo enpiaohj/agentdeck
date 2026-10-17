@@ -13,6 +13,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -103,6 +105,57 @@ func nativeOpenDB(path string, write bool) (*sql.DB, error) {
 
 func nativeQuoteID(s string) string { return `"` + strings.ReplaceAll(s, `"`, `""`) + `"` }
 
+// Maintenance triggers write derived columns back onto their own row. They fire
+// on INSERT or UPDATE only, so a DELETE of the targeted threads never runs them;
+// accepting them is safe as long as they cannot write outside the known tables.
+// Go's regexp has no backreferences, so the header is captured in groups and the
+// event kind is inspected in nativeMaintenanceTarget.
+var nativeTriggerHead = regexp.MustCompile(`(?is)^\s*CREATE\s+TRIGGER\s+(?:IF\s+NOT\s+EXISTS\s+)?"?(\w+)"?\s+(?:BEFORE|AFTER|INSTEAD\s+OF)\s+([A-Za-z]+(?:\s+OF\s+[A-Za-z_,\s]+?)?)\s+ON\s+"?(\w+)"?\s+WHEN\b(.*)$`)
+var nativeTriggerWrite = regexp.MustCompile(`(?is)\b(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+"?(\w+)"?(?:\s+SET\b)?`)
+
+// Reads the mutation event out of a trigger header so the guard can tell a
+// row-local maintenance trigger from one that reacts to DELETE. The body must be
+// a single BEGIN … END block and must not mention DELETE anywhere.
+func nativeMaintenanceTarget(ddl string) (event, table string, ok bool) {
+	m := nativeTriggerHead.FindStringSubmatch(ddl)
+	if m == nil {
+		return "", "", false
+	}
+	fields := strings.Fields(strings.ToUpper(m[2]))
+	if len(fields) == 0 || (fields[0] != "INSERT" && fields[0] != "UPDATE") {
+		return "", "", false
+	}
+	upper := strings.ToUpper(ddl)
+	if strings.Contains(upper, "DELETE") {
+		return "", "", false
+	}
+	if strings.Count(upper, "BEGIN") != 1 || strings.Count(upper, "END") != 1 {
+		return "", "", false
+	}
+	return fields[0], m[3], true
+}
+
+func nativeKnownTable(name string) bool {
+	return nativeTableColumns[name] != "" || nativeUnrelatedTables[name]
+}
+
+// nativeTriggerWrites lists the tables a trigger body writes to, so a maintenance
+// trigger cannot be used to smuggle rows into a table the guard never inspects.
+// Only the BEGIN … END body is scanned: the header's `UPDATE OF col` is not a write.
+func nativeTriggerWrites(ddl string) []string {
+	upper := strings.ToUpper(ddl)
+	if idx := strings.Index(upper, "BEGIN"); idx >= 0 {
+		ddl = ddl[idx:]
+	}
+	var out []string
+	for _, m := range nativeTriggerWrite.FindAllStringSubmatch(ddl, -1) {
+		if name := m[1]; name != "" && !slices.Contains(out, name) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 // The known schemas are explicit. New tables, columns, triggers or unknown
 // references fail closed before anything is removed, including file sources.
 func nativeDBSnapshot(q nativeSQL, path, id string) (*nativeDatabase, error) {
@@ -119,8 +172,18 @@ func nativeDBSnapshot(q nativeSQL, path, id string) (*nativeDatabase, error) {
 			return nil, err
 		}
 		if kind == "trigger" {
-			rows.Close()
-			return nil, errors.New("Codex 状态库含未知 trigger，拒绝删除")
+			if _, table, ok := nativeMaintenanceTarget(ddl); !ok || !nativeKnownTable(table) {
+				rows.Close()
+				return nil, fmt.Errorf("Codex 状态库含未知 trigger: %s", name)
+			}
+			// A maintenance trigger may only write back to known tables; one that
+			// reaches an unknown table could move rows the guard cannot verify.
+			for _, write := range nativeTriggerWrites(ddl) {
+				if !nativeKnownTable(write) {
+					rows.Close()
+					return nil, fmt.Errorf("Codex 状态库 trigger 写入未知表: %s → %s", name, write)
+				}
+			}
 		}
 		if kind == "table" {
 			if nativeTableColumns[name] == "" && !nativeUnrelatedTables[name] {

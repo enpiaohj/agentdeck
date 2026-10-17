@@ -258,6 +258,113 @@ func TestNativeDeleteMetadataChangesAreRefused(t *testing.T) {
 	}
 }
 
+// The real threads table carries the timestamp pairs the maintenance triggers
+// derive from; the minimal fixture above has only the three required columns.
+func nativeTestDBTimestamps(t *testing.T, root string) *sql.DB {
+	t.Helper()
+	db := nativeTestDB(t, root)
+	for _, stmt := range []string{
+		`ALTER TABLE threads ADD COLUMN created_at INTEGER`,
+		`ALTER TABLE threads ADD COLUMN updated_at INTEGER`,
+		`ALTER TABLE threads ADD COLUMN created_at_ms INTEGER`,
+		`ALTER TABLE threads ADD COLUMN updated_at_ms INTEGER`,
+		`ALTER TABLE threads ADD COLUMN recency_at INTEGER`,
+		`ALTER TABLE threads ADD COLUMN recency_at_ms INTEGER`,
+	} {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return db
+}
+
+// The real state_5.sqlite ships maintenance triggers that copy second-resolution
+// timestamps into their _ms columns on INSERT / UPDATE. They never fire on DELETE,
+// so the guard must let them through while still refusing anything it cannot read.
+func TestNativeDeleteAcceptsRealMaintenanceTriggers(t *testing.T) {
+	s, paths := nativeCodexFixture(t)
+	db := nativeTestDBTimestamps(t, CodexDir())
+	for _, ddl := range []string{
+		`CREATE TRIGGER threads_created_at_ms_after_insert AFTER INSERT ON threads
+WHEN NEW.created_at_ms IS NULL BEGIN UPDATE threads SET created_at_ms = NEW.created_at * 1000 WHERE id = NEW.id; END`,
+		`CREATE TRIGGER threads_created_at_ms_after_update AFTER UPDATE OF created_at ON threads
+WHEN NEW.created_at != OLD.created_at AND NEW.created_at_ms IS OLD.created_at_ms
+BEGIN UPDATE threads SET created_at_ms = NEW.created_at * 1000 WHERE id = NEW.id; END`,
+		`CREATE TRIGGER threads_recency_at_after_insert AFTER INSERT ON threads
+WHEN NEW.recency_at_ms = 0 BEGIN UPDATE threads SET recency_at = NEW.updated_at, recency_at_ms = COALESCE(NEW.updated_at_ms, NEW.updated_at * 1000) WHERE id = NEW.id; END`,
+		`CREATE TRIGGER threads_updated_at_ms_after_insert AFTER INSERT ON threads
+WHEN NEW.updated_at_ms IS NULL BEGIN UPDATE threads SET updated_at_ms = NEW.updated_at * 1000 WHERE id = NEW.id; END`,
+		`CREATE TRIGGER threads_updated_at_ms_after_update AFTER UPDATE OF updated_at ON threads
+WHEN NEW.updated_at != OLD.updated_at AND NEW.updated_at_ms IS OLD.updated_at_ms
+BEGIN UPDATE threads SET updated_at_ms = NEW.updated_at * 1000 WHERE id = NEW.id; END`,
+	} {
+		if _, err := db.Exec(ddl); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO threads(id,rollout_path,title,created_at,updated_at) VALUES(?,'path','title',100,200)`, s.ID); err != nil {
+		t.Fatal(err)
+	}
+	p, err := PrepareNativeDelete(s)
+	if err != nil {
+		t.Fatalf("real maintenance triggers refused: %v", err)
+	}
+	if err = p.Backup(filepath.Join(t.TempDir(), "backup")); err != nil {
+		t.Fatal(err)
+	}
+	if err = p.Delete(); err != nil {
+		t.Fatalf("delete with maintenance triggers: %v", err)
+	}
+	if _, err = os.Stat(paths[0]); !os.IsNotExist(err) {
+		t.Fatalf("source not deleted: %v", err)
+	}
+	var count int
+	if err = db.QueryRow(`SELECT count(*) FROM threads`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("threads %d %v", count, err)
+	}
+	if err = p.Restore(); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if err = db.QueryRow(`SELECT count(*) FROM threads`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("restore threads %d %v", count, err)
+	}
+}
+
+// Anything outside the recognised maintenance shape still fails closed.
+func TestNativeDeleteRefusesUnknownTriggers(t *testing.T) {
+	for name, ddl := range map[string]string{
+		"delete-event": `CREATE TRIGGER t_del AFTER DELETE ON threads BEGIN DELETE FROM thread_read_receipts WHERE thread_id = OLD.id; END`,
+		"insert-no-when": `CREATE TRIGGER t_nowhen AFTER INSERT ON threads
+BEGIN UPDATE threads SET created_at_ms = NEW.created_at * 1000 WHERE id = NEW.id; END`,
+		"writes-unknown-table": `CREATE TRIGGER t_unknown AFTER INSERT ON threads
+WHEN NEW.id IS NOT NULL BEGIN INSERT INTO surprise(thread_id) VALUES(NEW.id); END`,
+		"unknown-target": `CREATE TRIGGER t_target AFTER INSERT ON surprise2
+WHEN NEW.id IS NOT NULL BEGIN UPDATE surprise2 SET x = 1 WHERE id = NEW.id; END`,
+		"multi-statement": `CREATE TRIGGER t_multi AFTER INSERT ON threads
+WHEN NEW.id IS NOT NULL BEGIN UPDATE threads SET created_at_ms = 1 WHERE id = NEW.id; UPDATE threads SET updated_at_ms = 1 WHERE id = NEW.id; END`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, paths := nativeCodexFixture(t)
+			db := nativeTestDB(t, CodexDir())
+			if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS surprise(thread_id TEXT)`); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS surprise2(id TEXT, x INTEGER)`); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec(ddl); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := PrepareNativeDelete(s); err == nil {
+				t.Fatal("unknown trigger accepted")
+			}
+			if _, err := os.Stat(paths[0]); err != nil {
+				t.Fatal("source mutated", err)
+			}
+		})
+	}
+}
+
 func TestNativeDeleteRejectsSymlink(t *testing.T) {
 	s, paths := nativeCodexFixture(t)
 	other := filepath.Join(t.TempDir(), "outside")
