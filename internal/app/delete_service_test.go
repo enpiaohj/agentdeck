@@ -268,6 +268,12 @@ func TestManualDeleteCodexFamilyBatchAndUndo(t *testing.T) {
 	if err != nil || preview.Sessions != 2 {
 		t.Fatalf("Opt-in scope: %+v %v", preview, err)
 	}
+	// The Codex state DB and the shared index files (session_index.jsonl,
+	// history.jsonl) are rewritten in place, so the preview must count them as
+	// metadata rather than as files that get deleted.
+	if preview.NativeFiles != 2 || preview.Metadata != 3 {
+		t.Fatalf("preview file split: %+v", preview)
+	}
 	report, err := svc.DeleteSessions(preview.Token)
 	if err != nil {
 		t.Fatal(err)

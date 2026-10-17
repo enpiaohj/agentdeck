@@ -111,6 +111,7 @@ export class DeletePreview {
     "token": string;
     "sessions": number;
     "native_files": number;
+    "metadata_files": number;
     "children": number;
     "titles": string[];
     "paths": string[];
@@ -126,6 +127,9 @@ export class DeletePreview {
         }
         if (!("native_files" in $$source)) {
             this["native_files"] = 0;
+        }
+        if (!("metadata_files" in $$source)) {
+            this["metadata_files"] = 0;
         }
         if (!("children" in $$source)) {
             this["children"] = 0;
@@ -147,14 +151,14 @@ export class DeletePreview {
      * Creates a new DeletePreview instance from a string or object.
      */
     static createFrom($$source: any = {}): DeletePreview {
-        const $$createField4_0 = $$createType0;
         const $$createField5_0 = $$createType0;
+        const $$createField6_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("titles" in $$parsedSource) {
-            $$parsedSource["titles"] = $$createField4_0($$parsedSource["titles"]);
+            $$parsedSource["titles"] = $$createField5_0($$parsedSource["titles"]);
         }
         if ("paths" in $$parsedSource) {
-            $$parsedSource["paths"] = $$createField5_0($$parsedSource["paths"]);
+            $$parsedSource["paths"] = $$createField6_0($$parsedSource["paths"]);
         }
         return new DeletePreview($$parsedSource as Partial<DeletePreview>);
     }

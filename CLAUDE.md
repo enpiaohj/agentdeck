@@ -192,7 +192,9 @@ MSIX 实测不符，见前四份中的实测报告。
   - 预览返回 token 绑定选择与内容哈希；执行前重新校验，源文件变了就整批拒绝
   - 先写备份（原始文件 + 保留版本 + 数据库行快照）再删；备份失败不删
   - 绝不 `RemoveAll` 目录，只删确认过的文件与索引条目
-  - 未知数据库 schema 直接拒绝，不猜测着改
+  - 未知数据库 schema 直接拒绝，不猜测着改。唯一例外是 Codex 库自带的维护型
+    trigger：仅当 DDL 明确是 `AFTER/BEFORE INSERT` 或 `UPDATE`（不响应 DELETE）、
+    单个 `BEGIN…END`、且写入目标都在已知表内时才放行；任何一条不满足仍 fail closed
 - 会话内容视为不可信输入：恢复参数（session-id、cwd）必须白名单校验
 - 不得在日志、诊断包、提交中泄露凭据文件内容
   （`~/.claude/.credentials.json`、`~/.codex/auth.json` 等）

@@ -22,6 +22,7 @@ type DeletePreview struct {
 	Token       string   `json:"token"`
 	Sessions    int      `json:"sessions"`
 	NativeFiles int      `json:"native_files"`
+	Metadata    int      `json:"metadata_files"`
 	Children    int      `json:"children"`
 	Titles      []string `json:"titles"`
 	Paths       []string `json:"paths"`
@@ -170,6 +171,8 @@ func (s *SessionService) PreviewDeleteSessions(keys []string, includeChildren bo
 			}
 		}
 		preview.Titles = append(preview.Titles, sess.Title)
+		// Only the unlinked files count toward "deleted files" and bytes; the
+		// rewritten state DB and shared indexes keep their file on disk.
 		for _, path := range plan.Files {
 			if paths[path] {
 				continue
@@ -180,7 +183,11 @@ func (s *SessionService) PreviewDeleteSessions(keys []string, includeChildren bo
 			if err != nil {
 				return DeletePreview{}, err
 			}
-			preview.Bytes += info.Size()
+			if slices.Contains(plan.Remove, path) {
+				preview.Bytes += info.Size()
+			} else {
+				preview.Metadata++
+			}
 		}
 	}
 	for key := range owned {
@@ -188,7 +195,17 @@ func (s *SessionService) PreviewDeleteSessions(keys []string, includeChildren bo
 	}
 	sort.Strings(job.ownedKeys)
 	sort.Strings(preview.Paths)
-	preview.Sessions, preview.NativeFiles = len(job.keys), len(preview.Paths)
+	preview.Sessions = len(job.keys)
+	removed := map[string]bool{}
+	for _, plan := range job.native {
+		for _, path := range plan.Remove {
+			if removed[path] {
+				continue
+			}
+			removed[path] = true
+			preview.NativeFiles++
+		}
+	}
 	if a.deletePlans == nil {
 		a.deletePlans = map[string]*deleteJob{}
 	}
@@ -239,7 +256,7 @@ func (s *SessionService) DeleteSessions(token string) (DeleteReport, error) {
 		if err != nil {
 			return DeleteReport{}, fmt.Errorf("原始记录范围已变化，请重新预览：%w", err)
 		}
-		if !slices.Equal(fresh.Files, job.native[i].Files) {
+		if !slices.Equal(fresh.Files, job.native[i].Files) || !slices.Equal(fresh.Remove, job.native[i].Remove) {
 			return DeleteReport{}, errors.New("原始记录范围已变化，请重新预览")
 		}
 	}

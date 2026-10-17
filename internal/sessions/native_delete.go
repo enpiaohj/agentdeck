@@ -33,8 +33,12 @@ type nativeFile struct {
 
 // NativeDeletePlan is a prepared deletion of one explicitly identified local
 // session. Files is a preview only; changing it cannot change the deletion.
+// Files lists every path the operation touches; Remove lists only the ones that
+// are actually unlinked — the Codex state DB and shared index files are rewritten
+// in place and never removed, so a preview must not report them as deleted files.
 type NativeDeletePlan struct {
 	Files        []string
+	Remove       []string
 	session      Session
 	files        []nativeFile
 	index        *nativeIndex
@@ -70,6 +74,7 @@ func PrepareNativeDelete(s Session) (*NativeDeletePlan, error) {
 		}
 		p.files = append(p.files, nativeFile{Path: path, Hash: hash, Mode: mode})
 		p.Files = append(p.Files, path)
+		p.Remove = append(p.Remove, path)
 	}
 	if s.Path != "" {
 		found := false

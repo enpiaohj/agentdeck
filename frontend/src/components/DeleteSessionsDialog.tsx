@@ -6,7 +6,9 @@ export function DeleteSessionsDialog({ deletion: d }: { deletion: SessionDeletio
   return <Dialog open={d.targets.length > 0} onOpenChange={(_, data) => { if (!data.open) d.close() }}>
     <DialogSurface className="ad-delete-dialog" onKeyDown={event => event.stopPropagation()}><DialogBody>
       <DialogTitle>删除会话</DialogTitle>
-      <DialogContent className="ad-delete-content">
+      {/* Focus starts on the scroll container, not on the first checkbox, so
+          opening the dialog cannot scroll the explanation out of view. */}
+      <DialogContent className="ad-delete-content" tabIndex={-1} ref={node => node?.focus({ preventScroll: true })}>
         <p>将删除所选会话的 <strong>Codex / Claude 原始记录</strong>，以及 AgentDeck 保存的全部内容版本、收藏、归档、标签和备注。</p>
         <p>请先在原应用或终端中结束这些会话。删除前会自动生成可恢复备份；备份失败时不会开始删除。</p>
         <Checkbox checked={d.includeChildren} disabled={d.busy} onChange={(_, data) => d.changeChildren(data.checked === true)} label="同时删除这些会话的已知子会话" />
@@ -16,8 +18,9 @@ export function DeleteSessionsDialog({ deletion: d }: { deletion: SessionDeletio
           <dl className="ad-backup-summary ad-delete-summary">
             <dt>将删除会话</dt><dd>{d.preview.sessions} 个（明确选择 {d.targets.length} 个）</dd>
             <dt>已知额外子会话</dt><dd>{d.preview.children} 个{d.includeChildren ? '（已包含）' : '（保留）'}</dd>
-            <dt>涉及原始文件</dt><dd>{d.preview.native_files} 个（含相关索引）</dd>
-            <dt>涉及文件总大小</dt><dd>{(d.preview.bytes / 1024 / 1024).toFixed(2)} MB</dd>
+            <dt>将删除文件</dt><dd>{d.preview.native_files} 个</dd>
+            {d.preview.metadata_files ? <><dt>改写元数据</dt><dd>{d.preview.metadata_files} 个（状态库与共享索引，只删行不删文件）</dd></> : null}
+            <dt>将删除文件总大小</dt><dd>{(d.preview.bytes / 1024 / 1024).toFixed(2)} MB</dd>
           </dl>
           <details className="ad-delete-scope" open><summary>核对会话与路径</summary>
             <ul>{d.preview.titles.map((title, index) => <li key={index}>{title || '未命名会话'}</li>)}</ul>

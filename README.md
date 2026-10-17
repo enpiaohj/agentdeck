@@ -159,7 +159,9 @@ AgentDeck 默认只读访问各 Agent 的本地存储。唯一例外是**用户�
 4. **不删目录**：只移除确认过的具体文件与索引条目，绝不 `RemoveAll` 任何目录。
 
 Codex 的标题与子会话关系存在 `~/.codex/state_5.sqlite`，删除时在一个事务内移除相关
-行并重写 `session_index.jsonl`；未知的 schema 版本会直接拒绝，不会猜测着改。
+行并重写 `session_index.jsonl`；未知的 schema 会直接拒绝，不会猜测着改。该库自带
+若干维护型 trigger（仅响应 INSERT / UPDATE，把秒级时间戳同步到 `_ms` 列），它们不会
+在 DELETE 时触发，因此被识别放行；其余 trigger、表、列或外键关系一律 fail closed。
 撤销仅在本次运行期间提供（撤销 token 保存在内存），磁盘上的备份长期保留。
 
 ## 已知限制
