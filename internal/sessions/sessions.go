@@ -114,7 +114,13 @@ type CodexIdentity struct {
 
 // Session is one agent session.
 type Session struct {
+	// AgentDeck: native source missing; the permanent local library supplies it.
+	Retained bool `json:"retained,omitempty"`
 	ReadOnly bool `json:"read_only,omitempty"`
+	// AgentDeck-owned copies of cloud chat exports, separate from native files.
+	Imported     bool   `json:"imported,omitempty"`
+	Account      string `json:"account,omitempty"`
+	MessageCount int    `json:"message_count,omitempty"`
 	// Gateway: seen only through magpie's gateway, with no file of the
 	// agent's on this computer (external.go)
 	Gateway       bool          `json:"gateway,omitempty"`

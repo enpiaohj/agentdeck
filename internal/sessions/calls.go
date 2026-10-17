@@ -293,12 +293,23 @@ func callFiles() []file {
 			}
 		}
 	}
-	add(ccFiles("claude", ClaudeDir()))
+	// AgentDeck: recent Code runs can share the CLI projects directory.
+	// Only an explicit Desktop metadata ID changes their source identity.
+	shared := ccFiles("claude", ClaudeDir())
+	owned := desktopSessionIDs()
+	for i := range shared {
+		if id := strings.TrimPrefix(shared[i].key, "claude:"); owned[id] {
+			shared[i].agent, shared[i].key = "claude-desktop", "claude-desktop:"+id
+		}
+	}
+	add(shared)
 	for _, d := range callDesktopDirs() {
 		// Cowork keeps a Claude Code folder of its own for each session
-		homes, _ := SessionGlob(filepath.Join(d, "local-agent-mode-sessions", "*", "*", "local_*", ".claude"))
-		for _, h := range homes {
-			add(ccFiles("claude-desktop", h))
+		for _, kind := range []string{"local-agent-mode-sessions", "claude-code-sessions"} {
+			homes, _ := SessionGlob(filepath.Join(d, kind, "*", "*", "local_*", ".claude"))
+			for _, h := range homes {
+				add(ccFiles("claude-desktop", h))
+			}
 		}
 	}
 	add(codexFiles())

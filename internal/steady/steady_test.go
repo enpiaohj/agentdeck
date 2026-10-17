@@ -41,3 +41,24 @@ func TestStatWaitsOutAReplace(t *testing.T) {
 		t.Fatalf("a file not there: %v", err)
 	}
 }
+
+// AgentDeck：独立读者也会遇到 Windows 替换文件时的短暂缺失，不能立即报错。
+func TestReadFileWaitsOutAReplace(t *testing.T) {
+	windows = true
+	defer func() { windows, readFile = runtime.GOOS == "windows", os.ReadFile }()
+	missing := 3
+	readFile = func(p string) ([]byte, error) {
+		if missing > 0 {
+			missing--
+			return nil, &fs.PathError{Op: "open", Path: p, Err: fs.ErrNotExist}
+		}
+		return []byte("settings"), nil
+	}
+	if b, err := ReadFile("settings.json"); err != nil || string(b) != "settings" {
+		t.Fatalf("a file being replaced taken for gone: %q, %v", b, err)
+	}
+	readFile = os.ReadFile
+	if _, err := ReadFile(t.TempDir() + "/missing"); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("a genuinely missing file: %v", err)
+	}
+}

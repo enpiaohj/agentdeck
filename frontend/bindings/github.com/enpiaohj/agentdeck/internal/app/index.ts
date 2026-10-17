@@ -14,11 +14,15 @@ export {
 
 export {
     AgentView,
+    BackupInfo,
+    ClaudeImportReport,
     DiagRow,
     Filter,
     IndexStatus,
+    LibraryStatus,
     Mark,
     ProjectView,
+    RestoreReport,
     ScanProgress,
     SearchHitView,
     SearchReply,

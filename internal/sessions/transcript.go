@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"strings"
 )
 
 // Transcript is what was said in a session, in the order it was said.
@@ -59,6 +60,37 @@ func TranscriptOf(s Session) (Transcript, error) {
 		return out, ErrNoTranscript
 	}
 	return out, readTranscript(s, out.add)
+}
+
+// AgentDeck: permanent retention must not inherit the UI's 400 KB / 8000-rune
+// preview cuts. Reuse the native parsers and preserve every part they expose.
+func TranscriptForRetention(s Session) (Transcript, error) {
+	out := Transcript{Parts: []Part{}}
+	if !HasTranscript(s.Agent) || s.Path == "" {
+		return out, ErrNoTranscript
+	}
+	err := readTranscript(s, func(_ bool, p Part) bool {
+		if strings.TrimSpace(p.Text) == "" {
+			return true
+		}
+		out.Parts = append(out.Parts, p)
+		if p.Cut > 0 {
+			out.Cut = true
+		}
+		return true
+	})
+	return out, err
+}
+
+// PreviewTranscript applies the existing display limits to a retained record.
+func PreviewTranscript(full Transcript) Transcript {
+	out := Transcript{Parts: []Part{}, Cut: full.Cut}
+	for _, p := range full.Parts {
+		if !out.add(false, p) {
+			break
+		}
+	}
+	return out
 }
 
 // readTranscript tells add each part of a session's conversation, in order,

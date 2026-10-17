@@ -2,26 +2,28 @@
 // 标注库备份与恢复、崩溃恢复提示。
 import {
   makeStyles,
+  mergeClasses,
   tokens,
   Text,
   Button,
   Spinner,
 } from '@fluentui/react-components'
-import { ArrowClockwiseRegular, DatabaseRegular, ArrowUploadRegular } from '@fluentui/react-icons'
+import { ArrowClockwiseRegular } from '@fluentui/react-icons'
 import { useCallback, useEffect, useState } from 'react'
-import { Dialogs } from '@wailsio/runtime'
-import type { DiagRow, IndexStatus } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
+import { DataBackup } from './DataBackup'
+import type { DiagRow, IndexStatus, LibraryStatus } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
-import * as markService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/markservice'
 import * as searchService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/searchservice'
 import { useIndexStatus } from '../hooks/useIndexStatus'
 import { agentLabel, relTime } from '../util'
 
 const useStyles = makeStyles({
-  wrap: { height: '100%', overflowY: 'auto', padding: '16px 20px', boxSizing: 'border-box' },
-  section: { marginBottom: '24px' },
-  h: { fontSize: '15px', fontWeight: 600, marginBottom: '10px' },
-  table: { width: '100%', borderCollapse: 'collapse', fontSize: '13px' },
+  wrap: { height: '100%', overflowY: 'auto', padding: '28px', boxSizing: 'border-box', backgroundColor: tokens.colorNeutralBackground2 },
+  content: { maxWidth: '1100px', margin: '0 auto' },
+  section: { marginBottom: '16px', padding: '20px', border: `1px solid ${tokens.colorNeutralStroke2}`, borderRadius: '8px', backgroundColor: tokens.colorNeutralBackground1 },
+  tableWrap: { overflowX: 'auto' },
+  h: { display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '10px' },
+  table: { width: '100%', minWidth: '680px', borderCollapse: 'collapse', fontSize: '13px' },
   th: {
     textAlign: 'left',
     padding: '6px 10px',
@@ -29,7 +31,7 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3,
     fontWeight: 600,
   },
-  td: { padding: '8px 10px', borderBottom: `1px solid ${tokens.colorNeutralStroke3}`, verticalAlign: 'top' },
+  td: { padding: '8px 10px', borderBottom: `1px solid ${tokens.colorNeutralStroke3}`, verticalAlign: 'top', fontVariantNumeric: 'tabular-nums' },
   ok: { color: tokens.colorPaletteGreenForeground1 },
   warn: { color: tokens.colorPaletteYellowForeground1 },
   row: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', flexWrap: 'wrap' },
@@ -37,77 +39,60 @@ const useStyles = makeStyles({
   err: { fontSize: '12px', color: tokens.colorPaletteRedForeground1 },
 })
 
-export function DiagnosticsView() {
+export function DiagnosticsView({ revision = 0, embedded = false }: { revision?: number; embedded?: boolean }) {
   const styles = useStyles()
+  const Heading = embedded ? 'h2' : 'h1'
   const [rows, setRows] = useState<DiagRow[] | null>(null)
+  const [library, setLibrary] = useState<LibraryStatus | null>(null)
+  const [libraryError, setLibraryError] = useState('')
   const status = useIndexStatus()
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
 
   const load = useCallback(() => {
     sessionService.Diagnostics().then(setRows).catch((e) => setErr(String(e)))
+    sessionService.LibraryStatus().then(value => { setLibrary(value); setLibraryError('') }).catch(reason => setLibraryError(String(reason)))
   }, [])
 
   useEffect(() => {
     load()
-  }, [load])
+  }, [load, revision])
 
   const rebuild = () => {
-    searchService.Rebuild()
-    setMsg('已开始后台重建全文索引,进度见左栏状态')
-  }
-
-  const backup = () => {
-    Dialogs.OpenFile({
-      CanChooseDirectories: true,
-      CanChooseFiles: false,
-      CanCreateDirectories: true,
-      Title: '选择备份保存目录',
-      ButtonText: '备份到这里',
-    })
-      .then((dir) => {
-        if (!dir || typeof dir !== 'string') return
-        setMsg(''); setErr('')
-        markService.BackupMarks(dir).then(
-          (p) => { setMsg(`已备份到:${p}`); load() },
-          (e) => setErr(`备份失败:${e}`),
-        )
-      })
-      .catch(() => {})
-  }
-
-  const restore = () => {
-    Dialogs.OpenFile({
-      CanChooseFiles: true,
-      CanChooseDirectories: false,
-      Title: '选择标注库备份文件',
-      Filters: [{ DisplayName: 'AgentDeck 备份', Pattern: '*.db' }],
-    })
-      .then((f) => {
-        if (!f || typeof f !== 'string') return
-        setMsg(''); setErr('')
-        markService.RestoreMarks(f).then(
-          () => { setMsg('恢复完成,标注已切换到备份时点'); load() },
-          (e) => setErr(`恢复失败:${e}`),
-        )
-      })
-      .catch(() => {})
+    setErr('')
+    void searchService.Rebuild().then(() => setMsg('正在重建全文索引，进度显示在底部状态栏。')).catch(reason => setErr(`索引重建未能启动：${String(reason)}`))
   }
 
   return (
-    <div className={styles.wrap}>
+    <div className={styles.wrap} style={embedded ? { height:'auto',overflow:'visible',padding:0,background:'transparent' } : undefined}><div className={styles.content}>
+      <Heading style={{ fontSize: embedded ? 17 : 20, margin: '0 0 8px' }}>{embedded ? '数据与诊断' : '设置'}</Heading>
+      <p className={styles.msg} style={{ margin: '0 0 24px' }}>查看数据来源、维护全文索引和管理本机标注。</p>
+      <DataBackup onRestored={load} />
+      <div className={styles.section}>
+        <Text className={styles.h}>永久会话库</Text>
+        <div className={styles.row}>
+          <Text size={300}>默认开启 · 不自动清理</Text>
+          <Button size="small" appearance="subtle" icon={<ArrowClockwiseRegular />} onClick={load}>更新统计</Button>
+        </div>
+        {library ? <>
+          <Text block size={300}>{library.sessions} 个会话 · {library.versions} 个内容版本 · 正文约 {formatBytes(library.bytes)}</Text>
+          <Text block className={styles.msg} style={{ marginTop: 8, overflowWrap: 'anywhere', userSelect: 'text' }}>{library.path}</Text>
+          {library.error ? <Text block role="alert" className={styles.err}>{library.error}</Text> : null}
+        </> : libraryError ? <Text block role="alert" className={styles.err}>{libraryError}</Text> : <Spinner size="extra-tiny" />}
+        <Text block className={styles.msg} style={{ marginTop: 8 }}>启动、刷新后的索引构建及打开正文时自动保存成功读取的内容。相同正文去重，变化保留版本；上游清理后仍可阅读、搜索和导出。重建索引不删除永久库。</Text>
+      </div>
       <div className={styles.section}>
         <Text className={styles.h}>Agent 能力诊断</Text>
         <Text className={styles.msg} style={{ display: 'block', marginBottom: '8px' }}>
-          每次打开本页即时验证;能力状态来自本机真实扫描,非宣传表。
+          诊断结果基于当前扫描数据。新增记录需返回工作台后单击“刷新”。
         </Text>
         {err ? <Text className={styles.err}>{err}</Text> : null}
         {rows === null ? (
           <Spinner size="tiny" />
         ) : rows.length === 0 ? (
-          <Text className={styles.msg}>尚未发现任何 Agent 会话。确认已安装并使用过 Claude Code / Codex / ZCode 等工具后点顶部刷新。</Text>
+          <Text className={styles.msg}>未发现 Agent 会话。使用受支持的 Agent 创建会话后，请返回工作台重新扫描。</Text>
         ) : (
-          <table className={styles.table}>
+          <div className={styles.tableWrap}><table className={styles.table}>
             <thead>
               <tr>
                 <th className={styles.th}>Agent</th>
@@ -122,17 +107,17 @@ export function DiagnosticsView() {
               {rows.map((r) => (
                 <tr key={r.agent}>
                   <td className={styles.td}>{agentLabel(r.agent)}{r.source === 'wsl' ? '(WSL)' : ''}</td>
-                  <td className={`${styles.td} ${styles.ok}`}>{r.found ? '已发现' : '未发现'}</td>
+                  <td className={mergeClasses(styles.td, r.found && styles.ok)}>{r.found ? '已发现' : '未发现'}</td>
                   <td className={styles.td}>{r.sessions}</td>
                   <td className={styles.td}>{relTime(r.last_at)}</td>
-                  <td className={`${styles.td} ${r.resume ? styles.ok : styles.warn}`}>
+                  <td className={mergeClasses(styles.td, r.resume ? styles.ok : styles.warn)}>
                     {r.resume ? '可用' : '仅可查看'}
                   </td>
                   <td className={styles.td}>{r.resume_note}</td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </div>
 
@@ -142,33 +127,26 @@ export function DiagnosticsView() {
           <IndexLine status={status} />
           <Button size="small" icon={<ArrowClockwiseRegular />} onClick={rebuild}>重建索引</Button>
         </div>
-        <Text className={styles.msg}>重建期间搜索自动降级为快速扫描;收藏/标签/备注不受影响。</Text>
-      </div>
-
-      <div className={styles.section}>
-        <Text className={styles.h}>标注库备份与恢复</Text>
-        <div className={styles.row}>
-          <Button size="small" icon={<DatabaseRegular />} onClick={backup}>备份标注库…</Button>
-          <Button size="small" icon={<ArrowUploadRegular />} onClick={restore}>从备份恢复…</Button>
-        </div>
-        <Text className={styles.msg}>
-          备份含收藏/标签/备注/归档(在线一致性快照,不覆盖已有备份);恢复前会自动留底当前库。
-          会话正文为派生索引,可随时重建,不在备份范围。
-        </Text>
+        <Text className={styles.msg}>重建期间搜索自动降级为快速扫描；永久会话库及收藏 / 标签 / 备注不受影响。</Text>
       </div>
 
       {msg ? <Text className={styles.msg}>{msg}</Text> : null}
       {err ? <Text className={styles.err}>{err}</Text> : null}
-    </div>
+    </div></div>
   )
+}
+
+function formatBytes(value: number): string {
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`
+  return `${Math.max(1, Math.round(value / 1024))} KB`
 }
 
 function IndexLine({ status }: { status: IndexStatus | null }) {
   if (!status) return <Spinner size="extra-tiny" />
   switch (status.state) {
-    case 'ready': return <Text size={300}>索引就绪:{status.sessions} 会话 / {status.docs} 段</Text>
-    case 'building': return <Text size={300}><Spinner size="extra-tiny" /> 构建中:{status.sessions} 会话…</Text>
-    case 'failed': return <Text size={300} style={{ color: tokens.colorPaletteRedForeground1 }}>索引失败:{status.error}(搜索降级为快速扫描)</Text>
+    case 'ready': return <Text size={300}>索引就绪：{status.sessions} 会话 / {status.docs} 段</Text>
+    case 'building': return <Text size={300}><Spinner size="extra-tiny" /> 正在构建：{status.sessions} 会话…</Text>
+    case 'failed': return <Text size={300} style={{ color: tokens.colorPaletteRedForeground1 }}>索引构建失败：{status.error}（当前使用逐会话扫描）</Text>
     default: return <Text size={300}>索引未开始</Text>
   }
 }

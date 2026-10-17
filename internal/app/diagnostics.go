@@ -77,6 +77,21 @@ func (s *SessionService) Diagnostics() []DiagRow {
 			ResumeNote: note, Source: source,
 		})
 	}
+	s.a.mu.Lock()
+	importError := s.a.importError
+	s.a.mu.Unlock()
+	if importError != "" {
+		found := false
+		for i := range out {
+			if out[i].Agent == "claude-desktop" {
+				out[i].ResumeNote += "; 聊天导入库读取失败: " + importError
+				found = true
+			}
+		}
+		if !found {
+			out = append(out, DiagRow{Agent: "claude-desktop", ResumeNote: "聊天导入库读取失败: " + importError, Source: "import"})
+		}
+	}
 	return out
 }
 
@@ -85,6 +100,8 @@ func (s *SessionService) Diagnostics() []DiagRow {
 // BackupMarks 把标注库在线备份到 destDir(VACUUM INTO 一致性快照),
 // 返回备份文件全路径。目标已存在同名文件时报错,不覆盖已有备份。
 func (s *MarkService) BackupMarks(destDir string) (string, error) {
+	s.a.dataMu.Lock()
+	defer s.a.dataMu.Unlock()
 	dir := projects.Normalize(destDir)
 	if !filepath.IsAbs(dir) {
 		return "", fmt.Errorf("备份目录必须是绝对路径: %s", destDir)
@@ -103,6 +120,8 @@ func (s *MarkService) BackupMarks(destDir string) (string, error) {
 // 现库自动备份为 .bak → 覆盖 → 重开 → 刷新缓存并广播。失败时保留
 // 现库不动(先校验后动手,半途失败不破坏当前数据,对齐 TC-11)。
 func (s *MarkService) RestoreMarks(src string) error {
+	s.a.dataMu.Lock()
+	defer s.a.dataMu.Unlock()
 	if err := marks.Validate(src); err != nil {
 		return fmt.Errorf("不是有效的标注库备份: %v", err)
 	}

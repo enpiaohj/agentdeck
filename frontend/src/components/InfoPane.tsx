@@ -1,5 +1,4 @@
-// 右栏:会话信息面板。对齐概念图:顶部 tab、元数据键值、标签、备注、
-// 摘要(v1.1 置灰)、操作按钮组。
+// 会话详情：元数据、标签和备注；路径按需展开，恢复操作统一放在阅读区。
 import {
   makeStyles,
   shorthands,
@@ -8,25 +7,23 @@ import {
   Button,
   Input,
   Textarea,
-  Tooltip,
 } from '@fluentui/react-components'
 import {
   DismissRegular,
   CopyRegular,
   CheckmarkRegular,
   ArrowDownloadRegular,
-  OpenRegular,
-  ArrowSyncRegular,
-  ChevronDownRegular,
+  CheckmarkCircleRegular,
   AddRegular,
-  DeleteRegular,
   DocumentTextRegular,
+  StarFilled,
+  StarRegular,
+  ArchiveRegular,
 } from '@fluentui/react-icons'
 import { useEffect, useState } from 'react'
 import { Dialogs } from '@wailsio/runtime'
 import type { SessionView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
-import * as resumeService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/resumeservice'
 import * as markService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/markservice'
 import { agentMeta, fmtTime, relTime } from '../util'
 import { AgentMark } from '../icons/AgentMark'
@@ -34,7 +31,7 @@ import { AgentMark } from '../icons/AgentMark'
 const useStyles = makeStyles({
   wrap: {
     height: '100%',
-    width: '330px',
+    width: 'var(--ad-info-width)',
     display: 'flex',
     flexDirection: 'column',
     minWidth: 0,
@@ -42,26 +39,10 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorNeutralBackground1,
     borderLeft: `1px solid ${tokens.colorNeutralStroke3}`,
   },
-  tabs: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '2px',
-    padding: '0 10px',
-    borderBottom: `1px solid ${tokens.colorNeutralStroke3}`,
-  },
-  tab: {
-    border: 'none',
-    background: 'transparent',
-    cursor: 'pointer',
-    fontSize: '13px',
-    padding: '10px 8px',
-    color: tokens.colorNeutralForeground3,
-    borderBottom: '2px solid transparent',
-  },
-  tabOn: { color: tokens.colorBrandForeground1, borderBottom: `2px solid ${tokens.colorBrandBackground}`, fontWeight: 600 },
-  tabOff: { color: tokens.colorNeutralForeground4, cursor: 'default' },
-  body: { flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '16px' },
-  section: { display: 'flex', flexDirection: 'column', gap: '8px' },
+  tabs: { display: 'flex', alignItems: 'center', gap: '8px', padding: '0 12px 0 16px', minHeight: '48px', flexShrink: 0, borderBottom: `1px solid ${tokens.colorNeutralStroke3}` },
+  paneHeading: { fontSize: '12px', fontWeight: 600, color: tokens.colorNeutralForeground2 },
+  body: { flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' },
+  section: { display: 'flex', flexDirection: 'column', gap: '8px', borderTop: `1px solid ${tokens.colorNeutralStroke3}`, paddingTop: '12px' },
   sectionHead: { display: 'flex', alignItems: 'center', gap: '6px' },
   sectionTitle: { fontSize: '13px', fontWeight: 600 },
   linkBtn: {
@@ -72,12 +53,15 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'flex-start',
     gap: '8px',
-    paddingBottom: '12px',
+    paddingBottom: '8px',
     borderBottom: `1px solid ${tokens.colorNeutralStroke3}`,
   },
-  paneTitle: { flex: 1, minWidth: 0, fontSize: '14px', lineHeight: 1.4, overflowWrap: 'anywhere', fontWeight: 600 },
-  agentRow: { display: 'flex', alignItems: 'center', gap: '8px' },
-  kv: { display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr)', gap: '6px 10px', fontSize: '12.5px' },
+  paneTitle: { flex: 1, minWidth: 0, fontSize: '13px', lineHeight: 1.6, overflowWrap: 'anywhere', fontWeight: 600 },
+  agentRow: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', backgroundColor: tokens.colorNeutralBackground2, ...shorthands.borderRadius('6px') },
+  advanced: { borderTop: `1px solid ${tokens.colorNeutralStroke3}`, paddingTop: '12px', fontSize: '12px', color: tokens.colorNeutralForeground2, lineHeight: 1.6 },
+  advancedSummary: { cursor: 'pointer', color: tokens.colorNeutralForeground3, marginBottom: '8px' },
+  capability: { display: 'inline-flex', gap: '3px', alignItems: 'center', marginLeft: 'auto', fontSize: '11px', color: tokens.colorBrandForeground1, whiteSpace: 'nowrap' },
+  kv: { display: 'grid', gridTemplateColumns: '70px minmax(0, 1fr)', gap: '6px 8px', fontSize: '12px', lineHeight: 1.6 },
   k: { color: tokens.colorNeutralForeground3 },
   v: { color: tokens.colorNeutralForeground1, overflowWrap: 'anywhere' },
   chips: { display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' },
@@ -96,29 +80,13 @@ const useStyles = makeStyles({
     ...shorthands.border('1px', 'dashed', tokens.colorNeutralStroke1),
     color: tokens.colorNeutralForeground3,
   },
-  summaryBox: {
-    backgroundColor: tokens.colorNeutralBackground2,
-    ...shorthands.borderRadius('6px'),
-    padding: '8px 10px',
-    fontSize: '12.5px',
-    color: tokens.colorNeutralForeground3,
-    lineHeight: 1.6,
-  },
-  // foot:操作区固定在面板底部,不随元数据滚动
   foot: {
     flexShrink: 0,
     padding: '12px 16px 14px',
     borderTop: `1px solid ${tokens.colorNeutralStroke3}`,
     backgroundColor: tokens.colorNeutralBackground1,
   },
-  // 操作区两列网格:与概念图一致(主操作成对,长文案整行)。
-  // 列必须 minmax(0,1fr):1fr 不能小于内容的 min-content,按钮文案会把
-  // 网格撑出面板右边界(实测按钮跑出窗口)。
-  actions: { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px' },
-  actionFull: { gridColumn: 'span 2', minWidth: 0 },
-  actionCell: { minWidth: 0 },
-  actionBtn: { width: '100%', minWidth: 0 },
-  grayed: { opacity: 0.5, display: 'block', minWidth: 0 },
+  actions: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
   empty: {
     padding: '72px 24px 24px',
     textAlign: 'center',
@@ -148,18 +116,20 @@ export function InfoPane({ session, onChanged, onClose }: Props) {
   const [msg, setMsg] = useState('')
 
   useEffect(() => { setNoteDraft(session?.note ?? '') }, [session?.key, session?.note])
+  useEffect(() => { setMsg(''); setAdding(false); setTagDraft('') }, [session?.key])
 
   if (!session) {
     return (
-      <div className={styles.wrap}>
+      <aside id="session-details" className={`ad-info-pane ${styles.wrap}`} aria-label="会话信息">
         <div className={styles.tabs}>
-          <button className={styles.tab + ' ' + styles.tabOn}>会话信息</button>
+          <Text className={styles.paneHeading}>会话详情</Text>
+          <Button appearance="subtle" size="small" icon={<DismissRegular />} onClick={onClose} aria-label="收起信息面板" style={{ marginLeft: 'auto' }} />
         </div>
         <div className={styles.empty}>
           <DocumentTextRegular fontSize={24} />
-          <Text size={200} style={{ display: 'block', marginTop: 8 }}>选中会话后显示其元数据、标签与操作</Text>
+          <Text size={200} style={{ display: 'block', marginTop: 8 }}>选择会话后显示详细信息、标签和可用操作。</Text>
         </div>
-      </div>
+      </aside>
     )
   }
 
@@ -177,52 +147,43 @@ export function InfoPane({ session, onChanged, onClose }: Props) {
     if (!t || session.tags.includes(t)) { setTagDraft(''); setAdding(false); return }
     markService.SetTags(session.key, [...session.tags, t]).then(() => {
       setTagDraft(''); setAdding(false); onChanged()
-    }).catch(() => {})
+    }).catch(e => setMsg(`添加标签失败：${String(e).slice(0, 120)}`))
   }
   const removeTag = (t: string) => {
-    markService.SetTags(session.key, session.tags.filter((x) => x !== t)).then(onChanged).catch(() => {})
+    markService.SetTags(session.key, session.tags.filter((x) => x !== t)).then(onChanged).catch(e => setMsg(`移除标签失败：${String(e).slice(0, 120)}`))
   }
   const saveNote = () => {
     markService.SetNote(session.key, noteDraft).then(() => { setMsg('备注已保存'); onChanged() }).catch((e) => setMsg(String(e)))
   }
   const toggleStar = () => {
-    markService.SetFavorite(session.key, !session.favorite).then(onChanged).catch(() => {})
+    markService.SetFavorite(session.key, !session.favorite).then(onChanged).catch(e => setMsg(`收藏操作失败：${String(e).slice(0, 120)}`))
   }
   const toggleArchive = () => {
-    markService.SetArchived(session.key, !session.archived).then(onChanged).catch(() => {})
+    markService.SetArchived(session.key, !session.archived).then(onChanged).catch(e => setMsg(`归档操作失败：${String(e).slice(0, 120)}`))
   }
   const exportMd = () => {
     Dialogs.OpenFile({
       CanChooseDirectories: true, CanChooseFiles: false, CanCreateDirectories: true,
-      Title: '选择 Markdown 导出目录', ButtonText: '在此导出',
+      Title: '选择 Markdown 导出目录', ButtonText: '导出到此目录',
     }).then((dir) => {
       if (!dir || typeof dir !== 'string') return
       sessionService.ExportMarkdown(session.key, dir).then(
-        (p) => setMsg(`已导出:${p}`),
-        (e) => setMsg(`导出失败:${String(e).slice(0, 120)}`),
+        (p) => setMsg(`导出完成：${p}`),
+        (e) => setMsg(`导出失败：${String(e).slice(0, 120)}`),
       )
     }).catch(() => {})
   }
 
   return (
-    <div className={styles.wrap}>
+    <aside id="session-details" className={`ad-info-pane ${styles.wrap}`} aria-label="会话信息">
       <div className={styles.tabs}>
-        <button className={styles.tab + ' ' + styles.tabOn}>会话信息</button>
-        <Tooltip content="v1.1 提供" relationship="description">
-          <button className={styles.tab + ' ' + styles.tabOff} disabled>项目</button>
-        </Tooltip>
-        <Tooltip content="v1.1 提供" relationship="description">
-          <button className={styles.tab + ' ' + styles.tabOff} disabled>文件</button>
-        </Tooltip>
-        <Tooltip content="v1.1 提供" relationship="description">
-          <button className={styles.tab + ' ' + styles.tabOff} disabled>工具调用</button>
-        </Tooltip>
-        <Button appearance="subtle" size="small" icon={<DismissRegular />} onClick={onClose} title="收起信息面板" style={{ marginLeft: 'auto' }} />
+        <Text className={styles.paneHeading}>会话详情</Text>
+        <Button appearance="subtle" size="small" icon={<DismissRegular />} onClick={onClose} aria-label="收起信息面板" style={{ marginLeft: 'auto' }} />
       </div>
 
       <div className={styles.body}>
         <div className={styles.titleRow}>
-          <Text className={styles.paneTitle}>{session.title || '(无标题)'}</Text>
+          <Text className={styles.paneTitle}>{session.title || '未命名会话'}</Text>
           <Button
             appearance="subtle" size="small"
             icon={copied === 'title' ? <CheckmarkRegular /> : <CopyRegular />}
@@ -232,31 +193,37 @@ export function InfoPane({ session, onChanged, onClose }: Props) {
         </div>
 
         <div className={styles.agentRow}>
-          <AgentMark agent={session.agent} size={18} />
+          <AgentMark agent={session.agent} size={22} />
           <Text size={300}>{m.label}{session.source === 'wsl' ? '(WSL)' : ''}</Text>
-          <ChevronDownRegular fontSize={12} style={{ marginLeft: 'auto', color: tokens.colorNeutralForeground3 }} />
+          <span className={styles.capability} style={{ color: session.resume ? undefined : tokens.colorNeutralForeground3 }}>{session.resume ? <><CheckmarkCircleRegular />支持继续会话</> : '仅支持查看'}</span>
         </div>
 
         <div className={styles.kv}>
+          {session.account ? <><span className={styles.k}>账号</span><span className={styles.v}>{session.account}</span></> : null}
+          {session.source === 'import' ? <><span className={styles.k}>记录来源</span><span className={styles.v}>官方导出 · 本地副本</span></> : null}
+          {session.source === 'retained' ? <><span className={styles.k}>记录来源</span><span className={styles.v}>AgentDeck 永久保留</span></> : null}
+          <span className={styles.k}>保留策略</span><span className={styles.v}>读取后持久保存，不自动清理</span>
           <span className={styles.k}>创建时间</span><span className={styles.v}>{fmtTime(session.created)}</span>
-          <span className={styles.k}>最后更新</span><span className={styles.v}>{relTime(session.last)} · {fmtTime(session.last)}</span>
+          <span className={styles.k}>最后更新</span><span className={styles.v} title={fmtTime(session.last)}>{relTime(session.last)}</span>
           <span className={styles.k}>消息数量</span><span className={styles.v}>{session.messages}</span>
           {session.tokens > 0 ? (<>
             <span className={styles.k}>Token 消耗</span>
             <span className={styles.v}>约 {fmtTokens(session.tokens)}</span>
           </>) : null}
-          <span className={styles.k}>项目</span><span className={styles.v}>{session.project || '项目未知'}</span>
-          {session.cwd ? (<>
-            <span className={styles.k}>工作目录</span><span className={styles.v}>{session.cwd}</span>
-          </>) : null}
-          {session.source_path ? (<>
-            <span className={styles.k}>源路径</span><span className={styles.v}>{session.source_path}</span>
-          </>) : null}
+          <span className={styles.k}>项目</span><span className={styles.v}>{session.project || '未识别项目'}</span>
           <span className={styles.k}>恢复能力</span>
-          <span className={styles.v} style={{ color: session.resume ? undefined : tokens.colorPaletteYellowForeground1 }}>
-            {session.resume ? '可恢复' : '仅可查看历史'}
+          <span className={styles.v} >
+            {session.resume ? '可恢复' : '仅支持查看历史'}
           </span>
         </div>
+
+        {session.cwd || session.source_path ? <details className={styles.advanced} key={session.key}>
+          <summary className={styles.advancedSummary}>工作目录与存储位置</summary>
+          <div className={styles.kv}>
+            {session.cwd ? <><span className={styles.k}>工作目录</span><span className={styles.v}>{session.cwd}</span></> : null}
+            {session.source_path ? <><span className={styles.k}>源路径</span><span className={styles.v}>{session.source_path}</span></> : null}
+          </div>
+        </details> : null}
 
         <div className={styles.section}>
           <div className={styles.sectionHead}>
@@ -265,7 +232,7 @@ export function InfoPane({ session, onChanged, onClose }: Props) {
               className={styles.linkBtn}
               onClick={toggleStar}
             >
-              {session.favorite ? '★ 已收藏' : '☆ 收藏'}
+              {session.favorite ? <StarFilled style={{ color: tokens.colorStatusWarningForeground3 }} /> : <StarRegular />} {session.favorite ? '已收藏' : '收藏'}
             </button>
           </div>
           <div className={styles.chips}>
@@ -279,7 +246,7 @@ export function InfoPane({ session, onChanged, onClose }: Props) {
             ))}
             {adding ? (
               <Input
-                size="small" autoFocus placeholder="标签名" value={tagDraft} style={{ width: 100 }}
+                size="small" autoFocus placeholder="标签名称" value={tagDraft} style={{ width: 100 }}
                 onChange={(_, d) => setTagDraft(d.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') addTag(); if (e.key === 'Escape') setAdding(false) }}
                 onBlur={addTag}
@@ -296,27 +263,18 @@ export function InfoPane({ session, onChanged, onClose }: Props) {
           <div className={styles.sectionHead}>
             <span className={styles.sectionTitle}>备注</span>
             {noteDraft !== session.note ? (
-              <button className={styles.linkBtn} onClick={saveNote}>保存</button>
+              <button className={styles.linkBtn} title="Ctrl+Enter 保存备注" onClick={saveNote}>保存</button>
             ) : null}
           </div>
           <Textarea
             size="small"
-            placeholder="为这个会话记点什么(只存本机标注库)…"
+            placeholder="输入会话备注…" title="Ctrl+Enter 保存备注" aria-label="会话备注"
             value={noteDraft}
             onChange={(_, d) => setNoteDraft(d.value)}
-            rows={3}
+            onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); saveNote() } }}
+            rows={2}
             resize="vertical"
           />
-        </div>
-
-        <div className={styles.section}>
-          <div className={styles.sectionHead}>
-            <span className={styles.sectionTitle}>摘要</span>
-            <Tooltip content="v1.1 提供,当前版本未实现" relationship="description">
-              <span className={styles.grayed}><button className={styles.linkBtn} disabled>生成新摘要</button></span>
-            </Tooltip>
-          </div>
-          <div className={styles.summaryBox}>v1.1 将基于本地模型生成会话摘要;当前版本请用「导出为 Markdown」离线阅读。</div>
         </div>
 
         <div className={styles.section}>
@@ -325,47 +283,14 @@ export function InfoPane({ session, onChanged, onClose }: Props) {
             <Button size="small" icon={<ArrowDownloadRegular />} style={{ width: '100%' }} onClick={exportMd}>
               导出为 Markdown
             </Button>
-            <Button size="small" icon={<DocumentTextRegular />} style={{ width: '100%' }} onClick={toggleArchive}>
+            <Button size="small" icon={<ArchiveRegular />} style={{ width: '100%' }} onClick={toggleArchive}>
               {session.archived ? '取消归档' : '归档'}
             </Button>
-            <Tooltip content="v1.1 提供,当前版本未实现" relationship="description">
-              <span className={styles.grayed + ' ' + styles.actionFull}>
-                <Button size="small" disabled style={{ width: '100%' }}>交接到其他 Agent</Button>
-              </span>
-            </Tooltip>
-            <Tooltip content="本工具不做物理删除,源会话文件只增不改;归档只是列表过滤" relationship="description">
-              <span className={styles.grayed + ' ' + styles.actionFull}>
-                <Button size="small" disabled icon={<DeleteRegular />} style={{ width: '100%' }}>删除会话(不提供)</Button>
-              </span>
-            </Tooltip>
           </div>
         </div>
       </div>
 
-      {/* 底部固定区:只留最常用的恢复动作,不随元数据滚走 */}
-      <div className={styles.foot}>
-        <div className={styles.actions}>
-          {session.resume ? (
-            <>
-              <Button size="small" icon={<OpenRegular />} style={{ width: '100%' }}
-                onClick={() => void resumeService.OpenInTerminal(session.key)}>在终端中打开</Button>
-              <Button size="small" appearance="primary" icon={<ArrowSyncRegular />} style={{ width: '100%' }}
-                onClick={() => void resumeService.OpenInTerminal(session.key)}>恢复此会话</Button>
-              <Button size="small" className={styles.actionFull} icon={<CopyRegular />}
-                onClick={() => void resumeService.CopyToClipboard(session.key)}>复制恢复命令</Button>
-            </>
-          ) : (
-            <>
-              <Text size={200} className={styles.actionFull} style={{ color: tokens.colorPaletteYellowForeground1 }}>
-                该会话不可恢复,仅可查看历史
-              </Text>
-              <Button size="small" className={styles.actionFull} icon={<CopyRegular />}
-                onClick={() => void resumeService.CopyToClipboard(session.key)}>复制恢复命令</Button>
-            </>
-          )}
-          {msg ? <Text size={200} className={styles.actionFull} style={{ color: tokens.colorNeutralForeground3, overflowWrap: 'anywhere' }}>{msg}</Text> : null}
-        </div>
-      </div>
-    </div>
+      {msg ? <div className={styles.foot} role="status"><Text size={200} style={{ color: tokens.colorNeutralForeground3, overflowWrap: 'anywhere' }}>{msg}</Text></div> : null}
+    </aside>
   )
 }

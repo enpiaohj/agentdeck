@@ -85,9 +85,10 @@ func ReadThere(p string) ([]byte, error) {
 }
 
 // ReadFile is os.ReadFile, waiting out a file being replaced.
+// AgentDeck：Windows 替换时也可能短暂不存在，独立读者须与 ReadThere 一样等待。
 func ReadFile(p string) ([]byte, error) {
 	var b []byte
-	err := retry(func() (err error) {
+	err := retryGone(func() (err error) {
 		b, err = readFile(p)
 		return err
 	})

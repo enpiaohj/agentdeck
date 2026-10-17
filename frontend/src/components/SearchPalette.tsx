@@ -1,106 +1,100 @@
-// Ctrl+K 全局搜索面板:输入 → Query → 结果 → 跳转会话。
+// 工作区内的全文搜索结果，与会话预览并排展示。
 // 索引未就绪时后端自动降级为逐会话扫描,Reply.mode 明示给用户。
 import {
   makeStyles,
+  mergeClasses,
   tokens,
   Text,
-  Input,
   Spinner,
 } from '@fluentui/react-components'
-import { SearchRegular, DismissRegular } from '@fluentui/react-icons'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { SearchRegular } from '@fluentui/react-icons'
+import { useEffect, useRef, useState } from 'react'
 import type { SearchReply } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as searchService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/searchservice'
 import { agentMeta, relTime } from '../util'
 import { AgentMark } from '../icons/AgentMark'
 
 const useStyles = makeStyles({
-  overlay: {
-    position: 'fixed',
-    inset: 0,
-    backgroundColor: 'rgba(0,0,0,.4)',
-    display: 'flex',
-    justifyContent: 'center',
-    paddingTop: '10vh',
-    zIndex: 1000,
-  },
   panel: {
-    width: '640px',
-    maxHeight: '70vh',
+    width: 'var(--ad-list-width)',
+    minHeight: 0,
+    height: '100%',
     display: 'flex',
     flexDirection: 'column',
     backgroundColor: tokens.colorNeutralBackground1,
-    borderRadius: '8px',
-    boxShadow: tokens.shadow16,
+    borderRight: `1px solid ${tokens.colorNeutralStroke3}`,
     overflow: 'hidden',
+    padding: 0,
   },
   inputRow: { display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 14px', borderBottom: `1px solid ${tokens.colorNeutralStroke2}` },
   banner: {
     padding: '6px 14px',
-    fontSize: '12px',
+    fontSize: '11px',
     backgroundColor: tokens.colorStatusWarningBackground2,
     color: tokens.colorStatusWarningForeground1,
   },
   bannerOk: { backgroundColor: tokens.colorNeutralBackground2, color: tokens.colorNeutralForeground3 },
-  results: { flex: 1, overflowY: 'auto' },
+  results: { flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px' },
   hit: {
-    padding: '10px 14px',
+    display: 'block',
+    width: '100%',
+    borderRadius: '6px',
+    marginBottom: '2px',
+    textAlign: 'left',
+    border: 'none',
+    backgroundColor: 'transparent',
+    color: tokens.colorNeutralForeground1,
+    padding: '8px 9px',
     cursor: 'pointer',
-    borderBottom: `1px solid ${tokens.colorNeutralStroke3}`,
+
     ':hover': { backgroundColor: tokens.colorNeutralBackground1Hover },
   },
-  hitTitle: { display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '4px' },
+  hitTitle: { display: 'flex', gap: '7px', alignItems: 'center', marginBottom: '5px', minWidth: 0 },
+  active: { backgroundColor: tokens.colorBrandBackground2, boxShadow: `inset 2px 0 0 ${tokens.colorBrandBackground}` },
+  hitMeta: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', marginBottom: '5px' },
   agentTag: {
     fontSize: '11px',
     padding: '1px 6px',
     borderRadius: '4px',
-    backgroundColor: tokens.colorBrandBackground2,
-    color: tokens.colorBrandForeground2,
+    backgroundColor: tokens.colorNeutralBackground2,
+    color: tokens.colorNeutralForeground2,
     flexShrink: 0,
   },
-  snippet: { fontSize: '12px', color: tokens.colorNeutralForeground2, overflowWrap: 'anywhere' },
+  snippet: { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', fontSize: '12px', lineHeight: '1.6', color: tokens.colorNeutralForeground2, overflowWrap: 'anywhere' },
   mark: { color: tokens.colorBrandForeground1, fontWeight: 600 },
   empty: { padding: '24px', textAlign: 'center', color: tokens.colorNeutralForeground3 },
 })
 
 type Props = {
-  open: boolean
-  onClose: () => void
+  query: string
+  revision: number
+  selectedKey: string | null
+  onFocusSearch: () => void
   onJump: (key: string, partIndex: number) => void
 }
 
-export function SearchPalette({ open, onClose, onJump }: Props) {
+export function SearchResults({ query: q, revision, selectedKey, onFocusSearch, onJump }: Props) {
   const styles = useStyles()
-  const [q, setQ] = useState('')
   const [reply, setReply] = useState<SearchReply | null>(null)
   const [loading, setLoading] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [error, setError] = useState('')
+  const resultRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const requestVersion = useRef(0)
 
-  const run = useCallback((query: string) => {
-    if (!query.trim()) { setReply(null); return }
-    setLoading(true)
-    searchService
-      .Query(query, 20)
-      .then(setReply)
-      .catch(() => setReply(null))
-      .finally(() => setLoading(false))
-  }, [])
-
-  // 输入防抖 300ms
+  // 新输入和离开搜索立即使旧请求失效，避免慢查询覆盖新结果。
   useEffect(() => {
-    const t = setTimeout(() => run(q), 300)
-    return () => clearTimeout(t)
-  }, [q, run])
-
-  useEffect(() => {
-    if (open) {
-      setQ('')
-      setReply(null)
-      requestAnimationFrame(() => inputRef.current?.focus())
-    }
-  }, [open])
-
-  if (!open) return null
+    const version = ++requestVersion.current
+    setReply(null); setError(''); setLoading(false)
+    if (!q.trim()) return
+    const timer = setTimeout(() => {
+      setLoading(true)
+      searchService.Query(q, 50)
+        .then(result => { if (requestVersion.current === version) setReply(result) })
+        .catch(reason => { if (requestVersion.current === version) setError(String(reason).slice(0, 200)) })
+        .finally(() => { if (requestVersion.current === version) setLoading(false) })
+    }, 300)
+    return () => { clearTimeout(timer); requestVersion.current++ }
+  }, [q, revision])
 
   const highlight = (hit: { match: string; snippet: string }) => {
     if (!hit.match) return <span className={styles.snippet}>{hit.snippet}</span>
@@ -116,55 +110,53 @@ export function SearchPalette({ open, onClose, onJump }: Props) {
   }
 
   return (
-    <div className={styles.overlay} onClick={onClose}>
-      <div className={styles.panel} onClick={(e) => e.stopPropagation()}>
+    <section className={styles.panel} aria-label="全文搜索结果">
         <div className={styles.inputRow}>
-          <SearchRegular />
-          <Input
-            ref={inputRef}
-            appearance="underline"
-            placeholder="搜索会话内容(2 字以上中文词、英文短语)…"
-            value={q}
-            onChange={(_, d) => setQ(d.value)}
-            onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}
-            style={{ flex: 1 }}
-          />
-          {loading ? <Spinner size="extra-tiny" /> : <button onClick={onClose} style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex' }} title="关闭"><DismissRegular /></button>}
+          <SearchRegular style={{ color: tokens.colorBrandForeground1 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Text size={300} weight="semibold" block>搜索结果</Text>
+            <Text size={200} block style={{ color: tokens.colorNeutralForeground3, marginTop: 4, overflowWrap: 'anywhere' }}>「{q}」</Text>
+          </div>
+          {loading ? <Spinner size="extra-tiny" /> : null}
         </div>
-        {reply ? (
+        {error ? <div className={styles.empty} role="alert">搜索失败：{error}</div> : reply ? (
           <>
             {reply.mode === 'scan' ? (
-              <div className={styles.banner}>全文索引尚未就绪,当前为快速搜索(逐会话扫描,仅返回部分结果)</div>
+              <div className={styles.banner}>全文索引尚未就绪，当前使用逐会话扫描，仅显示部分结果。</div>
             ) : (
-              <div className={styles.banner + ' ' + styles.bannerOk}>全文检索 · 共 {reply.total} 处命中,显示前 {reply.hits.length} 条</div>
+              <div className={mergeClasses(styles.banner, styles.bannerOk)}>全文检索 · {reply.total} 处命中 · 显示 {reply.hits.length} 条</div>
             )}
             <div className={styles.results}>
               {reply.hits.length === 0 ? (
-                <div className={styles.empty}>没有找到与「{q}」相关的会话内容</div>
+                <div className={styles.empty}>未找到与「{q}」相关的会话内容</div>
               ) : (
                 reply.hits.map((h, i) => (
-                  <div key={h.part + i} className={styles.hit} onClick={() => onJump(h.key, partIndexOf(h.part))}>
-                    <div className={styles.hitTitle}>
-                      <AgentMark agent={h.agent} size={16} />
-                      <span className={styles.agentTag}>{agentMeta(h.agent).label}</span>
+                  <button title={h.title || '未命名会话'} key={h.part + i} ref={element => { resultRefs.current[i] = element }} className={mergeClasses(styles.hit, selectedKey === h.key && styles.active)} aria-current={selectedKey === h.key ? 'true' : undefined} onClick={() => onJump(h.key, partIndexOf(h.part))}
+                    onKeyDown={event => {
+                      if (event.key === 'ArrowDown') { event.preventDefault(); resultRefs.current[(i + 1) % reply.hits.length]?.focus() }
+                      if (event.key === 'ArrowUp') { event.preventDefault(); if (i === 0) onFocusSearch(); else resultRefs.current[i - 1]?.focus() }
+                    }}>
+                    <span className={styles.hitTitle}>
+                      <AgentMark agent={h.agent} size={18} />
                       <Text size={300} weight="semibold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {h.title || '(无标题)'}
+                        {h.title || '未命名会话'}
                       </Text>
-                      <Text size={200} style={{ marginLeft: 'auto', color: tokens.colorNeutralForeground3, flexShrink: 0 }}>
-                        {relTime(h.last)}
-                      </Text>
-                    </div>
+                    </span>
+                    <span className={styles.hitMeta}>
+                      <span className={styles.agentTag}>{agentMeta(h.agent).label}</span>
+                      <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{relTime(h.last)}</Text>
+                    </span>
                     {highlight(h)}
-                  </div>
+                  </button>
                 ))
               )}
             </div>
           </>
         ) : (
-          <div className={styles.empty}>输入关键词检索全部会话内容,Ctrl+K 随时唤起</div>
+          <div className={styles.empty}>{loading ? '正在搜索会话正文…' : q.trim() ? '正在准备搜索…' : '输入关键词以检索历史会话正文。'}</div>
         )}
-      </div>
-    </div>
+        <div className={mergeClasses(styles.banner, styles.bannerOk)}>选择结果预览会话 · Esc 返回会话列表</div>
+    </section>
   )
 }
 

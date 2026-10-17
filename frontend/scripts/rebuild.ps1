@@ -14,7 +14,6 @@ $ErrorActionPreference = 'Stop'
 Set-Location D:\Work\AgentDeck
 
 $go = "C:\Program Files\Go\bin\go.exe"
-$assets = "cmd\agentdeck-desktop\assets\assets"
 
 Write-Host "[1/5] npm build..." -ForegroundColor Cyan
 Push-Location frontend
@@ -23,8 +22,7 @@ if ($LASTEXITCODE -ne 0) { Pop-Location; throw "npm build failed" }
 Pop-Location
 
 Write-Host "[2/5] sync assets (wipe first)..." -ForegroundColor Cyan
-if (Test-Path $assets) { Get-ChildItem $assets | Remove-Item -Recurse -Force }
-Copy-Item -Recurse -Force frontend\dist\* cmd\agentdeck-desktop\assets\
+& "$PSScriptRoot\sync-assets.ps1"
 
 Write-Host "[3/5] go build..." -ForegroundColor Cyan
 & $go build -tags production -ldflags "-H windowsgui -s -w" -o bin\agentdeck-desktop.exe ./cmd/agentdeck-desktop

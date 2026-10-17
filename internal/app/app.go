@@ -8,11 +8,17 @@
 package app
 
 import (
+	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/enpiaohj/agentdeck/internal/claudehistory"
+	"github.com/enpiaohj/agentdeck/internal/history"
 	"github.com/enpiaohj/agentdeck/internal/marks"
 	"github.com/enpiaohj/agentdeck/internal/sessions"
 )
@@ -23,8 +29,12 @@ import (
 type Config struct {
 	// MarksPath 标注库路径；空用 marks.DefaultPath()。
 	MarksPath string
-	// IndexPath 全文索引库路径；空用内存索引（构建结果随进程而去）。
+	// IndexPath 全文索引库路径；空用默认磁盘库，":memory:" 用独立内存库。
 	IndexPath string
+	// ImportDir stores AgentDeck-owned chat imports, separate from native agents.
+	ImportDir string
+	// LibraryPath is permanent history, independent from the rebuildable index.
+	LibraryPath string
 	// Emit 前端事件推送；nil 时构建进度只落在 Status() 里。
 	Emit Emitter
 	// Clipboard 写剪贴板；nil 时复制动作报错。
@@ -35,20 +45,29 @@ type Config struct {
 
 // App 是装配根：标注库句柄 + 会话列表缓存 + 索引状态。
 type App struct {
-	cfg   Config
-	marks *marks.Store
+	dataMu        sync.Mutex // serializes owned-data backup, restore, import and mark mutations
+	cfg           Config
+	marks         *marks.Store
+	history       *history.Store
+	captureMu     sync.Mutex // serialize reads and commits, including index/preview callers
+	libraryError  string
+	captureErrors map[string]string
+	closing       bool // guarded by captureMu
+	readNative    func(sessions.Session) (sessions.Transcript, error)
 
-	mu       sync.Mutex
-	list     []sessions.Session // 装配缓存：sessions.List(All) 的快照
-	byKey    map[string]sessions.Session
-	marksAll map[string]marks.Mark // 标注快照，MarkService 写后同步刷新
-	messages map[string]int        // agent:id → 消息数，后台补齐
-	msgReady bool
-	loaded   bool
-	crashed  bool // 上次进程未正常退出(启动时检测残留 lock)
+	mu          sync.Mutex
+	list        []sessions.Session // 装配缓存：sessions.List(All) 的快照
+	byKey       map[string]sessions.Session
+	marksAll    map[string]marks.Mark // 标注快照，MarkService 写后同步刷新
+	messages    map[string]int        // agent:id → 消息数，后台补齐
+	msgReady    bool
+	loaded      bool
+	crashed     bool // 上次进程未正常退出(启动时检测残留 lock)
+	importError string
 
-	warmOnce sync.Once
-	search   *searchState
+	warmMu     sync.Mutex // serialize message scans across refreshed generations
+	generation uint64
+	search     *searchState
 }
 
 // New 打开标注库并返回装配根。索引不在此建——Rebuild 触发后台重建。
@@ -67,11 +86,30 @@ func New(cfg Config) (*App, error) {
 		}
 		cfg.IndexPath = p
 	}
+	if cfg.ImportDir == "" {
+		base := filepath.Dir(cfg.IndexPath)
+		if cfg.IndexPath == ":memory:" {
+			base = filepath.Dir(cfg.MarksPath)
+		}
+		cfg.ImportDir = filepath.Join(base, "imports", "claude")
+	}
+	if cfg.LibraryPath == "" {
+		base := filepath.Dir(cfg.IndexPath)
+		if cfg.IndexPath == ":memory:" {
+			base = filepath.Dir(cfg.MarksPath)
+		}
+		cfg.LibraryPath = filepath.Join(base, "library", "history.db")
+	}
 	m, err := marks.Open(cfg.MarksPath)
 	if err != nil {
 		return nil, err
 	}
-	a := &App{cfg: cfg, marks: m, search: newSearchState(cfg.IndexPath), crashed: checkCrash(cfg.MarksPath)}
+	h, err := history.Open(cfg.LibraryPath)
+	if err != nil {
+		m.Close()
+		return nil, fmt.Errorf("打开永久会话库失败: %w", err)
+	}
+	a := &App{cfg: cfg, marks: m, history: h, search: newSearchState(cfg.IndexPath), crashed: checkCrash(cfg.MarksPath), captureErrors: map[string]string{}, readNative: sessions.TranscriptForRetention}
 	return a, nil
 }
 
@@ -91,7 +129,15 @@ func indexDefaultPath() (string, error) {
 
 // Close 关闭标注库与索引库,并清除崩溃标记(正常退出)。
 func (a *App) Close() {
+	a.dataMu.Lock()
+	defer a.dataMu.Unlock()
 	a.search.close()
+	// An in-flight native read owns captureMu until its transaction commits.
+	// Wait for it before closing permanent storage, then reject later captures.
+	a.captureMu.Lock()
+	a.closing = true
+	a.history.Close()
+	a.captureMu.Unlock()
 	a.marks.Close()
 	clearCrash(a.cfg.MarksPath)
 }
@@ -119,6 +165,31 @@ func (a *App) ensure() {
 		return
 	}
 	list := sessions.List(sessions.All)
+	imported, importErr := claudehistory.List(a.cfg.ImportDir)
+	a.importError = ""
+	if importErr != nil {
+		a.importError = importErr.Error()
+	} else {
+		list = append(list, imported...)
+	}
+	// Retained-only rows keep the original key and marks but cannot advertise
+	// native resume: a local transcript is not an upstream executable session.
+	saved, historyErr := a.history.List()
+	if historyErr != nil {
+		a.libraryError = historyErr.Error()
+	}
+	live := make(map[string]bool, len(list))
+	for _, sess := range list {
+		live[sess.Agent+":"+sess.ID] = true
+	}
+	for _, sess := range saved {
+		if live[sess.Agent+":"+sess.ID] {
+			continue
+		}
+		sess.Retained, sess.ReadOnly, sess.Resume = true, true, ""
+		list = append(list, sess)
+	}
+	sort.SliceStable(list, func(i, j int) bool { return list[i].Last.After(list[j].Last) })
 	byKey := make(map[string]sessions.Session, len(list))
 	for _, s := range list {
 		byKey[s.Agent+":"+s.ID] = s
@@ -150,30 +221,35 @@ func (a *App) setList(list []sessions.Session) {
 // warmMessages 后台补齐消息数：ListAgent 每 agent 全量走文件，慢。
 // 补齐前列表的 Messages 显示 0（设计允许的降级态）。
 func (a *App) warmMessages() {
-	a.warmOnce.Do(func() {
-		a.mu.Lock()
-		if !a.loaded {
-			a.mu.Unlock()
-			return
-		}
-		agents := map[string]bool{}
-		for _, s := range a.list {
-			agents[s.Agent] = true
-		}
+	a.warmMu.Lock()
+	defer a.warmMu.Unlock()
+	a.mu.Lock()
+	if !a.loaded || a.msgReady {
 		a.mu.Unlock()
-		msgs := map[string]int{}
-		for ag := range agents {
-			for _, m := range sessions.ListAgent(ag) {
-				msgs[m.Agent+":"+m.ID] = m.Messages
-			}
+		return
+	}
+	generation := a.generation
+	agents := map[string]bool{}
+	for _, s := range a.list {
+		agents[s.Agent] = true
+	}
+	a.mu.Unlock()
+	msgs := map[string]int{}
+	for ag := range agents {
+		for _, m := range sessions.ListAgent(ag) {
+			msgs[m.Agent+":"+m.ID] = m.Messages
 		}
-		a.mu.Lock()
-		a.messages = msgs
-		a.msgReady = true
+	}
+	a.mu.Lock()
+	if generation != a.generation {
 		a.mu.Unlock()
-		// 通知前端重拉列表:补齐前消息数一律显示 0
-		a.emit(EventMessagesReady, nil)
-	})
+		return
+	}
+	a.messages = msgs
+	a.msgReady = true
+	a.mu.Unlock()
+	// 通知前端重拉列表:补齐前消息数一律显示 0
+	a.emit(EventMessagesReady, nil)
 }
 
 // snapshot 在锁内取列表与标注快照的浅拷贝引用：list 与 byKey 装配后
@@ -195,8 +271,32 @@ func (a *App) refreshMark(key string) {
 	if a.marksAll == nil {
 		a.marksAll = map[string]marks.Mark{}
 	}
-	a.marksAll[key] = m
+	next := maps.Clone(a.marksAll)
+	next[key] = m
+	a.marksAll = next
 	a.mu.Unlock()
+}
+
+// sessionMarkKey preserves marks when an explicitly identified Desktop run
+// previously appeared as CLI. Existing canonical marks always take priority.
+func sessionMarkKey(sess sessions.Session, key string, ms map[string]marks.Mark) string {
+	if _, exists := ms[key]; exists || sess.Agent != "claude-desktop" || sess.WSL != "" || sess.Path == "" {
+		return key
+	}
+	rel, err := filepath.Rel(filepath.Join(sessions.ClaudeDir(), "projects"), sess.Path)
+	if err != nil || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return key
+	}
+	legacy := "claude:" + sess.ID
+	if _, exists := ms[legacy]; exists {
+		return legacy
+	}
+	return key
+}
+
+func (a *App) markKey(key string) string {
+	_, byKey, ms := a.snapshot()
+	return sessionMarkKey(byKey[key], key, ms)
 }
 
 // session 最后活动时间的字符串形态；零值给空串，前端按未知渲染。

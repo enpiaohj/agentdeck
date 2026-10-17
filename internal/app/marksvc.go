@@ -5,7 +5,9 @@ package app
 type MarkService struct{ a *App }
 
 func (s *MarkService) SetFavorite(key string, v bool) error {
-	if err := s.a.marks.SetFavorite(key, v); err != nil {
+	s.a.dataMu.Lock()
+	defer s.a.dataMu.Unlock()
+	if err := s.a.marks.SetFavorite(s.a.markKey(key), v); err != nil {
 		return err
 	}
 	s.a.changed(key)
@@ -13,7 +15,9 @@ func (s *MarkService) SetFavorite(key string, v bool) error {
 }
 
 func (s *MarkService) SetArchived(key string, v bool) error {
-	if err := s.a.marks.SetArchived(key, v); err != nil {
+	s.a.dataMu.Lock()
+	defer s.a.dataMu.Unlock()
+	if err := s.a.marks.SetArchived(s.a.markKey(key), v); err != nil {
 		return err
 	}
 	s.a.changed(key)
@@ -21,7 +25,9 @@ func (s *MarkService) SetArchived(key string, v bool) error {
 }
 
 func (s *MarkService) SetTags(key string, tags []string) error {
-	if err := s.a.marks.SetTags(key, tags); err != nil {
+	s.a.dataMu.Lock()
+	defer s.a.dataMu.Unlock()
+	if err := s.a.marks.SetTags(s.a.markKey(key), tags); err != nil {
 		return err
 	}
 	s.a.changed(key)
@@ -29,7 +35,9 @@ func (s *MarkService) SetTags(key string, tags []string) error {
 }
 
 func (s *MarkService) SetNote(key, note string) error {
-	if err := s.a.marks.SetNote(key, note); err != nil {
+	s.a.dataMu.Lock()
+	defer s.a.dataMu.Unlock()
+	if err := s.a.marks.SetNote(s.a.markKey(key), note); err != nil {
 		return err
 	}
 	s.a.changed(key)
@@ -42,12 +50,12 @@ func (s *MarkService) TagsInUse() ([]string, error) {
 
 // Get 单个会话的标注。
 func (s *MarkService) Get(key string) (Mark, error) {
-	m, err := s.a.marks.Get(key)
+	m, err := s.a.marks.Get(s.a.markKey(key))
 	if err != nil {
 		return Mark{}, err
 	}
 	return Mark{
-		Key: m.Key, Favorite: m.Favorite, Archived: m.Archived,
+		Key: key, Favorite: m.Favorite, Archived: m.Archived,
 		Tags: m.Tags, Note: m.Note, Updated: m.Updated.UnixMilli(),
 	}, nil
 }
@@ -64,6 +72,6 @@ type Mark struct {
 
 // changed 刷新缓存快照并广播。
 func (a *App) changed(key string) {
-	a.refreshMark(key)
+	a.refreshMark(a.markKey(key))
 	a.emit(EventSessionsChanged, key)
 }

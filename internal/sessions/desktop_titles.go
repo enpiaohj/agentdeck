@@ -63,6 +63,28 @@ func DesktopTitles(ids []string) map[string]string {
 	return out
 }
 
+// desktopSessionIDs uses explicit metadata identities, never a matching title
+// or workspace path, to identify Desktop runs in the shared CLI directory.
+func desktopSessionIDs() map[string]bool {
+	desktopTitles.Lock()
+	defer desktopTitles.Unlock()
+	if desktopTitles.names == nil || time.Since(desktopTitles.at) >= desktopTitlesHeld {
+		scanDesktopTitles()
+	}
+	ids := map[string]bool{}
+	for _, d := range desktopTitles.last {
+		for _, id := range append([]string{d.CLI, d.Unarchived, d.PreClear}, d.Prior...) {
+			if id != "" {
+				ids[id] = true
+			}
+		}
+		if strings.HasPrefix(d.Session, "local_") {
+			ids[strings.TrimPrefix(d.Session, "local_")] = true
+		}
+	}
+	return ids
+}
+
 // scanDesktopTitles rebuilds the names; the caller holds desktopTitles.
 // A file that is there but can't be read or parsed (Desktop midway through
 // writing it) is unknown, not unnamed: its last parse stands. A file gone

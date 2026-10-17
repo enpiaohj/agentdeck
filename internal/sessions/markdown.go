@@ -44,6 +44,18 @@ func WriteGatewayMarkdown(w io.Writer, s Session, name string, t Transcript) err
 	})
 }
 
+// AgentDeck: export a permanent library copy without reopening an upstream file.
+func WriteRetainedMarkdown(w io.Writer, s Session, name string, t Transcript) error {
+	return writeMarkdown(w, s, name, "Saved by", "AgentDeck local library", t.Cut, func(each func(Part) bool) error {
+		for _, p := range t.Parts {
+			if !each(p) {
+				break
+			}
+		}
+		return nil
+	})
+}
+
 func writeMarkdown(w io.Writer, s Session, name, fromKey, from string, cut bool, parts func(func(Part) bool) error) error {
 	b := bufio.NewWriter(w)
 	title := strings.TrimSpace(s.Title)

@@ -7,7 +7,8 @@ package app
 // SessionView 是列表与会话卡片的一行。Resume 非空 = 可原生命令恢复；
 // 空 = 仅可查看历史。Source 区分本机/WSL/网关来源。
 type SessionView struct {
-	Key        string   `json:"key"` // agent:id
+	Account    string   `json:"account"` // imported cloud-chat account label
+	Key        string   `json:"key"`     // agent:id
 	Agent      string   `json:"agent"`
 	ID         string   `json:"id"`
 	Cwd        string   `json:"cwd"`
@@ -30,22 +31,36 @@ type SessionView struct {
 	Note       string   `json:"note"`
 }
 
+type ClaudeImportReport struct {
+	Conversations   int    `json:"conversations"`
+	Account         string `json:"account"`
+	AlreadyImported bool   `json:"already_imported"`
+	SkippedBlocks   int    `json:"skipped_blocks"`
+}
+
 // TranscriptView 是会话详情：全文按序。Cut 说明会话层按上限截断了。
 type TranscriptView struct {
-	Key   string           `json:"key"`
-	Parts []TranscriptPart `json:"parts"`
-	Cut   bool             `json:"cut"`
+	Start          int              `json:"start"`
+	Total          int              `json:"total"`
+	HasBefore      bool             `json:"has_before"`
+	HasAfter       bool             `json:"has_after"`
+	Retained       bool             `json:"retained"`
+	StorageWarning string           `json:"storage_warning"`
+	Key            string           `json:"key"`
+	Parts          []TranscriptPart `json:"parts"`
+	Cut            bool             `json:"cut"`
 }
 
 // TranscriptPart 是一句：Role user/assistant/tool，Kind text/thinking/
 // tool_use/tool_result/context/image。
 type TranscriptPart struct {
-	Role  string `json:"role"`
-	Kind  string `json:"kind"`
-	Name  string `json:"name,omitempty"`
-	Text  string `json:"text"`
-	Cut   int    `json:"cut,omitempty"`
-	Model string `json:"model,omitempty"`
+	OmittedBefore int    `json:"omitted_before"`
+	Role          string `json:"role"`
+	Kind          string `json:"kind"`
+	Name          string `json:"name,omitempty"`
+	Text          string `json:"text"`
+	Cut           int    `json:"cut,omitempty"`
+	Model         string `json:"model,omitempty"`
 }
 
 // SearchReply 是一次全文检索：Mode 说明命中来自全文索引（index）还是

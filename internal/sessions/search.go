@@ -257,6 +257,17 @@ func SearchSession(ctx context.Context, s Session, needle string) (Hit, bool, er
 	return m.hit, m.found, err
 }
 
+// AgentDeck: the same matching rules for an owned permanent copy.
+func SearchRetainedTranscript(t Transcript, needle string) (Hit, bool) {
+	m := matcher{needle: needle}
+	for _, p := range t.Parts {
+		if !m.add(p) {
+			break
+		}
+	}
+	return m.hit, m.found
+}
+
 // linesFile says whether s.Path is the file its conversation is written in,
 // so that one without the needle's bytes can be passed over unread. An
 // OpenCode session's is its info (the messages are elsewhere) or a database,

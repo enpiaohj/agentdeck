@@ -1,9 +1,9 @@
-// 左导航:视图入口 + Agent 筛选 + 项目区 + 索引状态条。可折叠 240↔48px。
+// 左导航:视图入口 + Agent 筛选 + 项目区 + 索引状态条。宽度随窗口变化，可折叠为 56px。
 import {
   makeStyles,
+  mergeClasses,
   tokens,
   Text,
-  Tooltip,
 } from '@fluentui/react-components'
 import {
   ArchiveRegular,
@@ -15,9 +15,8 @@ import {
   SettingsRegular,
 } from '@fluentui/react-icons'
 import { useEffect, useState } from 'react'
-import type { AgentView, IndexStatus, ProjectView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
+import type { AgentView, ProjectView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
-import { useIndexStatus } from '../hooks/useIndexStatus'
 import { agentMeta } from '../util'
 import { AgentMark } from '../icons/AgentMark'
 
@@ -30,41 +29,44 @@ export type SidebarFilter = {
 
 const useStyles = makeStyles({
   nav: {
-    width: '240px',
+    width: 'var(--ad-nav-width)',
     display: 'flex',
     flexDirection: 'column',
     height: '100%',
+    overflow: 'hidden',
     backgroundColor: tokens.colorNeutralBackground2,
     borderRight: `1px solid ${tokens.colorNeutralStroke2}`,
   },
-  navCollapsed: { width: '48px' },
+  navCollapsed: { width: '56px', overflowY: 'auto' },
+  agentScroll: { overflowY: 'auto', maxHeight: '42%', minHeight: '80px', flexShrink: 1 },
   item: {
     position: 'relative',
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
+    gap: '9px',
+    minHeight: '30px',
     width: 'calc(100% - 16px)',
-    margin: '2px 8px',
-    padding: '9px 12px',
+    margin: '1px 8px',
+    padding: '5px 8px',
     border: 'none',
-    borderRadius: '8px',
+    borderRadius: '6px',
     background: 'transparent',
     cursor: 'pointer',
     textAlign: 'left',
-    fontSize: '14px',
-    color: tokens.colorNeutralForeground1,
+    fontSize: '13px',
+    color: tokens.colorNeutralForeground2,
     ':hover': { backgroundColor: tokens.colorNeutralBackground3Hover },
   },
   itemActive: {
-    backgroundColor: tokens.colorNeutralBackground1,
+    backgroundColor: tokens.colorBrandBackground2,
+    color: tokens.colorBrandForeground1,
     fontWeight: 600,
-    boxShadow: tokens.shadow2,
     ':before': {
       content: '""',
       position: 'absolute',
-      left: '-8px',
-      top: '6px',
-      bottom: '6px',
+      left: '0',
+      top: '8px',
+      bottom: '8px',
       width: '3px',
       borderRadius: '2px',
       backgroundColor: tokens.colorBrandBackground,
@@ -74,24 +76,25 @@ const useStyles = makeStyles({
     marginLeft: 'auto',
     fontSize: '12px',
     color: tokens.colorNeutralForeground3,
-    backgroundColor: tokens.colorNeutralBackground3,
-    borderRadius: '10px',
-    padding: '0 8px',
+    backgroundColor: 'transparent',
+    fontVariantNumeric: 'tabular-nums',
+    padding: '0 2px',
     lineHeight: '19px',
     flexShrink: 0,
   },
   spacer: { flex: 1 },
   status: { padding: '10px 14px', fontSize: '11px', color: tokens.colorNeutralForeground3, borderTop: `1px solid ${tokens.colorNeutralStroke3}` },
   sectionTitle: {
-    padding: '16px 18px 6px',
-    fontSize: '12.5px',
+    padding: '18px 16px 7px',
+    fontSize: '11px',
     fontWeight: 600,
-    letterSpacing: '0.01em',
+    letterSpacing: '0.025em',
     color: tokens.colorNeutralForeground3,
   },
   foot: {
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    flexDirection: 'column',
     gap: '8px',
     padding: '10px 14px',
     borderTop: `1px solid ${tokens.colorNeutralStroke3}`,
@@ -103,13 +106,14 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '10px 10px 6px',
+    padding: '8px 12px 6px',
   },
   appName: { fontSize: '12px', fontWeight: 600, color: tokens.colorNeutralForeground3 },
 })
 
 type Props = {
   collapsed: boolean
+  listVersion: number
   onToggle: () => void
   filter: SidebarFilter
   onFilter: (f: SidebarFilter) => void
@@ -118,86 +122,89 @@ type Props = {
 
 function isAll(f: SidebarFilter) { return !f.agent && !f.favorites && !f.archived && !f.project }
 
-export function Sidebar({ collapsed, onToggle, filter, onFilter, onOpenDiagnostics }: Props) {
+export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, onOpenDiagnostics }: Props) {
   const styles = useStyles()
-  const agents = useAgents()
-  const projects = useProjects()
-  const status = useIndexStatus()
+  const agents = useAgents(listVersion)
+  const projects = useProjects(listVersion)
 
   const pick = (f: SidebarFilter) => () => onFilter(f)
 
   if (collapsed) {
     return (
-      <nav className={`${styles.nav} ${styles.navCollapsed}`}>
+      <nav className={mergeClasses(styles.nav, styles.navCollapsed)} aria-label="会话导航">
         <button className={styles.item} onClick={onToggle} title="展开导航" style={{ justifyContent: 'center' }}>
           <ChevronDoubleRightRegular />
         </button>
-        <button className={`${styles.item} ${isAll(filter) ? styles.itemActive : ''}`} onClick={pick({})} title="全部会话" style={{ justifyContent: 'center' }}>
+        <button className={mergeClasses(styles.item, isAll(filter) && styles.itemActive)} onClick={pick({})} title="全部会话" style={{ justifyContent: 'center' }}>
           <AppsRegular />
         </button>
-        <button className={`${styles.item} ${filter.favorites ? styles.itemActive : ''}`} onClick={pick({ favorites: true })} title="收藏" style={{ justifyContent: 'center' }}>
+        <button className={mergeClasses(styles.item, filter.favorites && styles.itemActive)} onClick={pick({ favorites: true })} title="收藏" style={{ justifyContent: 'center' }}>
           <StarRegular />
         </button>
-        <button className={`${styles.item} ${filter.archived ? styles.itemActive : ''}`} onClick={pick({ archived: true })} title="归档" style={{ justifyContent: 'center' }}>
+        <button className={mergeClasses(styles.item, filter.archived && styles.itemActive)} onClick={pick({ archived: true })} title="归档" style={{ justifyContent: 'center' }}>
           <ArchiveRegular />
         </button>
         {agents.map((a) => (
           <button
             key={a.agent}
-            className={`${styles.item} ${filter.agent === a.agent ? styles.itemActive : ''}`}
+            className={mergeClasses(styles.item, filter.agent === a.agent && styles.itemActive)}
             onClick={pick({ agent: a.agent })}
-            title={`${agentMeta(a.agent).label}(${a.count})`}
+            title={`${agentMeta(a.agent).label}(${a.count})`} aria-label={`${agentMeta(a.agent).label}，${a.count} 个会话`}
             style={{ justifyContent: 'center' }}
           >
             <AgentMark agent={a.agent} size={18} />
           </button>
         ))}
+        <div style={{ flex: 1 }} />
+        <button className={styles.item} onClick={onOpenDiagnostics} title="设置" aria-label="设置" style={{ justifyContent: 'center' }}><SettingsRegular /></button>
       </nav>
     )
   }
 
   return (
-    <nav className={styles.nav}>
+    <nav className={`ad-sidebar ${styles.nav}`} aria-label="会话导航">
       <div className={styles.head}>
-        <Text className={styles.appName}>导航</Text>
+        <Text className={styles.appName}>工作空间</Text>
         <button className={styles.item} style={{ width: 'auto', margin: 0, padding: '4px 6px' }} onClick={onToggle} title="折叠导航">
           <ChevronDoubleLeftRegular />
         </button>
       </div>
-      <button className={`${styles.item} ${isAll(filter) ? styles.itemActive : ''}`} onClick={pick({})}>
+      <button className={mergeClasses(styles.item, isAll(filter) && styles.itemActive)} onClick={pick({})}>
         <AppsRegular fontSize={16} />
         全部会话
         <span className={styles.count}>{agents.reduce((n, a) => n + a.count, 0)}</span>
       </button>
-      <button className={`${styles.item} ${filter.favorites ? styles.itemActive : ''}`} onClick={pick({ favorites: true })}>
+      <button className={mergeClasses(styles.item, filter.favorites && styles.itemActive)} onClick={pick({ favorites: true })}>
         <StarRegular fontSize={16} />
         收藏
       </button>
-      <button className={`${styles.item} ${filter.archived ? styles.itemActive : ''}`} onClick={pick({ archived: true })}>
+      <button className={mergeClasses(styles.item, filter.archived && styles.itemActive)} onClick={pick({ archived: true })}>
         <ArchiveRegular fontSize={16} />
         归档
       </button>
 
-      <div className={styles.sectionTitle}>Agent</div>
+      <div className={styles.sectionTitle}>智能体</div>
+      <div className={styles.agentScroll}>
       {agents.map((a) => (
         <button
           key={a.agent}
-          className={`${styles.item} ${filter.agent === a.agent ? styles.itemActive : ''}`}
+          className={mergeClasses(styles.item, filter.agent === a.agent && styles.itemActive)}
           onClick={pick({ agent: a.agent })}
           title={`${agentMeta(a.agent).label} · ${a.count} 个会话`}
         >
           <AgentMark agent={a.agent} size={18} />
-          {agentMeta(a.agent).label}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agentMeta(a.agent).label}</span>
           <span className={styles.count}>{a.count}</span>
         </button>
       ))}
+      </div>
 
-      <div className={styles.sectionTitle}>工作区</div>
+      <div className={styles.sectionTitle}>项目</div>
       <div className={styles.projectScroll}>
         {projects.map((p) => (
           <button
             key={p.path}
-            className={`${styles.item} ${filter.project === p.path ? styles.itemActive : ''}`}
+            className={mergeClasses(styles.item, filter.project === p.path && styles.itemActive)}
             onClick={pick({ project: p.path })}
             title={`${p.path}(${p.favorites} 收藏)`}
           >
@@ -222,44 +229,25 @@ export function Sidebar({ collapsed, onToggle, filter, onFilter, onOpenDiagnosti
             设置
           </button>
         ) : null}
-        <IndexBadge status={status} />
       </div>
     </nav>
   )
 }
 
-function IndexBadge({ status }: { status: IndexStatus | null }) {
-  if (!status) return <Text size={200}>索引状态未知</Text>
-  switch (status.state) {
-    case 'ready':
-      return <Text size={200}>● 全文索引就绪 · {status.docs} 段</Text>
-    case 'building':
-      return <Text size={200}>◐ 索引构建中 · {status.sessions} 会话</Text>
-    case 'failed':
-      return (
-        <Tooltip content={status.error || ''} relationship="description">
-          <Text size={200}>○ 索引失败 · 已降级为快速搜索</Text>
-        </Tooltip>
-      )
-    default:
-      return <Text size={200}>○ 索引未开始</Text>
-  }
-}
-
 // agent 清单加载(独立小 hook,避免与列表加载耦合)。
-function useAgents(): AgentView[] {
+function useAgents(listVersion: number): AgentView[] {
   const [agents, setAgents] = useState<AgentView[]>([])
   useEffect(() => {
     sessionService.Agents().then(setAgents).catch(() => {})
-  }, [])
+  }, [listVersion])
   return agents
 }
 
 // 项目聚合(按会话数排序,来自后端 Projects())。
-function useProjects(): ProjectView[] {
+function useProjects(listVersion: number): ProjectView[] {
   const [ps, setPs] = useState<ProjectView[]>([])
   useEffect(() => {
     sessionService.Projects().then(setPs).catch(() => {})
-  }, [])
+  }, [listVersion])
   return ps
 }

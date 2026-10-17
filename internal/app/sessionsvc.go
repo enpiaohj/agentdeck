@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/enpiaohj/agentdeck/internal/claudehistory"
 	"github.com/enpiaohj/agentdeck/internal/marks"
 	"github.com/enpiaohj/agentdeck/internal/projects"
 	"github.com/enpiaohj/agentdeck/internal/sessions"
@@ -28,6 +28,38 @@ type Filter struct {
 // SessionService 是会话列表/详情服务。
 type SessionService struct{ a *App }
 
+// ImportClaudeHistory copies an official chat export into the owned local store.
+// Account is a user label, not a login credential. No Claude source is changed.
+func (s *SessionService) ImportClaudeHistory(path, account string) (ClaudeImportReport, error) {
+	s.a.dataMu.Lock()
+	defer s.a.dataMu.Unlock()
+	report, err := claudehistory.Import(s.a.cfg.ImportDir, path, account)
+	if err != nil {
+		return ClaudeImportReport{}, err
+	}
+	s.Refresh()
+	s.a.mu.Lock()
+	loadError := s.a.importError
+	s.a.mu.Unlock()
+	if loadError != "" {
+		return ClaudeImportReport{}, fmt.Errorf("文件已保存，但读取导入库失败: %s", loadError)
+	}
+	return ClaudeImportReport{Conversations: report.Conversations, Account: report.Account, AlreadyImported: report.AlreadyImported, SkippedBlocks: report.SkippedBlocks}, nil
+}
+
+// Refresh rereads sources without touching transcripts or user marks.
+// Old background message counts cannot overwrite the new generation.
+func (s *SessionService) Refresh() {
+	a := s.a
+	a.mu.Lock()
+	a.loaded = false
+	a.generation++
+	a.messages, a.msgReady = nil, false
+	a.mu.Unlock()
+	a.ensure()
+	a.emit(EventSessionsChanged, "")
+}
+
 // List 按过滤条件返回会话视图（默认按最后活动降序，即 sessions 层顺序）。
 func (s *SessionService) List(f Filter) []SessionView {
 	list, _, ms := s.a.snapshot()
@@ -41,7 +73,7 @@ func (s *SessionService) List(f Filter) []SessionView {
 	out := make([]SessionView, 0, 64)
 	for _, sess := range list {
 		key := sess.Agent + ":" + sess.ID
-		m := ms[key]
+		m := ms[sessionMarkKey(sess, key, ms)]
 		if f.Agent != "" && sess.Agent != f.Agent {
 			continue
 		}
@@ -75,7 +107,7 @@ func (s *SessionService) Get(key string) (*SessionView, error) {
 	s.a.mu.Lock()
 	msgs, msgReady := s.a.messages, s.a.msgReady
 	s.a.mu.Unlock()
-	v := view(sess, key, ms[key], msgs, msgReady)
+	v := view(sess, key, ms[sessionMarkKey(sess, key, ms)], msgs, msgReady)
 	return &v, nil
 }
 
@@ -89,11 +121,12 @@ func (s *SessionService) Transcript(key string) (*TranscriptView, error) {
 	if !sessions.HasTranscript(sess.Agent) || sess.Path == "" {
 		return nil, sessions.ErrNoTranscript
 	}
-	tr, err := sessions.TranscriptOf(sess)
+	full, retained, warning, err := s.a.readConversation(sess)
 	if err != nil {
 		return nil, err
 	}
-	tv := &TranscriptView{Key: key, Cut: tr.Cut, Parts: make([]TranscriptPart, 0, len(tr.Parts))}
+	tr := sessions.PreviewTranscript(full)
+	tv := &TranscriptView{Key: key, Cut: tr.Cut, Retained: retained, StorageWarning: warning, Parts: make([]TranscriptPart, 0, len(tr.Parts))}
 	for _, p := range tr.Parts {
 		tv.Parts = append(tv.Parts, TranscriptPart{
 			Role: p.Role, Kind: p.Kind, Name: p.Name, Text: p.Text, Cut: p.Cut, Model: p.Model,
@@ -109,8 +142,12 @@ func (s *SessionService) SearchIn(key, needle string) (*SearchHitView, error) {
 	if !ok {
 		return nil, fmt.Errorf("会话不存在: %s", key)
 	}
-	h, found, err := sessions.SearchSession(context.Background(), sess, sessions.NeedleOf(needle))
-	if err != nil || !found {
+	tr, _, _, err := s.a.readConversation(sess)
+	if err != nil {
+		return nil, err
+	}
+	h, found := sessions.SearchRetainedTranscript(tr, sessions.NeedleOf(needle))
+	if !found {
 		return nil, err
 	}
 	return &SearchHitView{
@@ -141,13 +178,13 @@ func (s *SessionService) Agents() []AgentView {
 
 // Projects 项目聚合视图。
 func (s *SessionService) Projects() []ProjectView {
-	list, _, ms := s.a.snapshot()
+	list, byKey, ms := s.a.snapshot()
 	ps := projects.Group(list)
 	out := make([]ProjectView, 0, len(ps))
 	for _, p := range ps {
 		fav := 0
 		for _, k := range p.Keys {
-			if ms[k].Favorite {
+			if ms[sessionMarkKey(byKey[k], k, ms)].Favorite {
 				fav++
 			}
 		}
@@ -186,7 +223,11 @@ func (s *SessionService) ExportMarkdown(key, destDir string) (string, error) {
 		return "", err
 	}
 	defer f.Close()
-	if err := sessions.WriteMarkdown(f, sess, sess.Title); err != nil {
+	tr, _, _, err := s.a.readConversation(sess)
+	if err != nil {
+		return "", err
+	}
+	if err := sessions.WriteRetainedMarkdown(f, sess, sess.Title, tr); err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, name), nil
@@ -197,14 +238,19 @@ func (s *SessionService) ExportMarkdown(key, destDir string) (string, error) {
 // view 是 Session → SessionView 的唯一装配点。
 func view(s sessions.Session, key string, m marks.Mark, msgs map[string]int, msgReady bool) SessionView {
 	source := "local"
-	if s.Gateway {
+	if s.Retained {
+		source = "retained"
+	} else if s.Gateway {
 		source = "gateway"
+	} else if s.Imported {
+		source = "import"
 	} else if s.WSL != "" {
 		source = "wsl"
 	}
 	return SessionView{
 		Key:        key,
 		Agent:      s.Agent,
+		Account:    s.Account,
 		ID:         s.ID,
 		Cwd:        s.Cwd,
 		Project:    projects.DisplayName(projects.Normalize(s.Cwd)),
@@ -213,6 +259,9 @@ func view(s sessions.Session, key string, m marks.Mark, msgs map[string]int, msg
 		Created:    lastString(s.Start),
 		SourcePath: s.Path,
 		Messages: func() int {
+			if s.Imported || s.Retained {
+				return s.MessageCount
+			}
 			if msgReady {
 				return msgs[key]
 			}

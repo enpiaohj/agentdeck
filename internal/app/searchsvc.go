@@ -17,11 +17,14 @@ type searchState struct {
 	mu   sync.Mutex
 	path string
 
-	state    string
-	sessions int
-	docs     int
-	err      string
-	building bool
+	state      string
+	sessions   int
+	docs       int
+	err        string
+	building   bool
+	pending    bool // coalesce rebuild requests received during a build
+	closed     bool
+	generation uint64 // session snapshot represented by this index
 
 	ix *search.Index
 }
@@ -39,6 +42,8 @@ func (st *searchState) status() IndexStatus {
 func (st *searchState) close() {
 	st.mu.Lock()
 	defer st.mu.Unlock()
+	st.closed = true
+	st.pending = false
 	if st.ix != nil {
 		st.ix.Close()
 		st.ix = nil
@@ -48,7 +53,7 @@ func (st *searchState) close() {
 // SearchService 是全文检索服务:启动后台重建 + 查询 + 未就绪降级。
 type SearchService struct{ a *App }
 
-// Rebuild 触发一次后台重建;构建中重复调用被忽略。索引纯派生,
+// Rebuild 触发一次后台重建;构建中重复调用合并为一次后续重建。索引纯派生,
 // 每次 Rebuild 都是整库重建(与 Phase 1 的 Reset 语义一致)。
 func (s *SearchService) Rebuild() {
 	go s.a.buildIndex()
@@ -56,7 +61,16 @@ func (s *SearchService) Rebuild() {
 
 // Status 索引状态(状态条)。
 func (s *SearchService) Status() IndexStatus {
-	return s.a.search.status()
+	status := s.a.search.status()
+	s.a.mu.Lock()
+	generation := s.a.generation
+	s.a.mu.Unlock()
+	s.a.search.mu.Lock()
+	if status.State == "ready" && s.a.search.generation != generation {
+		status.State = "idle"
+	}
+	s.a.search.mu.Unlock()
+	return status
 }
 
 // Query 全文检索。索引就绪走 FTS(bm25 排序);未就绪降级为逐会话
@@ -67,22 +81,27 @@ func (s *SearchService) Query(q string, limit int) (*SearchReply, error) {
 		limit = 20
 	}
 	st := s.a.search
+	s.a.ensure()
+	// One immutable snapshot supplies both the generation check and metadata.
+	// Lock order is search -> app; no app lock is held while acquiring search.
 	st.mu.Lock()
-	ready := st.state == "ready" && st.ix != nil
+	s.a.mu.Lock()
+	generation, byKey := s.a.generation, s.a.byKey
+	s.a.mu.Unlock()
+	ready := st.state == "ready" && st.ix != nil && st.generation == generation
 	var ix *search.Index
 	if ready {
 		ix = st.ix
+		// Keep replacement/Close from invalidating a query's index handle.
+		defer st.mu.Unlock()
+		return s.queryIndex(ix, byKey, q, limit)
 	}
 	st.mu.Unlock()
-
-	if ready {
-		return s.queryIndex(ix, q, limit)
-	}
 	return s.queryScan(q, limit)
 }
 
 // queryIndex 全文索引路径。
-func (s *SearchService) queryIndex(ix *search.Index, q string, limit int) (*SearchReply, error) {
+func (s *SearchService) queryIndex(ix *search.Index, byKey map[string]sessions.Session, q string, limit int) (*SearchReply, error) {
 	rs, err := ix.Search(context.Background(), q, limit)
 	if err != nil {
 		return nil, err
@@ -91,11 +110,13 @@ func (s *SearchService) queryIndex(ix *search.Index, q string, limit int) (*Sear
 	if err != nil {
 		total = len(rs) // 计数失败退回所见,不假装是全部
 	}
-	_, byKey, _ := s.a.snapshot()
 	out := make([]SearchHitView, 0, len(rs))
 	for _, r := range rs {
 		key, _, _ := splitDocKey(r.Key)
-		sess := byKey[key]
+		sess, exists := byKey[key]
+		if !exists {
+			continue
+		}
 		out = append(out, SearchHitView{
 			Key:     key,
 			Part:    r.Key,
@@ -124,8 +145,12 @@ func (s *SearchService) queryScan(q string, limit int) (*SearchReply, error) {
 		if !sessions.HasTranscript(sess.Agent) || sess.Path == "" {
 			continue
 		}
-		h, found, err := sessions.SearchSession(context.Background(), sess, needle)
-		if err != nil || !found {
+		tr, _, _, err := s.a.readConversation(sess)
+		if err != nil {
+			continue
+		}
+		h, found := sessions.SearchRetainedTranscript(tr, needle)
+		if !found {
 			continue
 		}
 		out = append(out, SearchHitView{
@@ -156,7 +181,12 @@ func splitDocKey(docKey string) (key string, part int, ok bool) {
 func (a *App) buildIndex() {
 	st := a.search
 	st.mu.Lock()
+	if st.closed {
+		st.mu.Unlock()
+		return
+	}
 	if st.building {
+		st.pending = true
 		st.mu.Unlock()
 		return
 	}
@@ -164,10 +194,16 @@ func (a *App) buildIndex() {
 	st.state = "building"
 	st.err = ""
 	st.mu.Unlock()
+	a.pushIndex(EventIndexProgress, 0, 0)
 	defer func() {
 		st.mu.Lock()
 		st.building = false
+		pending := st.pending && !st.closed
+		st.pending = false
 		st.mu.Unlock()
+		if pending {
+			go a.buildIndex()
+		}
 	}()
 
 	ix, err := search.Open(st.path)
@@ -182,6 +218,11 @@ func (a *App) buildIndex() {
 	}
 	// 换上新库(关旧的)
 	st.mu.Lock()
+	if st.closed {
+		st.mu.Unlock()
+		ix.Close()
+		return
+	}
 	if st.ix != nil && st.ix != ix {
 		st.ix.Close()
 	}
@@ -189,7 +230,9 @@ func (a *App) buildIndex() {
 	st.mu.Unlock()
 
 	a.ensure()
-	list, _, _ := a.snapshot()
+	a.mu.Lock()
+	list, generation := a.list, a.generation
+	a.mu.Unlock()
 	docs := make([]search.Doc, 0, 64)
 	sessionsN, docsN := 0, 0
 	lastEmit := time.Now()
@@ -197,12 +240,18 @@ func (a *App) buildIndex() {
 		if !sessions.HasTranscript(s.Agent) || s.Path == "" {
 			continue
 		}
-		tr, err := sessions.TranscriptOf(s)
+		st.mu.Lock()
+		closed := st.closed
+		st.mu.Unlock()
+		if closed {
+			return
+		}
+		full, _, _, err := a.readConversation(s)
 		if err != nil {
 			continue
 		}
 		key := s.Agent + ":" + s.ID
-		for i, p := range tr.Parts {
+		for i, p := range full.Parts {
 			// 与 CLI/Phase 1 同一过滤:agent 每次都带的系统上下文与图片不收
 			if p.Role == "system" || p.Kind == "context" || p.Kind == "image" {
 				continue
@@ -221,8 +270,20 @@ func (a *App) buildIndex() {
 			a.pushIndex(EventIndexProgress, sessionsN, docsN)
 		}
 	}
+	a.mu.Lock()
+	currentGeneration := a.generation
+	a.mu.Unlock()
 	st.mu.Lock()
 	st.state = "ready"
+	if st.closed {
+		st.mu.Unlock()
+		return
+	}
+	if generation != currentGeneration {
+		st.state = "idle"
+		st.pending = true
+	}
+	st.generation = generation
 	st.sessions, st.docs = sessionsN, docsN
 	st.err = ""
 	st.mu.Unlock()

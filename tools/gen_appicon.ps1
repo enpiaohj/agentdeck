@@ -1,10 +1,12 @@
-# gen_appicon.ps1 -- draw the AgentDeck application icon and pack it.
+# gen_appicon.ps1 -- package the generated master for Windows and the UI.
+# Default: import build/appicon-source.png, preserving transparency.
+# Explicit -Design rows|deck|panes renders the legacy candidates below.
 #
-# The base is always the same: a rounded tile with an azure -> indigo gradient,
+# The legacy candidates share a rounded tile with an azure -> indigo gradient,
 # a soft top gloss and a bottom vignette (that part is the brand). What changes
 # between designs is the white mark in the middle:
 #
-#   rows   (current) the session list itself -- the row being worked on is a
+#   rows   (legacy) the session list itself -- the row being worked on is a
 #          full card with the spark at its trailing edge, two quieter rows
 #          behind it. One bold white mass, so it still reads at 16px.
 #   deck   a hand of cards fanned about its centre, the middle one face up with
@@ -19,8 +21,8 @@
 # column gaps cut out of it (the gaps read as thin align-lines, not columns),
 # and two card fans (the wings swing out below the front card like a bow tie).
 #
-# Everything is drawn at every size, so nothing is resampled and the 16px entry
-# stays crisp. The 256px render is copied into the frontend so the in-app brand
+# The default generated master is resampled to every size. Legacy candidates
+# are drawn per size. The 256px render is copied into the frontend so the in-app brand
 # mark and the executable icon can never drift apart.
 #
 # Usage:  powershell -NoProfile -ExecutionPolicy Bypass -File tools\gen_appicon.ps1
@@ -41,6 +43,7 @@
 
 param(
   [ValidateSet('rows', 'deck', 'panes')][string]$Design = 'rows',
+  [string]$SourceImage = '',
   [string]$Out = '',
   [string]$Sheet = ''
 )
@@ -56,6 +59,15 @@ if ($defaultOut) { $Out = Join-Path $root 'build' }
 $buildDir = $Out
 $winDir   = Join-Path $buildDir 'windows'
 $pubDir   = Join-Path $root 'frontend\public'
+$sourceBitmap = $null
+# Generated master is the default. Explicit -Design keeps legacy candidates reproducible.
+if (-not $PSBoundParameters.ContainsKey('Design') -and [string]::IsNullOrEmpty($SourceImage)) {
+  $SourceImage = Join-Path $root 'build\appicon-source.png'
+}
+if (-not [string]::IsNullOrEmpty($SourceImage)) {
+  $sourceBitmap = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $SourceImage).Path)
+  if ($sourceBitmap.Width -ne $sourceBitmap.Height) { $sourceBitmap.Dispose(); throw 'Icon master must be square.' }
+}
 $dirs = @($buildDir, $winDir)
 if ($defaultOut) { $dirs += $pubDir }
 foreach ($d in $dirs) {
@@ -214,6 +226,12 @@ function New-IconBitmap {
   $g.PixelOffsetMode   = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
   $g.Clear([System.Drawing.Color]::Transparent)
 
+  if ($sourceBitmap) {
+    $g.DrawImage($sourceBitmap, 0, 0, $Size, $Size)
+    $g.Dispose()
+    return $bmp
+  }
+
   $u = $Size / 1024.0   # design units -> pixels
   Add-Tile $g $u
   switch ($Design) {
@@ -226,7 +244,7 @@ function New-IconBitmap {
   return $bmp
 }
 
-# --- render every size natively ---
+# --- derive each size from the master, or render a legacy candidate ---
 $sizes = @(256, 128, 64, 48, 32, 24, 16)
 $pngs = @{}
 foreach ($s in $sizes) {
@@ -236,7 +254,9 @@ foreach ($s in $sizes) {
   $pngs[$s] = $ms.ToArray()
   $bmp.Dispose(); $ms.Dispose()
 }
-[System.IO.File]::WriteAllBytes((Join-Path $pubDir 'appicon-256.png'), $pngs[256])
+if ($defaultOut) {
+  [System.IO.File]::WriteAllBytes((Join-Path $pubDir 'appicon-256.png'), $pngs[256])
+}
 if (-not $defaultOut) {
   # a candidate run keeps its own 256px copy beside its master; in the build
   # dir the frontend's copy above is the only 256px file there is
@@ -291,7 +311,8 @@ if (-not [string]::IsNullOrEmpty($Sheet)) {
   }
 }
 
-Write-Host ("design:   {0}" -f $Design)
+Write-Host ("design:   {0}" -f $(if ($sourceBitmap) { 'generated deck master' } else { $Design }))
 Write-Host ("icon:     {0} ({1} bytes; sizes {2})" -f (Join-Path $winDir 'icon.ico'), (Get-Item (Join-Path $winDir 'icon.ico')).Length, ($order -join ','))
 Write-Host ("master:   {0}" -f (Join-Path $buildDir 'appicon.png'))
 Write-Host ("frontend: {0}" -f $(if ($defaultOut) { Join-Path $pubDir 'appicon-256.png' } else { '(not written)' }))
+if ($sourceBitmap) { $sourceBitmap.Dispose() }

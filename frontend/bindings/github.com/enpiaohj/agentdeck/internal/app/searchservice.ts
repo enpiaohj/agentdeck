@@ -26,7 +26,7 @@ export function Query(q: string, limit: number): $CancellablePromise<$models.Sea
 }
 
 /**
- * Rebuild 触发一次后台重建;构建中重复调用被忽略。索引纯派生,
+ * Rebuild 触发一次后台重建;构建中重复调用合并为一次后续重建。索引纯派生,
  * 每次 Rebuild 都是整库重建(与 Phase 1 的 Reset 语义一致)。
  */
 export function Rebuild(): $CancellablePromise<void> {

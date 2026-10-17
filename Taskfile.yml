@@ -23,8 +23,8 @@ tasks:
     cmds:
       - task: bindings
       - task: frontend:build
-      # 平铺拷入 embed 目录:dist/index.html 落 assets 根,URL 结构不变
-      - pwsh -NoProfile -Command "Copy-Item -Recurse -Force frontend/dist/* cmd/agentdeck-desktop/assets/"
+      # 清理旧 bundle 后平铺拷入 embed 目录，与 rebuild.ps1 共用入口
+      - pwsh -NoProfile -File frontend/scripts/sync-assets.ps1
       # -H windowsgui:GUI 子系统,双击不弹控制台;-s -w 去符号表
       - go build -tags production -ldflags "-H windowsgui -s -w" -o {{.BIN_DIR}}/{{.APP_NAME}}.exe ./cmd/agentdeck-desktop
 

@@ -1,110 +1,50 @@
 # AgentDeck 图标体系
 
-界面里出现的每一个图标,要么是本工具自己画的,要么是对方产品的真实品牌图标。
-不存在「看起来像」的仿制标志。
+## 应用图标
 
-## 1. 三层图标
-
-| 层 | 内容 | 代码 | 资源 |
-| --- | --- | --- | --- |
-| 应用标志 | AgentDeck 自己 | `AppMark.tsx` | `build/appicon.png` → `frontend/public/appicon-256.png` |
-| Agent 标识 | 每个被管理的 Agent | `AgentMark.tsx` + `agents.ts` | `frontend/public/agents/<key>.png` |
-| 界面图标 | 导航、动作、状态 | `@fluentui/react-icons` | 组件内联引用 |
-
-界面图标沿用 Fluent 图标集:它是完整的 24×24 网格、1.5px 描边、圆头圆角体系,
-自绘一套只会更差。需要自绘的场合只有两种——应用标志、以及 Fluent 里没有的
-品牌标识。
-
-## 2. 形状语言
-
-- **方片**(应用标志、Agent 标识):圆角半径 = 边长 / 4。
-- Agent 标识不带边框、不带描边、不叠阴影——品牌图标自己带底色,再加装饰会脏。
-- 尺寸取 14 / 16 / 18 / 24 / 30 / 38:列表行 14、筛选器 14、侧栏与搜索 16~18、
-  消息流头像 30、顶栏应用标志 38。
-- 同一 Agent 在任何位置都是同一张图、同一个圆角比例,只有尺寸变化。
-
-## 3. 应用图标(自己画的)
-
-`tools/gen_appicon.ps1` 用 GDI+ 现画,不依赖任何素材。底色三层是品牌固定部分:
-蓝色渐变(azure → indigo)圆角方片、顶部一层高光、底部一层暗角。中间的白色
-图形有三版,用 `-Design` 切换:
-
-| 设计 | 图形 | 含义 |
-| --- | --- | --- |
-| `rows`(当前) | 一张实心卡片 + 下面两行更淡的行,卡片右端一枚四角星 | 会话列表本身:正在工作的那一行是完整卡片,星就是「有 Agent 正在工作」 |
-| `deck` | 三张以中心为轴摊开的卡片,中间那张正面朝上带星 | 「All your agents. One deck.」的字面表达 |
-| `panes` | 四根不等宽的白条 | 本应用的四栏布局(导航｜会话列表｜消息流｜会话信息) |
-
-**为什么用 rows**:16~32px 是最常出现的尺寸(任务栏、资源管理器),这一档里
-只能容下一个白色主体。rows 只有一个实心白块 + 一个亮点,32px 仍读得出「列表 +
-某一行在工作」;deck 的扇形侧翼在 32px 只剩一圈柔光,panes 在 32px 会读成
-表格/窗口图标(通用、不指向本产品)。
-
-画过又放弃的:三张错位卡片的「层叠」(错位层在 64px 以下完全看不见)、
-把四栏从一块白板上「挖」出来(缝太细,读成对齐线而不是栏)、两张旋转卡片
-(侧卡下角会甩到前面卡的下面,像蝴蝶结)。
-
-每个尺寸都单独绘制(不从大图缩放),所以 16px 那一档不会糊。切换设计只需:
+新标志采用蓝色折叠 A 形浮雕，结合玻璃边缘、金属高光与深蓝底座，背后的标签代表历史上下文。
+图标由内置 imagegen 生成；透明母版为 `build/appicon-source.png`，生成提示词与来源
+记录在 `build/appicon-source.json`。运行以下命令统一生成界面与 Windows 图标：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tools\gen_appicon.ps1 -Design deck
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/gen_appicon.ps1
 wails3 generate syso -icon build/windows/icon.ico -info build/windows/info.json `
   -manifest build/windows/wails.exe.manifest -arch amd64 `
   -out cmd/agentdeck-desktop/resource_windows_amd64.syso
 ```
 
-加上 `-Sheet _probe\sheet` 会额外输出 256/64/48/32/16 各档单图与小尺寸的
-最近邻放大图,用来比对小尺寸下还看不看得出图形。输出:
+输出为 `build/appicon.png`（1024px）、`frontend/public/appicon-256.png`，以及
+`build/windows/icon.ico`（256/128/64/48/32/24/16px）。界面和 exe 使用同一母版。
+可用 `-Sheet _probe/icon-review` 检查各尺寸，`-Out _probe/icon-candidate` 不会改写界面图标。
+显式 `-Design rows|deck|panes` 仅用于重现旧候选方案；默认使用新母版。
 
-```
-build/appicon.png             1024px 母版
-build/windows/icon.ico        256/128/64/48/32/24/16,PNG 压缩条目
-frontend/public/appicon-256.png   界面顶栏标志(与 exe 图标同源)
-```
+## Agent 标识
 
-exe 图标经 Wails 的资源文件嵌入:
+`agents.ts` 是展示名与资源路径的唯一数据源，`AgentMark` 统一轮廓、尺寸和留白：
 
-```powershell
-wails3 generate syso `
-  -icon build/windows/icon.ico `
-  -info build/windows/info.json `
-  -manifest build/windows/wails.exe.manifest `
-  -arch amd64 -out cmd/agentdeck-desktop/resource_windows_amd64.syso
-```
+- 新增或替换的 SVG 来自固定版本的 Lobe Icons，文件与许可证随应用分发，运行时无需联网。
+- SVG 使用白底和适量内边距，深色模式下也能辨识黑色品牌符号；本机提取的 PNG 保留品牌底色。
+- 图片使用 `object-fit: contain`，避免裁切标志；故障状态按图片路径记录，切换 Agent 后可以恢复。
+- 容器统一细内边缘与轻微投影；品牌原始图形不重画，兜底底色跟随 Fluent 深浅色主题。
+- 没有确认品牌图标的产品，以及加载失败的资源，使用 Fluent 终端图标兜底并保留可访问名称。
+  Pi Coding Agent 与 Inflection Pi 不是同一产品，不借用同名标志。
 
-`resource_windows_amd64.syso` 是普通构建输入(Go 会自动链接同目录下的 .syso),
-换图标后必须重跑上面这条命令再 `go build`,否则 exe 还是旧图标。
-
-## 4. Agent 图标(取真的)
-
-`tools/gen_agenticons.ps1` 从本机已安装产品的图标资源里提取,缩放到 128px:
+品牌 SVG 的来源、固定提交与文件映射见 `frontend/public/agents/README.md`。
+仍使用的本机提取资源：
 
 | key | 来源 |
 | --- | --- |
-| claude / claude-desktop | Claude Desktop(MSIX)`app/resources/ion-dist/images/claude_app_icon.png` |
-| codex | Codex Desktop(MSIX)`app/resources/default_app/icon.png` |
-| zcode | `C:\Program Files\ZCode\resources\icon_windows.png` |
-| hermes | hermes-agent `apps/desktop/public/hermes.png`(品牌吉祥物) |
-| workbuddy | `C:\Program Files\WorkBuddyAI\...\resources\icon.png` |
-| qoder-cn | `C:\Program Files\Qoder\resources\application-icons\qoder-dark-windows.png` |
+| codex | 本机 `OpenAI.Codex_26.1013.3656.0` 包的 `Square44x44Logo.targetsize-256_altform-unplated.png`，按清单 `#3143FF` 合成底色 |
+| zcode | ZCode 安装目录的 `resources/icon_windows.png` |
+| hermes | hermes-agent 的 `apps/desktop/public/hermes.png` |
+| workbuddy | WorkBuddyAI 安装目录的 `resources/icon.png` |
 
-- Store/MSIX 路径带版本号,脚本用通配符在运行时解析,不写死版本。
-- 每个 key 给一串候选路径,取第一个存在的;产物直接覆盖 `frontend/public/agents/`。
-- 脚本只读源文件,不改动任何已安装产品。
+`tools/gen_agenticons.ps1` 仍可提取本机安装的产品 PNG；它不会覆盖新增的 SVG。
+新增 Agent 时登记 key / label / color / icon；使用透明品牌 SVG 时设置 `glyph: true`。
 
-### 没有官方图标时
+## 界面图标
 
-`agents.ts` 里 `icon: null` → `AgentMark` 渲染识别色方片 + 首字母,并在代码里
-写明原因。**不用相近的图形冒充品牌标志**,也不拿安装器自带的通用图标顶替
-(OpenCode 就是这种情况:本机只有更新器安装包,没有产品图标资源)。
+导航、按钮、收藏和索引状态均使用现有 `@fluentui/react-icons`。
+不以星号、圆点、emoji 或首字母代替图标，不手绘近似品牌标志。
 
-补上真图标的方法:把 PNG 放到 `frontend/public/agents/<key>.png`,在 `agents.ts`
-里把该条目的 `icon` 从 `null` 改成路径即可。图标加载失败时组件会自动退回方片,
-不会出现破图。
-
-## 5. 新增一个 Agent
-
-1. `frontend/src/icons/agents.ts` 的 `AGENT_LIST` 加一条(key / label / color);
-2. 若本机装了对应产品:`tools/gen_agenticons.ps1` 的 `$sources` 里加候选路径,
-   重跑脚本;
-3. 否则留 `icon: null`,写清没有官方资源的原因。
+Kimi 的固定 SVG 使用白色字形，界面为其配上深色底以保证浅色和深色主题下均可辨识；原始 SVG 保持不变。

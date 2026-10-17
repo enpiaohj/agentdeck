@@ -1,70 +1,35 @@
-// AgentMark —— Agent 的统一标识:真实品牌图标铺满圆角方片。
-//
-// 图标体系约定(见 icons/README.md):
-//   圆角半径 = size / 4,与 AgentDeck 自身应用图标的圆角比例一致;
-//   图标本身是方片(品牌自带的底色/留白),我们用 CSS 圆角把它收进同一套
-//   形状语言里,不在图标上再加边框或描边。
-//
-// 兜底:注册表里没有图标、或 PNG 加载失败(资源缺失/路径变了)时,退化为
-// 识别色方片 + 首字母,界面不会出现破图。
 import { useState } from 'react'
+import { CodeBlockRegular } from '@fluentui/react-icons'
+import { tokens } from '@fluentui/react-components'
 import { agentIdentity } from './agents'
 
-type Props = {
-  agent: string
-  size?: number
-  title?: string
-}
+type Props = { agent: string; size?: number; title?: string }
 
+// 统一轮廓和光学留白。故障状态与资源路径绑定，切换 Agent 不沿用旧失败。
 export function AgentMark({ agent, size = 20, title }: Props) {
   const id = agentIdentity(agent)
-  const [broken, setBroken] = useState(false)
-  const radius = Math.max(4, Math.round(size / 4))
+  const [brokenIcon, setBrokenIcon] = useState<string | null>(null)
+  const showImage = id.icon !== null && brokenIcon !== id.icon
   const label = title ?? id.label
-
-  if (id.icon && !broken) {
-    return (
-      <img
-        src={id.icon}
-        alt={label}
-        title={label}
-        width={size}
-        height={size}
-        style={{
-          width: size,
-          height: size,
-          borderRadius: radius,
-          objectFit: 'cover',
-          flexShrink: 0,
-          userSelect: 'none',
-          display: 'block',
-        }}
-        onError={() => setBroken(true)}
-      />
-    )
-  }
-
   return (
     <span
-      title={label}
-      aria-label={label}
+      role="img" aria-label={label} title={label}
       style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: size,
-        height: size,
-        borderRadius: radius,
-        backgroundColor: id.color,
-        color: '#fff',
-        fontSize: Math.round(size * 0.55),
-        fontWeight: 700,
-        lineHeight: 1,
-        flexShrink: 0,
-        userSelect: 'none',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: size, height: size, flexShrink: 0,
+        borderRadius: Math.max(3, Math.round(size * 0.24)),
+        backgroundColor: showImage ? (id.background ?? '#ffffff') : tokens.colorNeutralBackground3,
+        boxShadow: showImage ? `inset 0 0 0 1px ${tokens.colorNeutralStroke3}, 0 1px 2px #1425410a` : undefined,
+        color: id.color, overflow: 'hidden', userSelect: 'none',
       }}
     >
-      {(id.label[0] ?? '?').toUpperCase()}
+      {showImage ? (
+        <img
+          src={id.icon!} alt="" width={size} height={size}
+          style={{ width: size, height: size, objectFit: 'contain', display: 'block', padding: id.glyph ? Math.max(1, Math.round(size * 0.1)) : 0 }}
+          onError={() => setBrokenIcon(id.icon)}
+        />
+      ) : <CodeBlockRegular aria-hidden="true" fontSize={Math.round(size * 0.66)} />}
     </span>
   )
 }

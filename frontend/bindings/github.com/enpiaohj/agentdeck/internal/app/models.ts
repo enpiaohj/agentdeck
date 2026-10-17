@@ -33,6 +33,80 @@ export class AgentView {
     }
 }
 
+export class BackupInfo {
+    "created_at": string;
+    "files": number;
+    "bytes": number;
+    "sessions": number;
+    "versions": number;
+    "preferences": string;
+
+    /** Creates a new BackupInfo instance. */
+    constructor($$source: Partial<BackupInfo> = {}) {
+        if (!("created_at" in $$source)) {
+            this["created_at"] = "";
+        }
+        if (!("files" in $$source)) {
+            this["files"] = 0;
+        }
+        if (!("bytes" in $$source)) {
+            this["bytes"] = 0;
+        }
+        if (!("sessions" in $$source)) {
+            this["sessions"] = 0;
+        }
+        if (!("versions" in $$source)) {
+            this["versions"] = 0;
+        }
+        if (!("preferences" in $$source)) {
+            this["preferences"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new BackupInfo instance from a string or object.
+     */
+    static createFrom($$source: any = {}): BackupInfo {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new BackupInfo($$parsedSource as Partial<BackupInfo>);
+    }
+}
+
+export class ClaudeImportReport {
+    "conversations": number;
+    "account": string;
+    "already_imported": boolean;
+    "skipped_blocks": number;
+
+    /** Creates a new ClaudeImportReport instance. */
+    constructor($$source: Partial<ClaudeImportReport> = {}) {
+        if (!("conversations" in $$source)) {
+            this["conversations"] = 0;
+        }
+        if (!("account" in $$source)) {
+            this["account"] = "";
+        }
+        if (!("already_imported" in $$source)) {
+            this["already_imported"] = false;
+        }
+        if (!("skipped_blocks" in $$source)) {
+            this["skipped_blocks"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ClaudeImportReport instance from a string or object.
+     */
+    static createFrom($$source: any = {}): ClaudeImportReport {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ClaudeImportReport($$parsedSource as Partial<ClaudeImportReport>);
+    }
+}
+
 /**
  * DiagRow 是一个 Agent 的能力诊断行。设计文档 §3/§11.3:能力由运行时
  * 上报,UI 呈现证据、状态及验证时间——Found/Sessions/LastAt 即证据,
@@ -177,6 +251,46 @@ export class IndexStatus {
 }
 
 /**
+ * LibraryStatus reports permanent storage, not the rebuildable FTS cache.
+ */
+export class LibraryStatus {
+    "path": string;
+    "sessions": number;
+    "versions": number;
+    "bytes": number;
+    "error": string;
+
+    /** Creates a new LibraryStatus instance. */
+    constructor($$source: Partial<LibraryStatus> = {}) {
+        if (!("path" in $$source)) {
+            this["path"] = "";
+        }
+        if (!("sessions" in $$source)) {
+            this["sessions"] = 0;
+        }
+        if (!("versions" in $$source)) {
+            this["versions"] = 0;
+        }
+        if (!("bytes" in $$source)) {
+            this["bytes"] = 0;
+        }
+        if (!("error" in $$source)) {
+            this["error"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new LibraryStatus instance from a string or object.
+     */
+    static createFrom($$source: any = {}): LibraryStatus {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new LibraryStatus($$parsedSource as Partial<LibraryStatus>);
+    }
+}
+
+/**
  * Mark 是标注的对外形态(时间用毫秒时间戳,规避 time.Time 绑定差异)。
  */
 export class Mark {
@@ -272,6 +386,35 @@ export class ProjectView {
     static createFrom($$source: any = {}): ProjectView {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new ProjectView($$parsedSource as Partial<ProjectView>);
+    }
+}
+
+export class RestoreReport {
+    "rollback_path": string;
+    "preferences": string;
+    "message": string;
+
+    /** Creates a new RestoreReport instance. */
+    constructor($$source: Partial<RestoreReport> = {}) {
+        if (!("rollback_path" in $$source)) {
+            this["rollback_path"] = "";
+        }
+        if (!("preferences" in $$source)) {
+            this["preferences"] = "";
+        }
+        if (!("message" in $$source)) {
+            this["message"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RestoreReport instance from a string or object.
+     */
+    static createFrom($$source: any = {}): RestoreReport {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RestoreReport($$parsedSource as Partial<RestoreReport>);
     }
 }
 
@@ -412,6 +555,11 @@ export class SearchReply {
  */
 export class SessionView {
     /**
+     * imported cloud-chat account label
+     */
+    "account": string;
+
+    /**
      * agent:id
      */
     "key": string;
@@ -458,6 +606,9 @@ export class SessionView {
 
     /** Creates a new SessionView instance. */
     constructor($$source: Partial<SessionView> = {}) {
+        if (!("account" in $$source)) {
+            this["account"] = "";
+        }
         if (!("key" in $$source)) {
             this["key"] = "";
         }
@@ -529,10 +680,10 @@ export class SessionView {
      * Creates a new SessionView instance from a string or object.
      */
     static createFrom($$source: any = {}): SessionView {
-        const $$createField18_0 = $$createType0;
+        const $$createField19_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tags" in $$parsedSource) {
-            $$parsedSource["tags"] = $$createField18_0($$parsedSource["tags"]);
+            $$parsedSource["tags"] = $$createField19_0($$parsedSource["tags"]);
         }
         return new SessionView($$parsedSource as Partial<SessionView>);
     }
@@ -543,6 +694,7 @@ export class SessionView {
  * tool_use/tool_result/context/image。
  */
 export class TranscriptPart {
+    "omitted_before": number;
     "role": string;
     "kind": string;
     "name"?: string;
@@ -552,6 +704,9 @@ export class TranscriptPart {
 
     /** Creates a new TranscriptPart instance. */
     constructor($$source: Partial<TranscriptPart> = {}) {
+        if (!("omitted_before" in $$source)) {
+            this["omitted_before"] = 0;
+        }
         if (!("role" in $$source)) {
             this["role"] = "";
         }
@@ -578,12 +733,36 @@ export class TranscriptPart {
  * TranscriptView 是会话详情：全文按序。Cut 说明会话层按上限截断了。
  */
 export class TranscriptView {
+    "start": number;
+    "total": number;
+    "has_before": boolean;
+    "has_after": boolean;
+    "retained": boolean;
+    "storage_warning": string;
     "key": string;
     "parts": TranscriptPart[];
     "cut": boolean;
 
     /** Creates a new TranscriptView instance. */
     constructor($$source: Partial<TranscriptView> = {}) {
+        if (!("start" in $$source)) {
+            this["start"] = 0;
+        }
+        if (!("total" in $$source)) {
+            this["total"] = 0;
+        }
+        if (!("has_before" in $$source)) {
+            this["has_before"] = false;
+        }
+        if (!("has_after" in $$source)) {
+            this["has_after"] = false;
+        }
+        if (!("retained" in $$source)) {
+            this["retained"] = false;
+        }
+        if (!("storage_warning" in $$source)) {
+            this["storage_warning"] = "";
+        }
         if (!("key" in $$source)) {
             this["key"] = "";
         }
@@ -601,10 +780,10 @@ export class TranscriptView {
      * Creates a new TranscriptView instance from a string or object.
      */
     static createFrom($$source: any = {}): TranscriptView {
-        const $$createField1_0 = $$createType4;
+        const $$createField7_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("parts" in $$parsedSource) {
-            $$parsedSource["parts"] = $$createField1_0($$parsedSource["parts"]);
+            $$parsedSource["parts"] = $$createField7_0($$parsedSource["parts"]);
         }
         return new TranscriptView($$parsedSource as Partial<TranscriptView>);
     }

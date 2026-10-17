@@ -23,6 +23,9 @@ func (s *ResumeService) Command(key string) (string, error) {
 // sessionResume 构造恢复命令:快照里已有 Resume 用快照值;为空(如
 // ReadOnly 或装配缺口)时按会话现算。
 func sessionResume(s sessions.Session) string {
+	if s.Retained {
+		return ""
+	}
 	if s.Resume != "" {
 		return s.Resume
 	}

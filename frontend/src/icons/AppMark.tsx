@@ -1,7 +1,7 @@
 // AppMark —— AgentDeck 自身的应用标志。
 //
 // 用的是 build/appicon.png 的 256px 渲染(frontend/public/appicon-256.png),
-// 与 exe 图标同源同版:图标由 tools/gen_appicon.ps1 画出并同时落盘到
+// 与 exe 图标同源同版:tools/gen_appicon.ps1 从生成的透明母版统一导出
 // build/appicon.png、build/windows/icon.ico 与这里,不会再出现「界面里的
 // 标志和任务栏图标是两个东西」的情况。
 type Props = { size?: number }

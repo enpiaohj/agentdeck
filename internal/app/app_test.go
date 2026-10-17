@@ -43,7 +43,7 @@ func newTestApp(t *testing.T) (*App, *recorder, *[]string, *[]string) {
 	var clip, ran []string
 	a, err := New(Config{
 		MarksPath: filepath.Join(t.TempDir(), "marks.db"),
-		IndexPath: "", // 内存索引
+		IndexPath: ":memory:", // 空路径表示默认磁盘库；测试显式使用独立内存库。
 		Emit:      rec.emit,
 		Clipboard: func(text string) error { clip = append(clip, text); return nil },
 		Runner: func(name string, args ...string) error {
@@ -366,7 +366,7 @@ func TestBackupRestoreMarks(t *testing.T) {
 func TestCrashMarker(t *testing.T) {
 	dir := t.TempDir()
 	mp := filepath.Join(dir, "marks.db")
-	a1, err := New(Config{MarksPath: mp})
+	a1, err := New(Config{MarksPath: mp, IndexPath: ":memory:"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +377,7 @@ func TestCrashMarker(t *testing.T) {
 	if err := os.WriteFile(crashLockPath(mp), []byte("stale"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	a2, err := New(Config{MarksPath: mp})
+	a2, err := New(Config{MarksPath: mp, IndexPath: ":memory:"})
 	if err != nil {
 		t.Fatal(err)
 	}

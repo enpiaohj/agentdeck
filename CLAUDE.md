@@ -22,7 +22,7 @@
 | 项 | 选型 |
 | --- | --- |
 | 语言 | Go 1.26.8+ |
-| 桌面框架 | Wails v3（待接入） |
+| 桌面框架 | Wails v3（已接入，React 18 + Fluent UI v9） |
 | SQLite | `modernc.org/sqlite`（纯 Go，无 CGO） |
 | JSON | `tidwall/gjson` + `encoding/json` |
 
@@ -135,7 +135,8 @@ MSIX 实测不符，见前四份中的实测报告。
 10. **WebView2 会缓存 `index.html`，且 `assets/assets` 是只增目录**：改前端后
     直接 `go build` 可能打包出「新 exe 跑旧页面」的假象（旧 js 仍在目录里可达）。
     新增/删除前端文件后必须**先清空 `cmd/agentdeck-desktop/assets/assets`
-    再复制 `frontend/dist`**，已固化在 `frontend/scripts/rebuild.ps1`。
+    再复制 `frontend/dist`**，已固化在 `frontend/scripts/sync-assets.ps1`，
+    `Taskfile.yml` 与 `frontend/scripts/rebuild.ps1` 共用此入口。
 
 11. **UI 自检截图必须满足两个条件**，否则看到的是假象：
     - **DPI 感知**（`SetProcessDPIAware()`）：否则 `GetWindowRect` 返回虚拟化

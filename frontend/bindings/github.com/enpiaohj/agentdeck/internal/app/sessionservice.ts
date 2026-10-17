@@ -23,6 +23,10 @@ export function Agents(): $CancellablePromise<$models.AgentView[]> {
     });
 }
 
+export function BackupData(destDir: string, preferences: string): $CancellablePromise<string> {
+    return $Call.ByID(2829633546, destDir, preferences);
+}
+
 /**
  * Diagnostics 逐 Agent 汇报发现与恢复能力(即时验证,非缓存表)。
  */
@@ -50,10 +54,32 @@ export function Get(key: string): $CancellablePromise<$models.SessionView | null
 }
 
 /**
+ * ImportClaudeHistory copies an official chat export into the owned local store.
+ * Account is a user label, not a login credential. No Claude source is changed.
+ */
+export function ImportClaudeHistory(path: string, account: string): $CancellablePromise<$models.ClaudeImportReport> {
+    return $Call.ByID(1797313045, path, account).then(($result: any) => {
+        return $$createType6($result);
+    });
+}
+
+export function InspectBackup(src: string): $CancellablePromise<$models.BackupInfo> {
+    return $Call.ByID(1962923398, src).then(($result: any) => {
+        return $$createType7($result);
+    });
+}
+
+/**
  * LastCrashed 上次进程是否未正常退出(前端启动横幅)。
  */
 export function LastCrashed(): $CancellablePromise<boolean> {
     return $Call.ByID(2942518222);
+}
+
+export function LibraryStatus(): $CancellablePromise<$models.LibraryStatus> {
+    return $Call.ByID(2993559161).then(($result: any) => {
+        return $$createType8($result);
+    });
 }
 
 /**
@@ -61,7 +87,7 @@ export function LastCrashed(): $CancellablePromise<boolean> {
  */
 export function List(f: $models.Filter): $CancellablePromise<$models.SessionView[]> {
     return $Call.ByID(2411886668, f).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType9($result);
     });
 }
 
@@ -70,7 +96,21 @@ export function List(f: $models.Filter): $CancellablePromise<$models.SessionView
  */
 export function Projects(): $CancellablePromise<$models.ProjectView[]> {
     return $Call.ByID(2744492366).then(($result: any) => {
-        return $$createType8($result);
+        return $$createType11($result);
+    });
+}
+
+/**
+ * Refresh rereads sources without touching transcripts or user marks.
+ * Old background message counts cannot overwrite the new generation.
+ */
+export function Refresh(): $CancellablePromise<void> {
+    return $Call.ByID(1678276079);
+}
+
+export function RestoreData(src: string, currentPreferences: string): $CancellablePromise<$models.RestoreReport> {
+    return $Call.ByID(2278399566, src, currentPreferences).then(($result: any) => {
+        return $$createType12($result);
     });
 }
 
@@ -79,7 +119,7 @@ export function Projects(): $CancellablePromise<$models.ProjectView[]> {
  */
 export function ScanProgress(): $CancellablePromise<$models.ScanProgress> {
     return $Call.ByID(2378428406).then(($result: any) => {
-        return $$createType9($result);
+        return $$createType13($result);
     });
 }
 
@@ -88,7 +128,7 @@ export function ScanProgress(): $CancellablePromise<$models.ScanProgress> {
  */
 export function SearchIn(key: string, needle: string): $CancellablePromise<$models.SearchHitView | null> {
     return $Call.ByID(2754701431, key, needle).then(($result: any) => {
-        return $$createType11($result);
+        return $$createType15($result);
     });
 }
 
@@ -97,7 +137,18 @@ export function SearchIn(key: string, needle: string): $CancellablePromise<$mode
  */
 export function Transcript(key: string): $CancellablePromise<$models.TranscriptView | null> {
     return $Call.ByID(4281957278, key).then(($result: any) => {
-        return $$createType13($result);
+        return $$createType17($result);
+    });
+}
+
+/**
+ * TranscriptWindow reads the latest window (-1), the beginning (0), or a
+ * window beginning at a source part index. before reads backwards ending just
+ * before at, so byte-limited pages remain adjacent. Saved history is unchanged.
+ */
+export function TranscriptWindow(key: string, at: number, before: boolean): $CancellablePromise<$models.TranscriptView | null> {
+    return $Call.ByID(3007435842, key, at, before).then(($result: any) => {
+        return $$createType17($result);
     });
 }
 
@@ -108,11 +159,15 @@ const $$createType2 = $models.DiagRow.createFrom;
 const $$createType3 = $Create.Array($$createType2);
 const $$createType4 = $models.SessionView.createFrom;
 const $$createType5 = $Create.Nullable($$createType4);
-const $$createType6 = $Create.Array($$createType4);
-const $$createType7 = $models.ProjectView.createFrom;
-const $$createType8 = $Create.Array($$createType7);
-const $$createType9 = $models.ScanProgress.createFrom;
-const $$createType10 = $models.SearchHitView.createFrom;
-const $$createType11 = $Create.Nullable($$createType10);
-const $$createType12 = $models.TranscriptView.createFrom;
-const $$createType13 = $Create.Nullable($$createType12);
+const $$createType6 = $models.ClaudeImportReport.createFrom;
+const $$createType7 = $models.BackupInfo.createFrom;
+const $$createType8 = $models.LibraryStatus.createFrom;
+const $$createType9 = $Create.Array($$createType4);
+const $$createType10 = $models.ProjectView.createFrom;
+const $$createType11 = $Create.Array($$createType10);
+const $$createType12 = $models.RestoreReport.createFrom;
+const $$createType13 = $models.ScanProgress.createFrom;
+const $$createType14 = $models.SearchHitView.createFrom;
+const $$createType15 = $Create.Nullable($$createType14);
+const $$createType16 = $models.TranscriptView.createFrom;
+const $$createType17 = $Create.Nullable($$createType16);
