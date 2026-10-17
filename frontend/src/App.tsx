@@ -33,6 +33,9 @@ import { SettingsView } from './components/SettingsView'
 import { usePreferences } from './hooks/usePreferences'
 import { WorkspaceStatus } from './components/WorkspaceStatus'
 import { ClaudeHistoryImport } from './components/ClaudeHistoryImport'
+import { DeleteSessionsDialog, DeletedSessionsNotice } from './components/DeleteSessionsDialog'
+import { useSessionDeletion } from './hooks/useSessionDeletion'
+import { deletedSessionKeys } from './sessionDeletion'
 import type { SessionView, ClaudeImportReport } from '../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as searchService from '../bindings/github.com/enpiaohj/agentdeck/internal/app/searchservice'
 import * as sessionService from '../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
@@ -208,6 +211,23 @@ export function App() {
   const selectedRef = useRef<string | null>(null)
   selectedRef.current = selected?.key ?? null
 
+  const onSessionsDeleted = useCallback((keys: string[]) => {
+    if (!keys.length) return
+    // Invalidate in-flight search jumps so a removed detail cannot reappear.
+    selectionRequest.current++
+    if (selectedRef.current && keys.includes(selectedRef.current)) {
+      selectedRef.current = null
+      setSelected(null); setJumpPart(-1)
+    }
+    setListVersion(value => value + 1)
+    setSourceVersion(value => value + 1)
+  }, [])
+  const onDeletionRestored = useCallback(() => {
+    setListVersion(value => value + 1)
+    setSourceVersion(value => value + 1)
+  }, [])
+  const deletion = useSessionDeletion(onSessionsDeleted, onDeletionRestored)
+
   // 选中会话的快照刷新。消息数由后台补齐(事件 sessions:messages)、收藏/
   // 标签/备注由信息面板改动,两者都不走列表重载路径;不显式重取的话,
   // 信息面板与消息流头部的数字会一直停在打开那一刻的旧值(消息数恒为 0)。
@@ -226,8 +246,9 @@ export function App() {
       const key = Array.isArray(event.data) ? event.data[0] : event.data
       if (!key) setSourceVersion(value => value + 1)
     })
-    return () => { off(); offChanged() }
-  }, [refreshSelected])
+    const offDeleted = Events.On('sessions:deleted', event => onSessionsDeleted(deletedSessionKeys(event.data)))
+    return () => { off(); offChanged(); offDeleted() }
+  }, [refreshSelected, onSessionsDeleted])
 
   // 无边框窗口:跟踪最大化状态以切换按钮图标
   useEffect(() => {
@@ -384,6 +405,7 @@ export function App() {
           <span>{notice}</span><button className={styles.crashedClose} aria-label="关闭导入提示" onClick={() => setNotice('')}><DismissRegular /></button>
         </div> : null}
         <main className={styles.main} onKeyDown={event => {
+          if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
           if (event.key === 'Escape' && !event.nativeEvent.isComposing && event.keyCode !== 229 && searchQuery) { setSearchQuery(''); searchRef.current?.focus() }
         }}>
           {view !== 'diagnostics' ? <Sidebar
@@ -405,6 +427,7 @@ export function App() {
                 selectedKey={selected?.key ?? null}
                 onSelect={onSelect}
                 onOpenDetails={session => { onSelect(session); setInfoOpen(true) }}
+                onDeleteSessions={deletion.open}
                 listVersion={listVersion}
               />}
               <MessagePane session={selected} sourceVersion={sourceVersion} jumpPart={jumpPart} jumpToken={jumpToken} infoOpen={infoOpen} onToggleInfo={() => setInfoOpen(value => !value)} onOpenInfo={() => setInfoOpen(true)} />
@@ -413,6 +436,7 @@ export function App() {
                   session={selected}
                   onChanged={() => setListVersion((v) => v + 1)}
                   onClose={() => setInfoOpen(false)}
+                  onDeleteSessions={deletion.open}
                 />
               ) : (
                 <button
@@ -426,7 +450,9 @@ export function App() {
             </>
           )}
         </main>
+        <DeletedSessionsNotice deletion={deletion} />
         <WorkspaceStatus session={view === 'sessions' ? selected : null} />
+        <DeleteSessionsDialog deletion={deletion} />
       </div>
     </FluentProvider>
   )

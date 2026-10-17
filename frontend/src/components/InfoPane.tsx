@@ -19,6 +19,7 @@ import {
   StarFilled,
   StarRegular,
   ArchiveRegular,
+  DeleteRegular,
 } from '@fluentui/react-icons'
 import { useEffect, useState } from 'react'
 import { Dialogs } from '@wailsio/runtime'
@@ -27,6 +28,7 @@ import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/in
 import * as markService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/markservice'
 import { agentMeta, fmtTime, relTime } from '../util'
 import { AgentMark } from '../icons/AgentMark'
+import { deletionUnavailableReason } from '../sessionDeletion'
 
 const useStyles = makeStyles({
   wrap: {
@@ -105,9 +107,10 @@ type Props = {
   session: SessionView | null
   onChanged: () => void
   onClose: () => void
+  onDeleteSessions: (items: SessionView[]) => void
 }
 
-export function InfoPane({ session, onChanged, onClose }: Props) {
+export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Props) {
   const styles = useStyles()
   const [tagDraft, setTagDraft] = useState('')
   const [adding, setAdding] = useState(false)
@@ -134,6 +137,7 @@ export function InfoPane({ session, onChanged, onClose }: Props) {
   }
 
   const m = agentMeta(session.agent)
+  const deleteReason = deletionUnavailableReason([session])
 
   const copy = (text: string, tag: string) => {
     navigator.clipboard?.writeText(text).then(() => {
@@ -287,7 +291,9 @@ export function InfoPane({ session, onChanged, onClose }: Props) {
             <Button size="small" icon={<ArchiveRegular />} style={{ width: '100%' }} onClick={toggleArchive}>
               {session.archived ? '取消归档' : '归档'}
             </Button>
+            <Button size="small" icon={<DeleteRegular />} style={{ width: '100%' }} disabled={!!deleteReason} title={deleteReason || '删除原始记录及全部保留版本'} onClick={() => onDeleteSessions([session])}>删除会话…</Button>
           </div>
+          {deleteReason ? <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{deleteReason}</Text> : null}
         </div>
       </div>
 

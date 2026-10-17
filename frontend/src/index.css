@@ -157,6 +157,26 @@ button:focus-visible, select:focus-visible, [role='button']:focus-visible, summa
 .ad-settings-save { display: flex; align-items: center; gap: 6px; color: var(--ad-muted); font-size: 12px; }
 .ad-settings-save svg { font-size: 16px; }
 .ad-settings-save-error { color: var(--colorStatusDangerForeground1); max-width: 340px; }
+.ad-delete-dialog { max-width: 620px; }
+.ad-delete-content { max-height: min(65vh, 640px); overflow-y: auto; }
+.ad-delete-dialog p { font-size: 13px; line-height: 1.7; }
+.ad-delete-hint { font-size: 11px !important; color: var(--colorNeutralForeground3); line-height: 1.6; }
+.ad-delete-loading { display: flex; align-items: center; gap: 10px; padding: 18px 0; font-size: 13px; }
+.ad-delete-summary { margin: 14px 0; padding: 12px; border: 1px solid var(--colorNeutralStroke2); border-radius: 6px; background: var(--colorNeutralBackground2); }
+.ad-delete-scope { border-top: 1px solid var(--colorNeutralStroke2); padding-top: 12px; margin-bottom: 14px; font-size: 12px; }
+.ad-delete-scope summary { cursor: pointer; font-weight: 600; }
+.ad-delete-scope ul { margin: 10px 0; padding-left: 20px; max-height: 120px; overflow-y: auto; line-height: 1.8; overflow-wrap: anywhere; }
+.ad-delete-paths { color: var(--colorNeutralForeground3); font-family: Consolas, monospace; font-size: 11px; }
+.ad-delete-confirm { background-color: #b3271b !important; color: white !important; }
+.ad-delete-confirm:hover { background-color: #982014 !important; }
+.ad-delete-confirm:disabled { background-color: var(--colorNeutralBackgroundDisabled) !important; color: var(--colorNeutralForegroundDisabled) !important; }
+.ad-delete-error { color: var(--colorStatusDangerForeground1, #b3271b); overflow-wrap: anywhere; white-space: pre-wrap; font-size: 12px; margin-top: 10px; }
+.ad-deletion-notice { display: flex; align-items: center; gap: 12px; flex-shrink: 0; padding: 10px 16px; border-top: 1px solid var(--ad-line); font-size: 12px; }
+.ad-deletion-notice > div { flex: 1; min-width: 0; }
+.ad-deletion-notice > button { flex-shrink: 0; }
+.ad-delete-backup { overflow-wrap: anywhere; margin-top: 4px; }
+.ad-context-delete-reason { max-width: 250px; padding: 4px 12px 8px; font-size: 11px; color: var(--colorNeutralForeground3); line-height: 1.6; }
+.ad-delete-disabled-reason { padding: 0 14px 8px; color: var(--ad-muted); line-height: 1.5; }
 .ad-settings-toolbar { display: flex; align-items: center; gap: 16px; padding-bottom: 28px; margin-bottom: 28px; border-bottom: 1px solid var(--ad-line); }
 .ad-settings-toolbar > span { width: 100%; max-width: 420px; min-height: 36px; background: var(--ad-surface); }
 .ad-settings-toolbar > button { margin-left: auto; white-space: nowrap; color: var(--ad-muted); }

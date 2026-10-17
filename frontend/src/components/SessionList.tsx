@@ -23,6 +23,7 @@ import {
   SelectAllOnRegular,
   ChevronRightRegular,
   ChevronDownRegular,
+  DeleteRegular,
 } from '@fluentui/react-icons'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Events, Dialogs } from '@wailsio/runtime'
@@ -37,6 +38,7 @@ import { presentSessions, sessionDateGroup, sessionMonth, type SessionOrder } fr
 import { selectSession, selectContextSession, pruneSelection, type SessionSelection, type SelectionModifiers } from '../sessionSelection'
 import { SessionContextMenu, type SessionAction } from './SessionContextMenu'
 import { groupSessionRows } from '../sessionHierarchy'
+import { deletionUnavailableReason, explicitDeletionTargets } from '../sessionDeletion'
 
 const useStyles = makeStyles({
   wrap: {
@@ -148,10 +150,11 @@ type Props = {
   selectedKey: string | null
   onSelect: (s: SessionView) => void
   onOpenDetails: (s: SessionView) => void
+  onDeleteSessions: (items: SessionView[]) => void
   listVersion?: number
 }
 
-export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, listVersion }: Props) {
+export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDeleteSessions, listVersion }: Props) {
   const styles = useStyles()
   const { rows, loading, error, reload } = useRows(filter, listVersion)
   const [selection, setSelection] = useState<SessionSelection>(() => ({ keys: new Set(selectedKey ? [selectedKey] : []), anchor: selectedKey, focus: selectedKey }))
@@ -179,6 +182,8 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, list
   const visibleIndexes = useMemo(() => new Map(visibleKeys.map((key, index) => [key, index])), [visibleKeys])
   const visibleSelection = useMemo(() => pruneSelection(selection, visibleKeys), [selection, visibleKeys])
   const checked = visibleSelection.keys
+  const deletionTargets = explicitDeletionTargets(visibleRows, checked)
+  const deleteReason = deletionUnavailableReason(deletionTargets)
   const scope = JSON.stringify([filter.agent, filter.project, filter.favorites, filter.archived, query, month, account])
   const previousScope = useRef(scope)
   const contextItems = context?.scope === scope ? context.keys.map(key => visibleRows[visibleIndexes.get(key) ?? -1]).filter((row): row is SessionView => !!row) : []
@@ -290,6 +295,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, list
     closeContext()
     if (action === 'open') { onSelect(item); return }
     if (action === 'details') { onOpenDetails(item); return }
+    if (action === 'delete') { onDeleteSessions(items); return }
     if (action === 'favorite' || action === 'archive') {
       const value = !items.every(row => action === 'favorite' ? row.favorite : row.archived)
       await bulk(key => action === 'favorite' ? markService.SetFavorite(key, value) : markService.SetArchived(key, value), new Set(items.map(row => row.key)))()
@@ -339,6 +345,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, list
 
   return (
     <div className={styles.wrap} onKeyDown={event => {
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
       if (event.nativeEvent.isComposing || event.keyCode === 229 || (event.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"], [role="menu"]')) return
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') { event.preventDefault(); selectAll() }
       if (event.key === 'Escape' && !busy && checked.size) { event.preventDefault(); event.stopPropagation(); clearSelection() }
@@ -500,9 +507,11 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, list
             onClick={bulk((k) => markService.SetFavorite(k, true))}>收藏</Button>
           <Button size="small" icon={filter.archived ? <ArchiveArrowBackRegular /> : <ArchiveRegular />} disabled={busy}
             onClick={bulk((k) => markService.SetArchived(k, !filter.archived))}>{filter.archived ? '取消归档' : '归档'}</Button>
+          <Button size="small" icon={<DeleteRegular />} disabled={busy || !!deleteReason} title={deleteReason || '删除原始记录及全部保留版本'} onClick={() => onDeleteSessions(deletionTargets)}>删除会话…</Button>
           <Button size="small" disabled={busy} aria-label="清空选择" title="清空选择 (Esc)" onClick={clearSelection}>清空</Button>
         </div>
       ) : null}
+      {checked.size > 0 && deleteReason ? <Text size={200} className="ad-delete-disabled-reason">{deleteReason}</Text> : null}
     </div>
   )
 }
