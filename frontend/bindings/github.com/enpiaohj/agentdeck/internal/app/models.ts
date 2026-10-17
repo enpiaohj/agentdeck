@@ -555,6 +555,21 @@ export class SearchReply {
  */
 export class SessionView {
     /**
+     * confirmed main | subagent | unknown
+     */
+    "role": string;
+
+    /**
+     * original parent, when known
+     */
+    "parent_key": string;
+
+    /**
+     * present main in the current list
+     */
+    "group_key": string;
+
+    /**
      * imported cloud-chat account label
      */
     "account": string;
@@ -606,6 +621,15 @@ export class SessionView {
 
     /** Creates a new SessionView instance. */
     constructor($$source: Partial<SessionView> = {}) {
+        if (!("role" in $$source)) {
+            this["role"] = "";
+        }
+        if (!("parent_key" in $$source)) {
+            this["parent_key"] = "";
+        }
+        if (!("group_key" in $$source)) {
+            this["group_key"] = "";
+        }
         if (!("account" in $$source)) {
             this["account"] = "";
         }
@@ -680,10 +704,10 @@ export class SessionView {
      * Creates a new SessionView instance from a string or object.
      */
     static createFrom($$source: any = {}): SessionView {
-        const $$createField19_0 = $$createType0;
+        const $$createField22_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tags" in $$parsedSource) {
-            $$parsedSource["tags"] = $$createField19_0($$parsedSource["tags"]);
+            $$parsedSource["tags"] = $$createField22_0($$parsedSource["tags"]);
         }
         return new SessionView($$parsedSource as Partial<SessionView>);
     }

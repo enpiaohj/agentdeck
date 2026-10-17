@@ -94,6 +94,7 @@ func (s *SessionService) List(f Filter) []SessionView {
 		}
 		out = append(out, view(sess, key, m, msgs, msgReady))
 	}
+	applySessionFamilies(out, sessionFamilyRoots(list))
 	return out
 }
 
@@ -159,8 +160,12 @@ func (s *SessionService) SearchIn(key, needle string) (*SearchHitView, error) {
 // Agents 侧栏 agent 清单（计数含归档，前端按需展示）。
 func (s *SessionService) Agents() []AgentView {
 	list, _, _ := s.a.snapshot()
+	roots := sessionFamilyRoots(list)
 	count := map[string]int{}
 	for _, sess := range list {
+		if roots[sess.Agent+":"+sess.ID] != "" {
+			continue
+		}
 		count[sess.Agent]++
 	}
 	out := make([]AgentView, 0, len(count))
@@ -183,14 +188,24 @@ func (s *SessionService) Projects() []ProjectView {
 	out := make([]ProjectView, 0, len(ps))
 	for _, p := range ps {
 		fav := 0
+		members := make([]sessions.Session, 0, len(p.Keys))
 		for _, k := range p.Keys {
+			members = append(members, byKey[k])
+		}
+		roots := sessionFamilyRoots(members)
+		count := 0
+		for _, k := range p.Keys {
+			if roots[k] != "" {
+				continue
+			}
+			count++
 			if ms[sessionMarkKey(byKey[k], k, ms)].Favorite {
 				fav++
 			}
 		}
 		out = append(out, ProjectView{
 			Path: p.Path, Name: p.Name, Drive: p.Drive,
-			Count: len(p.Keys), Favorites: fav, Last: lastString(p.Last),
+			Count: count, Favorites: fav, Last: lastString(p.Last),
 		})
 	}
 	return out
@@ -248,6 +263,13 @@ func view(s sessions.Session, key string, m marks.Mark, msgs map[string]int, msg
 		source = "wsl"
 	}
 	return SessionView{
+		Role: s.Role,
+		ParentKey: func() string {
+			if s.Agent == "codex" && s.Role == "subagent" && s.ParentSession != "" {
+				return "codex:" + s.ParentSession
+			}
+			return ""
+		}(),
 		Key:        key,
 		Agent:      s.Agent,
 		Account:    s.Account,

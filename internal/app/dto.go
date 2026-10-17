@@ -7,8 +7,11 @@ package app
 // SessionView 是列表与会话卡片的一行。Resume 非空 = 可原生命令恢复；
 // 空 = 仅可查看历史。Source 区分本机/WSL/网关来源。
 type SessionView struct {
-	Account    string   `json:"account"` // imported cloud-chat account label
-	Key        string   `json:"key"`     // agent:id
+	Role       string   `json:"role"`       // confirmed main | subagent | unknown
+	ParentKey  string   `json:"parent_key"` // original parent, when known
+	GroupKey   string   `json:"group_key"`  // present main in the current list
+	Account    string   `json:"account"`    // imported cloud-chat account label
+	Key        string   `json:"key"`        // agent:id
 	Agent      string   `json:"agent"`
 	ID         string   `json:"id"`
 	Cwd        string   `json:"cwd"`

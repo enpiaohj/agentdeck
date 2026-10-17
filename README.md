@@ -15,8 +15,8 @@ AgentDeck 解决「当时做了什么、怎么接着做」。
 
 ## 当前状态
 
-**已发布 v0.2.0 — Windows 桌面工作台**（Wails v3 + React 18 + Fluent UI v9）。
-版本变化见 [CHANGELOG.md](CHANGELOG.md)，本地发布快照位于 `releases/v0.2.0/`。
+**已发布 v0.2.1 — Windows 桌面工作台**（Wails v3 + React 18 + Fluent UI v9）。
+版本变化见 [CHANGELOG.md](CHANGELOG.md)，本地发布快照位于 `releases/v0.2.1/`。
 
 已实现：
 
@@ -34,7 +34,7 @@ AgentDeck 解决「当时做了什么、怎么接着做」。
 - 会话列表采用桌面选择：单击单选、Ctrl 点击切换、Shift 连选、Ctrl+Shift 追加连选；Ctrl+A 或表头按钮全选当前筛选结果，Esc 清空选择，支持方向键与 Home / End
 - 会话右键菜单支持打开、继续会话、收藏、归档、管理标签与备注、复制及 Markdown 导出；多选时支持批量整理与导出，Shift+F10 可用键盘打开菜单
 - 复制恢复命令或在终端中继续会话
-- 子代理归属（`role` / `parent_session` / `root_session`）
+- Codex 子 Agent 按已确认的主会话归组，默认折叠，可展开查看；会话计数不重复计入子会话，筛选与搜索仍可访问独立子会话
 - Token 与成本统计（含逐模型明细）
 - 完整数据 ZIP 备份与合并恢复，覆盖已保存会话及全部版本、标注、导入历史与界面偏好；恢复前自动保存当前数据
 - 默认持久化成功读取的会话，内容变化保留版本、相同正文去重，不自动清理；上游原记录删除后仍可查看、检索及导出

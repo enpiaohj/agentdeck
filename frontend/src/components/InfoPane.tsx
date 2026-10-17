@@ -199,6 +199,7 @@ export function InfoPane({ session, onChanged, onClose }: Props) {
         </div>
 
         <div className={styles.kv}>
+          {session.role === 'subagent' ? <><span className={styles.k}>会话类型</span><span className={styles.v}>子 Agent 会话</span></> : null}
           {session.account ? <><span className={styles.k}>账号</span><span className={styles.v}>{session.account}</span></> : null}
           {session.source === 'import' ? <><span className={styles.k}>记录来源</span><span className={styles.v}>官方导出 · 本地副本</span></> : null}
           {session.source === 'retained' ? <><span className={styles.k}>记录来源</span><span className={styles.v}>AgentDeck 永久保留</span></> : null}

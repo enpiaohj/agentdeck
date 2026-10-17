@@ -21,6 +21,8 @@ import {
   DismissRegular,
   TagRegular,
   SelectAllOnRegular,
+  ChevronRightRegular,
+  ChevronDownRegular,
 } from '@fluentui/react-icons'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Events, Dialogs } from '@wailsio/runtime'
@@ -34,6 +36,7 @@ import type { SidebarFilter } from './Sidebar'
 import { presentSessions, sessionDateGroup, sessionMonth, type SessionOrder } from '../sessionPresentation'
 import { selectSession, selectContextSession, pruneSelection, type SessionSelection, type SelectionModifiers } from '../sessionSelection'
 import { SessionContextMenu, type SessionAction } from './SessionContextMenu'
+import { groupSessionRows } from '../sessionHierarchy'
 
 const useStyles = makeStyles({
   wrap: {
@@ -102,6 +105,9 @@ const useStyles = makeStyles({
     ':hover': { backgroundColor: tokens.colorBrandBackground2Hover },
   },
   rowSelected: { backgroundColor: tokens.colorBrandBackground2, ...shorthands.borderColor(tokens.colorBrandBackground2), ':hover': { backgroundColor: tokens.colorBrandBackground2Hover } },
+  childRow: { marginLeft: '24px', borderLeft: `1px solid ${tokens.colorNeutralStroke2}` },
+  familyToggle: { display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 4px', border: 'none', borderRadius: '4px', backgroundColor: 'transparent', color: tokens.colorNeutralForeground3, fontSize: '11px', cursor: 'pointer', flexShrink: 0, ':hover': { backgroundColor: tokens.colorNeutralBackground3, color: tokens.colorNeutralForeground1 } },
+  childLabel: { color: tokens.colorNeutralForeground3, fontSize: '10px', flexShrink: 0 },
   rowBody: { display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, minWidth: 0 },
   titleLine: { display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 },
   title: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '13px', fontWeight: 600 },
@@ -162,7 +168,13 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, list
   const accounts = useMemo(() => [...new Set(rows.map(row => row.account).filter(Boolean))].sort(), [rows])
   const months = useMemo(() => [...new Set(rows.map(row => sessionMonth(row.last)).filter(Boolean))].sort().reverse(), [rows])
   const [order, setOrder] = useState<SessionOrder>('latest')
-  const visibleRows = useMemo(() => presentSessions(rows, query, order, account).filter(row => !month || sessionMonth(row.last) === month), [rows, query, order, month, account])
+  const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(() => new Set())
+  const allFamilies = useMemo(() => groupSessionRows(rows, new Set()), [rows])
+  const filteredRows = useMemo(() => presentSessions(rows, query, order, account).filter(row => !month || sessionMonth(row.last) === month), [rows, query, order, month, account])
+  const hierarchy = useMemo(() => groupSessionRows(filteredRows, expandedFamilies), [filteredRows, expandedFamilies])
+  const visibleRows = hierarchy.visible
+  const selectedChild = filteredRows.find(row => row.key === selectedKey && hierarchy.childKeys.has(row.key))
+  const pendingReveal = !!selectedChild?.group_key && !expandedFamilies.has(selectedChild.group_key)
   const visibleKeys = useMemo(() => visibleRows.map(row => row.key), [visibleRows])
   const visibleIndexes = useMemo(() => new Map(visibleKeys.map((key, index) => [key, index])), [visibleKeys])
   const visibleSelection = useMemo(() => pruneSelection(selection, visibleKeys), [selection, visibleKeys])
@@ -181,11 +193,34 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, list
       setActionMessage('')
     }
   }, [scope])
-  useEffect(() => { if (!loading) setSelection(previous => pruneSelection(previous, visibleKeys)) }, [visibleKeys, loading])
+  // A search jump can mount the list with a child already selected. Wait for
+  // its family's expansion before pruning, or the selection is lost on load.
+  useEffect(() => { if (!loading && !pendingReveal) setSelection(previous => pruneSelection(previous, visibleKeys)) }, [visibleKeys, loading, pendingReveal])
   useEffect(() => { setMonth(''); setAccount('') }, [filter])
   useEffect(() => {
     if (selectedKey) setSelection(previous => previous.focus === selectedKey ? previous : { keys: new Set([selectedKey]), anchor: selectedKey, focus: selectedKey })
   }, [selectedKey])
+  useEffect(() => {
+    const selected = rows.find(row => row.key === selectedKey)
+    if (!selected?.group_key || selected.role !== 'subagent') return
+    setExpandedFamilies(previous => previous.has(selected.group_key) ? previous : new Set([...previous, selected.group_key]))
+  }, [selectedKey, rows])
+
+  const toggleFamily = (s: SessionView) => {
+    if (busy) return
+    const collapsing = expandedFamilies.has(s.key)
+    if (collapsing && hierarchy.children.get(s.key)?.some(child => child.key === selectedKey)) {
+      onSelect(s)
+      setSelection({ keys: new Set([s.key]), anchor: s.key, focus: s.key })
+    }
+    setExpandedFamilies(previous => {
+      const next = new Set(previous)
+      if (collapsing) next.delete(s.key)
+      else next.add(s.key)
+      return next
+    })
+    setContext(null)
+  }
 
   const choose = (s: SessionView, modifiers: SelectionModifiers = {}) => {
     if (busy) return
@@ -288,15 +323,16 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, list
 
   const groups = useMemo(() => {
     const g = new Map<string, SessionView[]>()
-    for (const s of visibleRows) {
+    for (const s of hierarchy.roots) {
       const d = sessionDateGroup(s.last)
       if (!g.has(d)) g.set(d, [])
       g.get(d)!.push(s)
+      if (expandedFamilies.has(s.key)) g.get(d)!.push(...(hierarchy.children.get(s.key) ?? []))
     }
     const keys = [...g.keys()].filter(key => key !== '时间未知')
     if (g.has('时间未知')) keys.push('时间未知')
     return keys.map(key => [key, g.get(key)!] as const)
-  }, [visibleRows, order])
+  }, [hierarchy, expandedFamilies])
 
   const projectName = filter.project?.split(/[\\/]/).filter(Boolean).pop()
   const listTitle = filter.archived ? '归档会话' : filter.favorites ? '收藏会话' : projectName ? projectName : filter.agent ? agentMeta(filter.agent).label : '全部会话'
@@ -309,7 +345,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, list
     }}>
       <div className={styles.head}>
         <span className={styles.headTitle} title={filter.project || listTitle}>{listTitle}</span>
-        <span className={styles.count} aria-live="polite">{query || month || account ? `${visibleRows.length} / ${rows.length}` : rows.length} 个</span>
+        <span className={styles.count} aria-live="polite" title="子会话收在主会话下，不重复计入会话数量">{query || month || account ? `${hierarchy.roots.length} / ${allFamilies.roots.length}` : allFamilies.roots.length} 个会话{hierarchy.childKeys.size ? ` · ${hierarchy.childKeys.size} 个子会话` : ''}</span>
         <Tooltip content="全选当前列表 (Ctrl+A)" relationship="label"><Button size="small" appearance="subtle" icon={<SelectAllOnRegular />} aria-label="全选会话" disabled={busy || !visibleRows.length} onClick={selectAll} /></Tooltip>
         <Tooltip content={order === 'latest' ? '切换为最早活动优先' : '切换为最近活动优先'} relationship="label">
         <button className={styles.headBtn} aria-label={order === 'latest' ? '最早活动优先' : '最近活动优先'} onClick={() => setOrder(order === 'latest' ? 'oldest' : 'latest')}>
@@ -317,7 +353,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, list
         </button>
         </Tooltip>
       </div>
-      <span id={helpId} className="ad-sr-only">单击选中；Ctrl 点击切换；Shift 连选；Ctrl+Shift 追加连选；Ctrl+A 全选当前列表；Esc 清空选择。方向键移动，Home / End 到首尾。</span>
+      <span id={helpId} className="ad-sr-only">单击选中；Ctrl 点击切换；Shift 连选；Ctrl+Shift 追加连选；Ctrl+A 全选当前可见列表；Esc 清空选择。上下方向键移动，Home / End 到首尾；左右方向键展开或收起子会话。</span>
       <div className={styles.tools}>
         <Input size="small" appearance="filled-lighter" aria-label="筛选当前会话列表" placeholder="筛选标题、项目、标签、账号…" value={query} onChange={(_, data) => setQuery(data.value)} contentBefore={<SearchRegular />} contentAfter={query || month || account ? <button className={styles.headBtn} aria-label="清除列表筛选" title="清除关键词、月份和账号筛选" onClick={() => { setQuery(''); setMonth(''); setAccount('') }}><DismissRegular /></button> : undefined} />
         <div className="ad-list-filters"><div className="ad-date-filter">
@@ -370,19 +406,23 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, list
           {groups.map(([day, list]) => (
             <div key={day} role="rowgroup" aria-label={day}>
               <div className={styles.groupTitle} aria-hidden="true">
-                {day}<span className={styles.groupCount}>({list.length})</span>
+                {day}<span className={styles.groupCount}>({list.filter(row => !hierarchy.childKeys.has(row.key)).length})</span>
               </div>
               {list.map((s) => {
                 const selected = checked.has(s.key)
                 const active = selected && selectedKey === s.key
                 const m = agentMeta(s.agent)
                 const contextLabel = [s.account, s.project].filter(Boolean).join(' · ')
-                const detail = [m.label, contextLabel, s.tags.length ? `标签：${s.tags.join('、')}` : ''].filter(Boolean).join(' · ')
+                const detail = [m.label, s.role === 'subagent' ? '子会话' : '', contextLabel, s.tags.length ? `标签：${s.tags.join('、')}` : ''].filter(Boolean).join(' · ')
+                const childCount = hierarchy.children.get(s.key)?.length ?? 0
+                const nested = hierarchy.childKeys.has(s.key)
                 return (
                   <div
                     key={s.key}
                     ref={element => { if (element) rowRefs.current.set(s.key, element); else rowRefs.current.delete(s.key) }}
-                    className={mergeClasses('sessionRow', styles.row, selected && styles.rowSelected, active && styles.rowActive)}
+                    className={mergeClasses('sessionRow', styles.row, nested && styles.childRow, selected && styles.rowSelected, active && styles.rowActive)}
+                    data-session-key={s.key}
+                    data-child-session={nested || undefined}
                     onMouseDown={event => { if (event.shiftKey || event.ctrlKey || event.metaKey) event.preventDefault() }}
                     onClick={event => { if ((event.target as HTMLElement).closest('button')) return; choose(s, { toggle: event.ctrlKey || event.metaKey, range: event.shiftKey }); event.currentTarget.focus() }}
                     onContextMenu={event => { event.preventDefault(); event.stopPropagation(); openContext(s, event.clientX, event.clientY) }}
@@ -398,6 +438,12 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, list
                       const modifiers = { toggle: e.ctrlKey || e.metaKey, range: e.shiftKey }
                       if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); e.stopPropagation(); const box=e.currentTarget.getBoundingClientRect(); openContext(s, box.left+20, box.top+20); return }
                       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(s, modifiers); return }
+                      if (e.key === 'ArrowRight' && childCount && !expandedFamilies.has(s.key)) { e.preventDefault(); toggleFamily(s); return }
+                      if (e.key === 'ArrowLeft') {
+                        if (childCount && expandedFamilies.has(s.key)) { e.preventDefault(); toggleFamily(s); return }
+                        const parent = nested ? filteredRows.find(row => row.key === s.group_key) : undefined
+                        if (parent) { e.preventDefault(); choose(parent); rowRefs.current.get(parent.key)?.focus(); return }
+                      }
                       if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
                       e.preventDefault()
                       const index = visibleIndexes.get(s.key) ?? 0
@@ -426,8 +472,12 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, list
                       </div>
                       <div className={styles.meta} title={detail}>
                         <AgentMark agent={s.agent} size={14} />
+                        {s.role === 'subagent' ? <span className={styles.childLabel}>子会话</span> : null}
                         {!filter.agent ? <><span className={styles.agentName}>{m.label}</span><span aria-hidden="true">·</span></> : null}
                         <span className={styles.context}>{contextLabel || (filter.agent ? m.label : '无项目')}</span>
+                        {childCount ? <button type="button" className={styles.familyToggle} aria-label={`${expandedFamilies.has(s.key) ? '收起' : '展开'} ${childCount} 个子会话`} aria-expanded={expandedFamilies.has(s.key)} disabled={busy} onClick={event => { event.stopPropagation(); toggleFamily(s) }}>
+                          {expandedFamilies.has(s.key) ? <ChevronDownRegular fontSize={12} /> : <ChevronRightRegular fontSize={12} />}{childCount} 个子会话
+                        </button> : null}
                         {s.tags.length ? <span className={styles.tagCount} aria-label={`${s.tags.length} 个标签`}><TagRegular fontSize={11} />{s.tags.length}</span> : null}
                         {filter.archived ? <Button size="small" appearance="subtle" icon={<ArchiveArrowBackRegular />} aria-label="取消归档" title="取消归档" tabIndex={(visibleSelection.focus ?? visibleKeys[0]) === s.key ? 0 : -1} onClick={unarchive(s)} /> : null}
                       </div>
