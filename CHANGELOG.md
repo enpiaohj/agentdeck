@@ -13,6 +13,17 @@ AgentDeck 的版本索引。
   应上传 GitHub Releases；本机尚未配置远端仓库，所以目前没有 GitHub Release，
   分发包就是快照内的 exe。
 
+## v0.2.2 — 2026-10-18
+
+修复 Codex 会话完全无法删除的问题，并修正删除预览中「将删除文件」的统计口径。
+
+- 修复 Codex 状态库自带的 5 个维护 trigger 被一律拒绝，导致所有 Codex 会话在预览阶段就报「含未知 trigger，拒绝删除」。改为按 DDL 识别：仅当触发事件是 INSERT / UPDATE、不响应 DELETE、单个 `BEGIN…END`、监听与写入的表都在白名单内才放行；其余情况仍 fail closed。
+- 删除预览区分「将删除文件」与「改写元数据」：`state_5.sqlite`、`session_index.jsonl`、`history.jsonl` 只删行或原地重写，不再计入删除文件数与总大小。
+- 修复删除确认弹窗打开时说明文字被首个复选框的自动聚焦滚出视口。
+- 完整变更、升级说明及验证记录见 [本版 CHANGELOG](releases/v0.2.2/CHANGELOG.md)。
+
+快照：`releases/v0.2.2/`　产物：`AgentDeck-v0.2.2-win-x64.exe`
+
 ## v0.2.1 — 2026-10-17
 
 - 修复 Codex 子 Agent 会话被平铺为独立会话的问题：按已确认的根会话关系归组，默认收起子会话，支持展开、键盘导航和搜索定位；主会话计数与侧栏统计不重复计入子会话。
