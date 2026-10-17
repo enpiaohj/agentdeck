@@ -1,0 +1,493 @@
+// 中栏:会话列表。支持本地筛选、双向时间排序与按日分组，宽度随窗口变化。
+// 桌面选择：单击 / Ctrl 切换 / Shift 连选 / Ctrl+A 全选，批量条独立占位。
+import {
+  makeStyles,
+  mergeClasses,
+  shorthands,
+  tokens,
+  Text,
+  Spinner,
+  Button,
+  Input,
+  Tooltip,
+} from '@fluentui/react-components'
+import {
+  StarFilled,
+  StarRegular,
+  ArchiveRegular,
+  ArchiveArrowBackRegular,
+  ArrowSortRegular,
+  SearchRegular,
+  DismissRegular,
+  TagRegular,
+  SelectAllOnRegular,
+} from '@fluentui/react-icons'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { Events, Dialogs } from '@wailsio/runtime'
+import type { SessionView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
+import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
+import * as markService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/markservice'
+import * as resumeService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/resumeservice'
+import { agentMeta, fmtTime, relTime } from '../util'
+import { AgentMark } from '../icons/AgentMark'
+import type { SidebarFilter } from './Sidebar'
+import { presentSessions, sessionDateGroup, sessionMonth, type SessionOrder } from '../sessionPresentation'
+import { selectSession, selectContextSession, pruneSelection, type SessionSelection, type SelectionModifiers } from '../sessionSelection'
+import { SessionContextMenu, type SessionAction } from './SessionContextMenu'
+
+const useStyles = makeStyles({
+  wrap: {
+    width: 'var(--ad-list-width)',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    position: 'relative',
+    minWidth: 0,
+    minHeight: 0,
+    backgroundColor: tokens.colorNeutralBackground1,
+    borderRight: `1px solid ${tokens.colorNeutralStroke3}`,
+  },
+  head: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '16px 16px 10px',
+  },
+  headTitle: { fontSize: '14px', fontWeight: 650, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  tools: { padding: '0 16px 12px', display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: `1px solid ${tokens.colorNeutralStroke3}` },
+  count: { fontSize: '11px', color: tokens.colorNeutralForeground3, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' },
+  headBtn: {
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    userSelect: 'none',
+    color: tokens.colorNeutralForeground3,
+    display: 'flex',
+    alignItems: 'center',
+    padding: '4px',
+    ...shorthands.borderRadius('4px'),
+    ':hover': { backgroundColor: tokens.colorNeutralBackground1Hover },
+  },
+  rows: { flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', paddingBottom: '8px' },
+  groupTitle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '14px 16px 7px',
+    fontSize: '11px',
+    fontWeight: 600,
+    color: tokens.colorNeutralForeground3,
+  },
+  groupCount: { color: tokens.colorNeutralForeground4, fontWeight: 400 },
+  // 两行会话：标题与时间、来源与项目；保留完整信息的悬停说明。
+  row: {
+    position: 'relative',
+    display: 'flex',
+    gap: '8px',
+    margin: '0 8px 3px',
+    padding: '10px 8px',
+    ...shorthands.border('1px', 'solid', 'transparent'),
+    ...shorthands.borderRadius('7px'),
+    backgroundColor: tokens.colorNeutralBackground1,
+    cursor: 'pointer',
+    userSelect: 'none',
+    ':hover': {
+      backgroundColor: tokens.colorNeutralBackground1Hover,
+    },
+  },
+  rowActive: {
+    backgroundColor: tokens.colorBrandBackground2,
+    ...shorthands.borderColor(tokens.colorBrandBackground2),
+    boxShadow: `inset 2px 0 0 ${tokens.colorBrandBackground}`,
+    ':hover': { backgroundColor: tokens.colorBrandBackground2Hover },
+  },
+  rowSelected: { backgroundColor: tokens.colorBrandBackground2, ...shorthands.borderColor(tokens.colorBrandBackground2), ':hover': { backgroundColor: tokens.colorBrandBackground2Hover } },
+  rowBody: { display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, minWidth: 0 },
+  titleLine: { display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 },
+  title: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '13px', fontWeight: 600 },
+  starBtn: {
+    border: 'none', background: 'transparent', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', padding: '2px', flexShrink: 0,
+    ...shorthands.borderRadius('4px'),
+    color: tokens.colorNeutralForeground4,
+    ':hover': { color: tokens.colorStatusWarningForeground3 },
+  },
+  starOn: { color: tokens.colorStatusWarningForeground3 },
+  titleOn: { color: tokens.colorNeutralForeground1 },
+  meta: { display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0, height: '18px', color: tokens.colorNeutralForeground3 },
+  agentName: { fontSize: '11px', flexShrink: 0 },
+  context: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '11px' },
+  tagCount: { display: 'inline-flex', alignItems: 'center', gap: '2px', fontSize: '10px', flexShrink: 0 },
+  time: { fontSize: '11px', color: tokens.colorNeutralForeground3, flexShrink: 0, fontWeight: 400 },
+  center: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '8px', padding: '0 16px', textAlign: 'center' },
+  bulkBar: {
+    flexShrink: 0,
+    minWidth: 0,
+    margin: '0 8px 8px',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '6px',
+    ...shorthands.borderRadius('6px'),
+    backgroundColor: tokens.colorNeutralBackground3,
+    boxShadow: tokens.shadow16,
+    zIndex: 10,
+  },
+})
+
+type Props = {
+  filter: SidebarFilter
+  selectedKey: string | null
+  onSelect: (s: SessionView) => void
+  onOpenDetails: (s: SessionView) => void
+  listVersion?: number
+}
+
+export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, listVersion }: Props) {
+  const styles = useStyles()
+  const { rows, loading, error, reload } = useRows(filter, listVersion)
+  const [selection, setSelection] = useState<SessionSelection>(() => ({ keys: new Set(selectedKey ? [selectedKey] : []), anchor: selectedKey, focus: selectedKey }))
+  const rowRefs = useRef(new Map<string, HTMLDivElement>())
+  const gridRef = useRef<HTMLDivElement>(null)
+  const helpId = useId()
+  const [busy, setBusy] = useState(false)
+  const [bulkError, setBulkError] = useState('')
+  const [actionMessage, setActionMessage] = useState('')
+  const [context, setContext] = useState<{ key: string; keys: string[]; x: number; y: number; scope: string } | null>(null)
+  const [query, setQuery] = useState('')
+  const [month, setMonth] = useState('')
+  const [account, setAccount] = useState('')
+  const accounts = useMemo(() => [...new Set(rows.map(row => row.account).filter(Boolean))].sort(), [rows])
+  const months = useMemo(() => [...new Set(rows.map(row => sessionMonth(row.last)).filter(Boolean))].sort().reverse(), [rows])
+  const [order, setOrder] = useState<SessionOrder>('latest')
+  const visibleRows = useMemo(() => presentSessions(rows, query, order, account).filter(row => !month || sessionMonth(row.last) === month), [rows, query, order, month, account])
+  const visibleKeys = useMemo(() => visibleRows.map(row => row.key), [visibleRows])
+  const visibleIndexes = useMemo(() => new Map(visibleKeys.map((key, index) => [key, index])), [visibleKeys])
+  const visibleSelection = useMemo(() => pruneSelection(selection, visibleKeys), [selection, visibleKeys])
+  const checked = visibleSelection.keys
+  const scope = JSON.stringify([filter.agent, filter.project, filter.favorites, filter.archived, query, month, account])
+  const previousScope = useRef(scope)
+  const contextItems = context?.scope === scope ? context.keys.map(key => visibleRows[visibleIndexes.get(key) ?? -1]).filter((row): row is SessionView => !!row) : []
+  const contextOpen = !!context && contextItems.length === context.keys.length && contextItems.length > 0 && !busy
+
+  useEffect(() => {
+    if (previousScope.current !== scope) {
+      previousScope.current = scope
+      setSelection({ keys: new Set(), anchor: null, focus: null })
+      setBulkError('')
+      setContext(null)
+      setActionMessage('')
+    }
+  }, [scope])
+  useEffect(() => { if (!loading) setSelection(previous => pruneSelection(previous, visibleKeys)) }, [visibleKeys, loading])
+  useEffect(() => { setMonth(''); setAccount('') }, [filter])
+  useEffect(() => {
+    if (selectedKey) setSelection(previous => previous.focus === selectedKey ? previous : { keys: new Set([selectedKey]), anchor: selectedKey, focus: selectedKey })
+  }, [selectedKey])
+
+  const choose = (s: SessionView, modifiers: SelectionModifiers = {}) => {
+    if (busy) return
+    const next = selectSession(visibleSelection, visibleKeys, s.key, modifiers)
+    setSelection(next)
+    setBulkError('')
+    if (next.keys.has(s.key)) onSelect(s)
+  }
+
+  const selectAll = () => {
+    if (busy || !visibleKeys.length) return
+    setSelection({ keys: new Set(visibleKeys), anchor: visibleSelection.anchor ?? visibleKeys[0], focus: visibleSelection.focus ?? visibleKeys[0] })
+    setBulkError('')
+  }
+
+  const clearSelection = () => {
+    setSelection({ keys: new Set(), anchor: null, focus: visibleSelection.focus })
+    setBulkError('')
+    gridRef.current?.focus({ preventScroll: true })
+  }
+
+  const toggleStar = (s: SessionView) => (e: React.MouseEvent) => {
+    e.stopPropagation()
+    markService.SetFavorite(s.key, !s.favorite).then(reload).catch(() => {})
+  }
+
+  const unarchive = (s: SessionView) => (e: React.MouseEvent) => {
+    e.stopPropagation()
+    markService.SetArchived(s.key, false).then(reload).catch(() => {})
+  }
+
+  const bulk = (op: (key: string) => Promise<unknown>, targets: ReadonlySet<string> = checked) => async () => {
+    if (targets.size === 0 || busy) return
+    setBusy(true)
+    setBulkError('')
+    const succeeded = new Set<string>()
+    const failed: string[] = []
+    try {
+      for (const key of targets) {
+        try { await op(key); succeeded.add(key) }
+        catch (reason) { failed.push(String(reason).slice(0, 120)) }
+      }
+      if (failed.length) setBulkError(`${failed.length} 项操作失败，未完成项保留选中：${failed[0]}`)
+    } finally {
+      setBusy(false)
+      setSelection(previous => ({ ...previous, keys: new Set([...previous.keys].filter(key => !succeeded.has(key))) }))
+      reload()
+    }
+  }
+
+  const openContext = (s: SessionView, x: number, y: number) => {
+    if (busy) return
+    const next = selectContextSession(visibleSelection, visibleKeys, s.key)
+    setSelection(next)
+    setBulkError(''); setActionMessage('')
+    setContext({ key: s.key, keys: visibleKeys.filter(key => next.keys.has(key)), x, y, scope })
+    rowRefs.current.get(s.key)?.focus({ preventScroll: true })
+  }
+  const closeContext = () => {
+    if (context) rowRefs.current.get(context.key)?.focus({ preventScroll: true })
+    setContext(null)
+  }
+  const contextAction = async (action: SessionAction) => {
+    if (!contextOpen || !context || busy) return
+    const items = contextItems
+    const item = items[0]
+    closeContext()
+    if (action === 'open') { onSelect(item); return }
+    if (action === 'details') { onOpenDetails(item); return }
+    if (action === 'favorite' || action === 'archive') {
+      const value = !items.every(row => action === 'favorite' ? row.favorite : row.archived)
+      await bulk(key => action === 'favorite' ? markService.SetFavorite(key, value) : markService.SetArchived(key, value), new Set(items.map(row => row.key)))()
+      return
+    }
+    setBusy(true); setBulkError(''); setActionMessage('')
+    try {
+      if (action === 'copyTitle' || action === 'copyCwd') {
+        if (!navigator.clipboard) throw new Error('剪贴板当前不可用')
+        await navigator.clipboard.writeText(action === 'copyCwd' ? item.cwd : items.map(row => row.title || '未命名会话').join('\n'))
+        setActionMessage(action === 'copyCwd' ? '工作目录已复制。' : '会话标题已复制。')
+      } else if (action === 'resume') {
+        await resumeService.OpenInTerminal(item.key); setActionMessage('已在终端中打开会话。')
+      } else if (action === 'copyResume') {
+        await resumeService.CopyToClipboard(item.key); setActionMessage('恢复命令已复制。')
+      } else if (action === 'export') {
+        const dir = await Dialogs.OpenFile({ CanChooseDirectories: true, CanChooseFiles: false, CanCreateDirectories: true, Title: '选择 Markdown 导出目录', ButtonText: '导出到此目录' })
+        if (!dir || typeof dir !== 'string') return
+        let succeeded = 0
+        const failures: string[] = []
+        for (const row of items) {
+          try { await sessionService.ExportMarkdown(row.key, dir); succeeded++ }
+          catch (reason) { failures.push(`${row.title || '未命名会话'}：${String(reason).slice(0, 120)}`) }
+        }
+        setActionMessage(`已导出 ${succeeded} 个会话。`)
+        if (failures.length) setBulkError(`${failures.length} 个会话导出失败。${failures[0]}`)
+      }
+    } catch (reason) { setBulkError(`操作失败：${String(reason).slice(0, 240)}`) }
+    finally { setBusy(false) }
+  }
+
+  const groups = useMemo(() => {
+    const g = new Map<string, SessionView[]>()
+    for (const s of visibleRows) {
+      const d = sessionDateGroup(s.last)
+      if (!g.has(d)) g.set(d, [])
+      g.get(d)!.push(s)
+    }
+    const keys = [...g.keys()].filter(key => key !== '时间未知')
+    if (g.has('时间未知')) keys.push('时间未知')
+    return keys.map(key => [key, g.get(key)!] as const)
+  }, [visibleRows, order])
+
+  const projectName = filter.project?.split(/[\\/]/).filter(Boolean).pop()
+  const listTitle = filter.archived ? '归档会话' : filter.favorites ? '收藏会话' : projectName ? projectName : filter.agent ? agentMeta(filter.agent).label : '全部会话'
+
+  return (
+    <div className={styles.wrap} onKeyDown={event => {
+      if (event.nativeEvent.isComposing || event.keyCode === 229 || (event.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"], [role="menu"]')) return
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') { event.preventDefault(); selectAll() }
+      if (event.key === 'Escape' && !busy && checked.size) { event.preventDefault(); event.stopPropagation(); clearSelection() }
+    }}>
+      <div className={styles.head}>
+        <span className={styles.headTitle} title={filter.project || listTitle}>{listTitle}</span>
+        <span className={styles.count} aria-live="polite">{query || month || account ? `${visibleRows.length} / ${rows.length}` : rows.length} 个</span>
+        <Tooltip content="全选当前列表 (Ctrl+A)" relationship="label"><Button size="small" appearance="subtle" icon={<SelectAllOnRegular />} aria-label="全选会话" disabled={busy || !visibleRows.length} onClick={selectAll} /></Tooltip>
+        <Tooltip content={order === 'latest' ? '切换为最早活动优先' : '切换为最近活动优先'} relationship="label">
+        <button className={styles.headBtn} aria-label={order === 'latest' ? '最早活动优先' : '最近活动优先'} onClick={() => setOrder(order === 'latest' ? 'oldest' : 'latest')}>
+          <ArrowSortRegular fontSize={15} />
+        </button>
+        </Tooltip>
+      </div>
+      <span id={helpId} className="ad-sr-only">单击选中；Ctrl 点击切换；Shift 连选；Ctrl+Shift 追加连选；Ctrl+A 全选当前列表；Esc 清空选择。方向键移动，Home / End 到首尾。</span>
+      <div className={styles.tools}>
+        <Input size="small" appearance="filled-lighter" aria-label="筛选当前会话列表" placeholder="筛选标题、项目、标签、账号…" value={query} onChange={(_, data) => setQuery(data.value)} contentBefore={<SearchRegular />} contentAfter={query || month || account ? <button className={styles.headBtn} aria-label="清除列表筛选" title="清除关键词、月份和账号筛选" onClick={() => { setQuery(''); setMonth(''); setAccount('') }}><DismissRegular /></button> : undefined} />
+        <div className="ad-list-filters"><div className="ad-date-filter">
+          <select aria-label="按活动月份筛选会话" value={month} onChange={event => setMonth(event.target.value)}>
+            <option value="">所有月份</option>
+            {months.map(value => <option key={value} value={value}>{value.replace('-', '年')}月</option>)}
+          </select>
+        </div>
+        {accounts.length ? <div className="ad-date-filter">
+          <select aria-label="按聊天账号筛选会话" value={account} onChange={event => setAccount(event.target.value)}>
+            <option value="">全部账号</option>
+            {accounts.map(value => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </div> : null}</div>
+        {filter.agent === 'claude-desktop' ? <div className="ad-source-note">本地记录与导入的聊天历史</div> : null}
+      </div>
+
+      {error ? (
+        <div className={styles.center}>
+          <Text size={300}>会话加载失败：{error}</Text>
+        </div>
+      ) : loading && rows.length === 0 ? (
+        <div className={styles.center}>
+          <Spinner size="tiny" />
+          <Text size={300}>正在扫描本机会话…</Text>
+        </div>
+      ) : visibleRows.length === 0 ? (
+        <div className={styles.center}>
+          <Text size={400} weight="semibold">
+            {query || month || account ? '未找到匹配会话' : filter.archived ? '暂无归档会话' : filter.favorites ? '暂无收藏会话' : '未发现会话'}
+          </Text>
+          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+            {query || month || account ? '请调整关键词，或清除筛选条件。' : filter.archived
+              ? '会话归档后显示在此列表，可随时取消归档。'
+              : '使用受支持的 Agent 创建会话后，请单击“刷新”重新扫描。'}
+          </Text>
+          {query || month || account ? <Button size="small" onClick={() => { setQuery(''); setMonth(''); setAccount('') }}>清除筛选</Button> : null}
+        </div>
+      ) : (
+        <div ref={gridRef} className={styles.rows} role="grid" aria-label="会话列表" aria-multiselectable="true" aria-rowcount={visibleRows.length} aria-colcount={1} aria-describedby={helpId} aria-busy={busy} tabIndex={-1} onKeyDown={event => {
+          if (busy || event.target !== event.currentTarget || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+          event.preventDefault()
+          const s = event.key === 'End' ? visibleRows.at(-1) : event.key === 'Home' ? visibleRows[0] : visibleRows.find(row => row.key === visibleSelection.focus) ?? visibleRows[0]
+          if (s) {
+            if ((event.ctrlKey || event.metaKey) && !event.shiftKey) setSelection(previous => ({ ...previous, focus: s.key }))
+            else choose(s, { toggle: event.ctrlKey || event.metaKey, range: event.shiftKey })
+            rowRefs.current.get(s.key)?.focus()
+          }
+        }}>
+          {groups.map(([day, list]) => (
+            <div key={day} role="rowgroup" aria-label={day}>
+              <div className={styles.groupTitle} aria-hidden="true">
+                {day}<span className={styles.groupCount}>({list.length})</span>
+              </div>
+              {list.map((s) => {
+                const selected = checked.has(s.key)
+                const active = selected && selectedKey === s.key
+                const m = agentMeta(s.agent)
+                const contextLabel = [s.account, s.project].filter(Boolean).join(' · ')
+                const detail = [m.label, contextLabel, s.tags.length ? `标签：${s.tags.join('、')}` : ''].filter(Boolean).join(' · ')
+                return (
+                  <div
+                    key={s.key}
+                    ref={element => { if (element) rowRefs.current.set(s.key, element); else rowRefs.current.delete(s.key) }}
+                    className={mergeClasses('sessionRow', styles.row, selected && styles.rowSelected, active && styles.rowActive)}
+                    onMouseDown={event => { if (event.shiftKey || event.ctrlKey || event.metaKey) event.preventDefault() }}
+                    onClick={event => { if ((event.target as HTMLElement).closest('button')) return; choose(s, { toggle: event.ctrlKey || event.metaKey, range: event.shiftKey }); event.currentTarget.focus() }}
+                    onContextMenu={event => { event.preventDefault(); event.stopPropagation(); openContext(s, event.clientX, event.clientY) }}
+                    tabIndex={(visibleSelection.focus ?? visibleKeys[0]) === s.key ? 0 : -1}
+                    role="row"
+                    aria-label={`查看会话 ${s.title || '未命名会话'}`}
+                    aria-selected={selected}
+                    aria-haspopup="menu"
+                    aria-expanded={contextOpen && context?.key === s.key}
+                    aria-rowindex={(visibleIndexes.get(s.key) ?? 0) + 1}
+                    onKeyDown={(e) => {
+                      if (e.target !== e.currentTarget || e.nativeEvent.isComposing || busy) return
+                      const modifiers = { toggle: e.ctrlKey || e.metaKey, range: e.shiftKey }
+                      if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); e.stopPropagation(); const box=e.currentTarget.getBoundingClientRect(); openContext(s, box.left+20, box.top+20); return }
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(s, modifiers); return }
+                      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
+                      e.preventDefault()
+                      const index = visibleIndexes.get(s.key) ?? 0
+                      const nextIndex = e.key === 'Home' ? 0 : e.key === 'End' ? visibleRows.length - 1 : Math.max(0, Math.min(visibleRows.length - 1, index + (e.key === 'ArrowDown' ? 1 : -1)))
+                      const next = visibleRows[nextIndex]
+                      if (modifiers.toggle && !modifiers.range) setSelection(previous => ({ ...previous, focus: next.key }))
+                      else choose(next, modifiers)
+                      rowRefs.current.get(next.key)?.focus()
+                      rowRefs.current.get(next.key)?.scrollIntoView({ block: 'nearest' })
+                    }}
+                  >
+                    <div className={styles.rowBody} role="gridcell">
+                      <div className={styles.titleLine}>
+                        <Text title={s.title || '未命名会话'} className={mergeClasses(styles.title, selected && styles.titleOn)}>{s.title || '未命名会话'}</Text>
+                        <span className={styles.time} title={fmtTime(s.last)}>{relTime(s.last)}</span>
+                        <button
+                          data-favorite={s.favorite}
+                          className={mergeClasses('ad-row-star', styles.starBtn, s.favorite && styles.starOn)}
+                          onClick={toggleStar(s)}
+                          title={s.favorite ? '取消收藏' : '收藏'}
+                          aria-label={`${s.favorite ? '取消收藏' : '收藏'}会话 ${s.title || '未命名会话'}`}
+                          tabIndex={(visibleSelection.focus ?? visibleKeys[0]) === s.key ? 0 : -1}
+                        >
+                          {s.favorite ? <StarFilled fontSize={13} /> : <StarRegular fontSize={13} />}
+                        </button>
+                      </div>
+                      <div className={styles.meta} title={detail}>
+                        <AgentMark agent={s.agent} size={14} />
+                        {!filter.agent ? <><span className={styles.agentName}>{m.label}</span><span aria-hidden="true">·</span></> : null}
+                        <span className={styles.context}>{contextLabel || (filter.agent ? m.label : '无项目')}</span>
+                        {s.tags.length ? <span className={styles.tagCount} aria-label={`${s.tags.length} 个标签`}><TagRegular fontSize={11} />{s.tags.length}</span> : null}
+                        {filter.archived ? <Button size="small" appearance="subtle" icon={<ArchiveArrowBackRegular />} aria-label="取消归档" title="取消归档" tabIndex={(visibleSelection.focus ?? visibleKeys[0]) === s.key ? 0 : -1} onClick={unarchive(s)} /> : null}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {contextOpen && context ? <SessionContextMenu key={`${context.key}:${context.x}:${context.y}`} items={contextItems} point={context} onClose={closeContext} onAction={action => void contextAction(action)} /> : null}
+      {actionMessage ? <Text size={200} role="status" style={{ padding: '0 12px 8px', color: tokens.colorNeutralForeground3 }}>{actionMessage}</Text> : null}
+      {bulkError ? <Text size={200} role="alert" style={{ padding: '0 12px 8px', color: tokens.colorPaletteRedForeground1, overflowWrap: 'anywhere' }}>{bulkError}</Text> : null}
+      {checked.size > 0 ? (
+        <div className={styles.bulkBar} role="group" aria-label="批量会话操作">
+          <Text size={200} weight="semibold" aria-live="polite" style={{ marginRight: 'auto' }}>已选 {checked.size} 项</Text>
+          <Button size="small" icon={<StarRegular />} disabled={busy}
+            onClick={bulk((k) => markService.SetFavorite(k, true))}>收藏</Button>
+          <Button size="small" icon={filter.archived ? <ArchiveArrowBackRegular /> : <ArchiveRegular />} disabled={busy}
+            onClick={bulk((k) => markService.SetArchived(k, !filter.archived))}>{filter.archived ? '取消归档' : '归档'}</Button>
+          <Button size="small" disabled={busy} aria-label="清空选择" title="清空选择 (Esc)" onClick={clearSelection}>清空</Button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+type RowsState = { rows: SessionView[]; loading: boolean; error: string; reload: () => void }
+
+function useRows(filter: SidebarFilter, listVersion?: number): RowsState {
+  const scope = JSON.stringify([filter.agent ?? '', filter.project ?? '', !!filter.favorites, !!filter.archived])
+  const [state, setState] = useState({ rows: [] as SessionView[], loading: true, error: '', scope })
+
+  const request = useRef(0)
+  const load = useCallback(() => {
+    const version = ++request.current
+    setState((s) => ({ rows: s.scope === scope ? s.rows : [], loading: true, error: '', scope }))
+    sessionService
+      .List({
+        agent: filter.agent ?? '',
+        favorites: filter.favorites ?? false,
+        archived: filter.archived ?? false,
+        project: filter.project ?? '',
+        tag: '',
+        search: '',
+      })
+      .then((rows) => { if (version === request.current) setState({ rows, loading: false, error: '', scope }) })
+      .catch((e) => { if (version === request.current) setState({ rows: [], loading: false, error: String(e), scope }) })
+  }, [filter, scope])
+
+  useEffect(() => { load(); return () => { request.current++ } }, [load, listVersion])
+
+  useEffect(() => {
+    const off = Events.On('sessions:messages', () => load())
+    return () => { off() }
+  }, [load])
+
+  // A new sidebar scope must never expose the previous scope's actionable
+  // rows, including the render before the request-start effect runs.
+  return state.scope === scope ? { ...state, reload: load } : { rows: [], loading: true, error: '', reload: load }
+}
