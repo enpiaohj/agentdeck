@@ -3,6 +3,7 @@ import { ArrowLeftRegular, ArrowResetRegular, SearchRegular, PaintBrushRegular, 
 import { useId, useState, type ReactNode } from 'react'
 import { usePreferences } from '../hooks/usePreferences'
 import { DiagnosticsView } from './DiagnosticsView'
+import { ReadingPreview } from './MessagePane'
 
 const categories = [
   {id:'appearance',label:'外观',icon:<PaintBrushRegular />},
@@ -25,7 +26,7 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
       {key:'width',title:'阅读宽度',description:'适中宽度用于常规阅读；宽版适用于较宽屏幕和代码内容。',control:id=><select id={id} value={p.readingWidth} onChange={e=>update({readingWidth:e.target.value as typeof p.readingWidth})}><option value="balanced">适中</option><option value="wide">宽版</option></select>},
     ]},
     {id:'reading',title:'会话阅读',description:'设置会话初始位置、正文行距和过程记录的显示方式。',rows:[
-      {key:'start',title:'默认阅读位置',description:'切换会话时应用此设置；全文搜索优先定位匹配内容。',control:id=><select id={id} value={p.readingStart} onChange={e=>update({readingStart:e.target.value as typeof p.readingStart})}><option value="latest">最新一轮问答</option><option value="start">会话开头</option></select>},
+      {key:'start',title:'默认阅读位置',description:'首次打开或没有已记阅读位置时应用；新的搜索跳转优先定位匹配段。',control:id=><select id={id} value={p.readingStart} onChange={e=>update({readingStart:e.target.value as typeof p.readingStart})}><option value="latest">最新一轮问答</option><option value="start">会话开头</option></select>},
       {key:'spacing',title:'正文行距',description:'舒适行距适合长文，紧凑行距方便快速浏览。',control:id=><select id={id} value={p.spacing} onChange={e=>update({spacing:e.target.value as typeof p.spacing})}><option value="comfortable">舒适</option><option value="compact">紧凑</option></select>},
       {key:'fold',title:'默认折叠过程记录',description:'默认收起思考过程、工具调用、工具结果、上下文与结构化数据。',control:id=><input id={id} type="checkbox" role="switch" checked={p.foldProcesses} onChange={e=>update({foldProcesses:e.target.checked})} />},
     ]},
@@ -59,12 +60,12 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
               <div className="ad-setting-card">{group.rows.map(row=><div className="ad-setting-row" key={row.key}>
               <div><label htmlFor={`${baseId}-${row.key}`}>{row.title}</label><p>{row.description}</p></div>{row.control(`${baseId}-${row.key}`)}
               </div>)}</div>
-              {group.id==='appearance' ? <aside className="ad-settings-preview" aria-label="阅读预览"><div className="ad-preview-toolbar"><span>阅读预览</span><span>实时更新</span></div><div className="ad-preview-document"><div className="ad-preview-role"><span aria-hidden="true">A</span>助手<span>刚刚</span></div><div className="ad-markdown"><h3>会话阅读预览</h3><p>正文采用统一字号与行距，便于阅读和查阅。</p><p>正文支持重点标记，代码路径 <code>src/session.ts</code> 单独显示。</p></div></div></aside> : null}
+              {group.id==='appearance' || group.id==='reading' ? <aside className="ad-settings-preview" aria-label="阅读预览"><div className="ad-preview-toolbar"><span>阅读预览</span><span>实时更新</span></div><ReadingPreview /></aside> : null}
             </div>
           </section>)}
           {data ? <DiagnosticsView revision={revision} embedded /> : null}
           {shortcuts ? <section className="ad-settings-section"><h2>快捷键</h2><p className="ad-settings-description">列表选择遵循常见桌面应用的操作习惯。</p><dl className="ad-shortcuts">{[
-            ['搜索所有会话','Ctrl + K'],['打开设置','Ctrl + ,'],['打开会话操作菜单','Shift + F10'],['全选当前列表','Ctrl + A'],['追加 / 取消选择','Ctrl + 单击'],['连续选择','Shift + 单击'],['追加连续范围','Ctrl + Shift + 单击'],['清空选择','Esc'],['移动焦点 / 扩展选择','方向键 / Shift + 方向键'],['保存备注','Ctrl + Enter'],
+            ['搜索所有会话','Ctrl + K'],['打开设置','Ctrl + ,'],['打开会话操作菜单','Shift + F10'],['查找当前会话','Ctrl + F'],['下一 / 上一命中段','Enter / Shift + Enter'],['全选筛选后当前展开项','Ctrl + A'],['追加 / 取消选择','Ctrl + 单击'],['连续选择','Shift + 单击'],['追加连续范围','Ctrl + Shift + 单击'],['清空选择','Esc'],['移动焦点 / 扩展选择','方向键 / Shift + 方向键'],['保存备注','Ctrl + Enter'],
           ].map(([label,key])=><div key={label}><dt>{label}</dt><dd><kbd>{key}</kbd></dd></div>)}</dl></section> : null}
           {!shown.length&&!data&&!shortcuts ? <p className="ad-settings-description">未找到匹配的设置，请调整搜索关键词。</p> : null}
         </div>

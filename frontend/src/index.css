@@ -20,10 +20,13 @@ html, body, #root {
 }
 button, input, textarea, select { font: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
-button:focus-visible, select:focus-visible, [role='button']:focus-visible, summary:focus-visible {
+button:focus-visible, select:focus-visible, [role='button']:focus-visible, [role='row']:focus-visible, summary:focus-visible {
   outline: 2px solid var(--ad-accent); outline-offset: -2px;
 }
 .ad-list-filters { display: flex; gap: 8px; min-width: 0; }
+.ad-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.ad-filter-chips:empty { display: none; }
+.ad-filter-chips > button { max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 .ad-date-filter { display: flex; flex: 1; flex-direction: row; gap: 3px; min-width: 0; font-size: 11px; color: var(--ad-muted); }
 .ad-date-filter select {
   width: 100%; min-width: 0; height: 26px; border: 1px solid var(--ad-line);
@@ -31,6 +34,15 @@ button:focus-visible, select:focus-visible, [role='button']:focus-visible, summa
   color: inherit; cursor: pointer; font-size: 12px; text-overflow: ellipsis;
 }
 .ad-source-note { color: var(--ad-muted); font-size: 11px; line-height: 1.6; }
+.ad-process-group { max-width: var(--ad-reader-width); margin: 0 auto 16px; padding: 8px 10px; border: 1px solid var(--ad-line); border-radius: 6px; }
+.ad-process-group > summary { cursor: pointer; color: var(--ad-muted); font-size: 12px; line-height: 1.6; }
+.ad-process-group[open] > summary { margin-bottom: 10px; }
+.ad-page-boundary { max-width: var(--ad-reader-width); margin: 12px auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--ad-muted); font-size: 11px; }
+.ad-page-context { max-width: var(--ad-reader-width); margin: 8px auto 16px; padding: 8px 12px; border-left: 2px solid var(--ad-line); color: var(--ad-muted); font-size: 12px; overflow-wrap: anywhere; }
+.ad-page-context small { display: block; margin-bottom: 4px; }
+.ad-find-context { margin: 0; padding: 8px 16px; background: var(--ad-soft); font-size: 12px; overflow-wrap: anywhere; }
+.ad-find-context small { display: block; color: var(--ad-muted); }
+.ad-reader-nav input { min-width: 80px; flex: 1; max-width: 280px; background: var(--ad-surface); color: var(--ad-text); border: 1px solid var(--ad-line); border-radius: 4px; padding: 4px 6px; }
 .ad-reading-context { display: flex; gap: 8px; align-items: center; min-width: 0; font-size: 11px; color: var(--ad-muted); }
 .ad-reading-context > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ad-reading-context > span:last-child { flex-shrink: 0; }
@@ -46,7 +58,7 @@ button:focus-visible, select:focus-visible, [role='button']:focus-visible, summa
 .ad-status-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
 .ad-status-item svg { flex-shrink: 0; width: 13px; height: 13px; }
 .ad-status-trailing { display: flex; align-items: center; justify-content: flex-end; gap: 20px; min-width: 0; }
-.ad-status-trailing > span:first-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ad-status-trailing > span:first-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
 .ad-status-shortcut { white-space: nowrap; flex-shrink: 0; }
 .ad-status-shortcut kbd { font: inherit; margin-right: 4px; }
 .ad-titlebar-context { flex: 1; color: var(--ad-muted); font-size: 12px; padding-left: 16px; border-left: 1px solid var(--ad-line); }

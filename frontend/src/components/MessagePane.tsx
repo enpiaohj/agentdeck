@@ -35,7 +35,7 @@ import { agentMeta, fmtTime } from '../util'
 import { AgentMark } from '../icons/AgentMark'
 import { highlight } from '../highlight'
 import { useTheme } from '../hooks/useTheme'
-import { foldedContent, isLongCode, markdownCodeText, type FoldedContent } from '../transcriptPresentation'
+import { foldedContent, isLongCode, markdownCodeText, transcriptGroups, processSummary, type FoldedContent } from '../transcriptPresentation'
 import type { ComponentProps, ReactNode } from 'react'
 import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -210,6 +210,10 @@ const useStyles = makeStyles({
   errRow: { display: 'flex', alignItems: 'flex-start', gap: '8px' },
 })
 
+type ReadingPosition = { at: number; before: boolean; scroll: number; anchor?: number; offset?: number }
+const consumedJumps = new Map<string, number>()
+const readingPositions = new Map<string, ReadingPosition>()
+
 type Props = {
   session: SessionView | null
   sourceVersion: number
@@ -230,7 +234,7 @@ export function MessagePane({ session, sourceVersion, jumpPart, jumpToken, infoO
         <div className={styles.empty}>
           <span className={styles.emptyIcon}><CommentMultipleRegular fontSize={26} /></span>
           <Text size={400} weight="semibold" style={{ display: 'block', marginTop: 10 }}>选择一个会话查看消息</Text>
-          <Text size={200} style={{ display: 'block', marginTop: 6 }}>左侧会话列表按时间分组;Ctrl+K 可全文检索消息内容</Text>
+          <Text size={200} style={{ display: 'block', marginTop: 6 }}>左侧会话列表按时间分组；Ctrl+K 可全文检索消息内容</Text>
         </div>
       </div>
     )
@@ -243,7 +247,21 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
   const theme = useTheme()
   const m = agentMeta(session.agent)
   const { preferences } = usePreferences()
-  const [destination, setDestination] = useState(() => ({ at:jumpPart>=0?jumpPart:preferences.readingStart==='latest'?-1:0, before:false, focus:jumpPart>=0?jumpPart:null as number|null, revision:0 }))
+  const explicitJump = useRef(jumpPart >= 0 && consumedJumps.get(session.key) !== jumpToken)
+  const savedPosition = useRef(readingPositions.get(session.key))
+  const restoreAnchor = useRef<ReadingPosition | null>(explicitJump.current ? null : savedPosition.current ?? null)
+  const restoreScroll = useRef<number | null>(explicitJump.current ? null : savedPosition.current?.scroll ?? null)
+  const [destination, setDestination] = useState(() => ({ at:explicitJump.current?jumpPart:savedPosition.current?.at ?? (preferences.readingStart==='latest'?-1:0), before:explicitJump.current?false:savedPosition.current?.before ?? false, focus:explicitJump.current?jumpPart:null as number|null, revision:0 }))
+  useEffect(() => { if (explicitJump.current) consumedJumps.set(session.key, jumpToken) }, [])
+  const [findOpen, setFindOpen] = useState(false)
+  const [findQuery, setFindQuery] = useState('')
+  const [findHits, setFindHits] = useState<number[]>([])
+  const [findSnippets, setFindSnippets] = useState<string[]>([])
+  const [findIndex, setFindIndex] = useState(-1)
+  const [findBusy, setFindBusy] = useState(false)
+  const [findError, setFindError] = useState('')
+  const findInput = useRef<HTMLInputElement>(null)
+  const findOrigin = useRef<ReadingPosition | null>(null)
   const lastJump = useRef(`${jumpPart}:${jumpToken}`)
   const request = useRef(0)
   const [tr, setTr] = useState<TranscriptView | null>(null)
@@ -263,10 +281,59 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
     const value=`${jumpPart}:${jumpToken}`
     if(lastJump.current===value)return
     lastJump.current=value
-    if(jumpPart>=0)setDestination(previous=>({at:jumpPart,before:false,focus:jumpPart,revision:previous.revision+1}))
+    if(jumpPart>=0) { consumedJumps.set(session.key, jumpToken); restoreAnchor.current=null; restoreScroll.current=null; findOrigin.current=null; setFindOpen(false); setDestination(previous=>({at:jumpPart,before:false,focus:jumpPart,revision:previous.revision+1})) }
   },[jumpPart,jumpToken])
 
-  const navigate = (at:number,before=false) => setDestination(previous=>({at,before,focus:null,revision:previous.revision+1}))
+  const [pageContext, setPageContext] = useState('')
+  const navigate = (at:number,before=false) => {
+    const neighbor = before ? tr?.parts[0] : tr?.parts.at(-1)
+    setPageContext(tr && (before ? at === tr.start : at === tr.start + tr.parts.length) && neighbor ? `${before ? '后文' : '前文'}衔接 · ${neighbor.text.replace(/\s+/g, ' ').slice(before ? 0 : -180, before ? 180 : undefined)}` : '')
+    restoreScroll.current=null; setDestination(previous=>({at,before,focus:null,revision:previous.revision+1}))
+  }
+  const position = useRef<ReadingPosition>({ at: destination.at, before: destination.before, scroll: 0 })
+  position.current = { ...position.current, at: destination.at, before: destination.before }
+  useEffect(() => () => { readingPositions.set(session.key, position.current) }, [session.key])
+  const openFind = useCallback(() => {
+    if (!findOrigin.current) findOrigin.current = { ...position.current }
+    setFindOpen(true)
+    requestAnimationFrame(() => { findInput.current?.focus(); findInput.current?.select() })
+  }, [])
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.isComposing || event.keyCode === 229 || document.querySelector('[role="dialog"][aria-modal="true"]')) return
+      if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]') && event.target !== findInput.current) return
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); openFind() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [openFind])
+  useEffect(() => {
+    let active = true
+    setFindHits([]); setFindIndex(-1); setFindError('')
+    if (!findOpen || !findQuery.trim()) { setFindBusy(false); return }
+    setFindBusy(true)
+    const timer = setTimeout(() => {
+      sessionService.SearchInAll(session.key, findQuery).then(hits => {
+        if (!active) return
+        const indexes = hits.map(hit => Number(hit.part.slice(hit.part.lastIndexOf('#') + 1))).filter(Number.isSafeInteger)
+        setFindHits(indexes)
+        setFindSnippets(hits.map(hit => hit.snippet))
+      }).catch(reason => { if (active) setFindError(String(reason)) }).finally(() => { if (active) setFindBusy(false) })
+    }, 180)
+    return () => { active = false; clearTimeout(timer) }
+  }, [session.key, findQuery, findOpen, sourceVersion])
+  const moveFind = (step: number) => {
+    if (!findHits.length) return
+    const next = findIndex < 0 ? (step < 0 ? findHits.length - 1 : 0) : (findIndex + step + findHits.length) % findHits.length
+    setFindIndex(next); restoreScroll.current = null
+    setDestination(previous => ({ at: findHits[next], before: false, focus: findHits[next], revision: previous.revision + 1 }))
+  }
+  const closeFind = () => {
+    const origin = findOrigin.current
+    setFindOpen(false); findOrigin.current = null
+    requestAnimationFrame(() => bodyRef.current?.focus({ preventScroll: true }))
+    if (origin) { restoreAnchor.current = origin; restoreScroll.current = origin.scroll; setDestination(previous => ({ at: origin.at, before: origin.before, focus: null, revision: previous.revision + 1 })) }
+  }
 
   const runAction = async (action: () => Promise<void>) => {
     setActionBusy(true); setActionError('')
@@ -290,7 +357,14 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
   useEffect(() => {
     if (!tr || loading || err) return
     const frame = requestAnimationFrame(() => {
-      if(hitPart>=0)hitRef.current?.scrollIntoView({block:'center'})
+      if(restoreScroll.current !== null && bodyRef.current) {
+        const anchor = restoreAnchor.current
+        const element = anchor?.anchor === undefined ? null : bodyRef.current.querySelector<HTMLElement>(`[data-part-index="${anchor.anchor}"]`)
+        if (element) bodyRef.current.scrollTop += element.getBoundingClientRect().top - bodyRef.current.getBoundingClientRect().top - (anchor?.offset ?? 0)
+        else bodyRef.current.scrollTop=restoreScroll.current
+        restoreScroll.current=null; restoreAnchor.current=null
+      }
+      else if(hitPart>=0)hitRef.current?.scrollIntoView({block:'center'})
       else if(destination.at<0&&latestRef.current)latestRef.current.scrollIntoView({block:'end'})
       else if(bodyRef.current)bodyRef.current.scrollTop=destination.at<0?bodyRef.current.scrollHeight:0
     })
@@ -342,7 +416,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
           <span className="ad-reader-agent"><AgentMark agent={session.agent} size={14} />{m.label}</span>
           {session.project ? <span className="ad-reader-context" title={session.project}>{session.project}</span> : null}
           {session.account ? <span className="ad-reader-context" title={`账号：${session.account}`}>{session.account}</span> : null}
-          <span className="ad-reader-count">{session.messages} 条消息</span>
+          <span className="ad-reader-count" title="消息按源记录统计；正文段还包括思考、工具与上下文，因此两者数量可能不同。">{session.messages} 条消息</span>
           <button className={styles.chipAdd} onClick={onOpenInfo} title="在会话信息中管理标签"><AddRegular fontSize={12} />{session.tags.length ? `${session.tags.length} 个标签` : '标签'}</button>
         </div>
       </div>
@@ -350,11 +424,27 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
       <nav className="ad-reader-nav" aria-label="会话阅读导航">
         <Button size="small" appearance="subtle" icon={<ArrowUpRegular />} onClick={()=>navigate(0)} disabled={loading}>会话开头</Button>
         <Tooltip content="更早的内容" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronLeftRegular />} aria-label="阅读更早内容" disabled={loading||!tr?.has_before} onClick={()=>navigate(tr?.start??0,true)} /></Tooltip>
-        <span role="status" className="ad-reader-range">{loading?'正在载入…':tr?.total?`${tr.start+1}–${tr.start+tr.parts.length} / ${tr.total} 段`:'暂无正文'}</span>
+        <span role="status" className="ad-reader-range">{loading?`正在载入…${tr?.total?`（${tr.total} 段）`:''}`:tr?.total?`${tr.start+1}–${tr.start+tr.parts.length} / ${tr.total} 段`:'暂无正文'}</span>
         <Tooltip content="较新的内容" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronRightRegular />} aria-label="阅读较新内容" disabled={loading||!tr?.has_after} onClick={()=>navigate((tr?.start??0)+(tr?.parts.length??0))} /></Tooltip>
+        <Button size="small" appearance="subtle" onClick={openFind} title="查找当前会话 (Ctrl+F)">查找</Button>
         <Button size="small" appearance={destination.at<0?'secondary':'subtle'} icon={<ArrowDownRegular />} onClick={()=>navigate(-1)} disabled={loading}>最新消息</Button>
       </nav>
-      <div ref={bodyRef} className={`ad-reading-body ${styles.body}`}>
+      {findOpen ? <div className="ad-reader-nav" role="search" aria-label="会话内查找">
+        <input ref={findInput} aria-label="查找当前会话" placeholder="查找当前会话…" value={findQuery} onChange={event => setFindQuery(event.target.value)} onKeyDown={event => { if (event.nativeEvent.isComposing) return; if (event.key === 'Enter') { event.preventDefault(); moveFind(event.shiftKey ? -1 : 1) } if (event.key === 'Escape') { event.stopPropagation(); closeFind() } }} />
+        <span role="status">{findBusy ? '查找中…' : findError || `${findIndex < 0 ? 0 : findIndex + 1} / ${findHits.length} 个命中段`}</span>
+        <Button size="small" disabled={!findHits.length} onClick={() => moveFind(-1)}>上一处</Button>
+        <Button size="small" disabled={!findHits.length} onClick={() => moveFind(1)}>下一处</Button>
+        <Button size="small" onClick={closeFind}>返回原阅读位置</Button>
+      </div> : null}
+      {findOpen && findIndex >= 0 ? <p className="ad-find-context" role="status">命中段 {findHits[findIndex] + 1}：{findSnippets[findIndex]}<small>查找范围为已读取正文；长段预览可能仅显示部分内容。</small></p> : null}
+      <div ref={bodyRef} tabIndex={-1} onScroll={event => {
+        const body = event.currentTarget
+        const top = body.getBoundingClientRect().top
+        const anchor = [...body.querySelectorAll<HTMLElement>('[data-part-index]')].find(element => element.getClientRects().length > 0 && element.getBoundingClientRect().bottom >= top)
+        position.current = { ...position.current, scroll: body.scrollTop, anchor: anchor ? Number(anchor.dataset.partIndex) : undefined, offset: anchor ? anchor.getBoundingClientRect().top - top : undefined }
+      }} className={`ad-reading-body ${styles.body}`}>
+        {pageContext && !loading ? <blockquote className="ad-page-context"><small>相邻窗口摘录 · 不计入当前段数</small>{pageContext}</blockquote> : null}
+        {tr?.has_before && !loading ? <div className="ad-page-boundary"><Button size="small" onClick={() => navigate(tr.start, true)}>继续阅读更早内容</Button><span>当前从原始第 {tr.start + 1} 段开始；上一窗口紧接此处。</span></div> : null}
         {tr?.storage_warning ? <Text role="alert" size={200} block style={{ marginBottom: 12, color: tokens.colorPaletteRedForeground1 }}>{tr.storage_warning}</Text> : null}
         {tr?.retained ? <Text size={200} block style={{ marginBottom: 12, color: tokens.colorNeutralForeground3 }}>正在阅读 AgentDeck 永久保留的本地副本，上游原记录暂不可用。</Text> : null}
         {tr && !loading && hitPart >= 0 && (hitPart < tr.start || hitPart >= tr.start+tr.parts.length || tr.parts[hitPart-tr.start]?.cut) ? <Text size={200} block style={{ marginBottom: 12, color: tokens.colorNeutralForeground3 }}>本段包含预览范围之外的内容，可导出完整 Markdown 查看。</Text> : null}
@@ -369,8 +459,10 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
             <Button size="small" icon={<ArrowClockwiseRegular />} onClick={load} style={{ flexShrink: 0 }}>重试</Button>
           </div>
         ) : tr ? (
-          tr.parts.map((p, i) => {
-            const partIndex=(tr.start??0)+i
+          transcriptGroups(tr.parts, tr.start).map(group => <ProcessGroup key={group.start} process={group.process} count={group.parts.length} summary={processSummary(group.parts)} reveal={hitPart >= group.start && hitPart < group.start + group.parts.length} revision={destination.revision} boundary={group.process && ((group.start === tr.start && tr.has_before) || (group.start + group.parts.length === tr.start + tr.parts.length && tr.has_after))}>
+          {group.parts.map((p, offset) => {
+            const partIndex=group.start+offset
+            const i=partIndex-tr.start
             const hit = partIndex === hitPart
             const setHitRef = (el: HTMLElement | null) => { if (hit) hitRef.current = el; if(i===latestIndex)latestRef.current=el }
             const isUser = p.role === 'user'
@@ -409,8 +501,9 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
                   </button> : null}
               </div>
             )
-          })
+          })}</ProcessGroup>)
         ) : null}
+        {tr?.has_after && !loading ? <div className="ad-page-boundary"><span>已读至原始第 {tr.start + tr.parts.length} 段；下一窗口紧接此处。</span><Button size="small" onClick={() => navigate(tr.start + tr.parts.length)}>继续阅读后续内容</Button></div> : null}
       </div>
 
       {actionError ? <div role="alert" style={{ padding: '8px 24px', color: tokens.colorPaletteRedForeground1, fontSize: 12 }}>{actionError}</div> : null}
@@ -436,6 +529,19 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
 // Markdown/GFM 排版，代码块保留行号、高亮、复制和按需展开。
 
 type Styles = ReturnType<typeof useStyles>
+
+function ProcessGroup({ process, count, summary, reveal, revision, boundary, children }: { process: boolean; count: number; summary: string; reveal: boolean; revision: number; boundary: boolean; children: ReactNode }) {
+  const { preferences } = usePreferences()
+  const [open, setOpen] = useState(reveal || !preferences.foldProcesses)
+  useEffect(() => { if (reveal) setOpen(true) }, [reveal, revision])
+  useEffect(() => setOpen(reveal || !preferences.foldProcesses), [preferences.foldProcesses])
+  if (!process) return <>{children}</>
+  return <details className="ad-process-group" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary>过程记录 · {count} 段 · {summary}{boundary ? ' · 可能承接相邻窗口' : ''}</summary>
+    {boundary ? <p className="ad-source-note">相邻窗口可能还有过程记录；此分组仅表示连续段落。</p> : null}
+    {children}
+  </details>
+}
 
 function ProcessContent({ content, reveal, revealToken, cut, styles, meta, children }: { content: FoldedContent; reveal: boolean; revealToken: number; cut?: number; styles: Styles; meta: string; children: ReactNode }) {
   const {preferences}=usePreferences()
@@ -493,6 +599,20 @@ function renderRichText(text: string, styles: Styles, theme: 'light' | 'dark', r
   return <MarkdownContent text={text} styles={styles} theme={theme} reveal={reveal} revealToken={revealToken} />
 }
 
+// 设置预览复用正文相同的 Markdown、过程折叠和代码渲染器。
+export function ReadingPreview() {
+  const styles = useStyles()
+  const theme = useTheme()
+  const sample = '### 会话阅读预览\n\n正文采用当前字号、行距与阅读宽度。支持 **重点标记** 和路径 `src/session.ts`。\n\n```ts\nconst session = { title: "示例会话" }\nconsole.log(session.title)\n```'
+  const process = { role: 'assistant', kind: 'thinking', text: '核对会话来源，再读取正文。' }
+  return <div className="ad-preview-document" style={{ maxWidth: 'var(--ad-reader-width)' }}>
+    {renderRichText(sample, styles, theme)}
+    <ProcessGroup process count={1} summary="思考过程 1" reveal={false} revision={0} boundary={false}>
+      <ProcessContent content={foldedContent(process)!} reveal={false} revealToken={0} styles={styles} meta="示例">{renderRichText(process.text, styles, theme)}</ProcessContent>
+    </ProcessGroup>
+  </div>
+}
+
 // CodeArea:等宽代码区(标题栏 + 语言徽标 + 行号槽 + 关键字/字符串/注释/数字着色 + 复制)。
 // head 显式给空串表示"无标题"(工具输出),此时标题栏只显示占位标签与复制。
 function CodeArea({ raw, styles, theme, head, scroll, reveal = false, revealToken = 0, foldLong = true }: {
@@ -526,8 +646,10 @@ function CodeArea({ raw, styles, theme, head, scroll, reveal = false, revealToke
   const bodyId = useId()
   const long = foldLong && isLongCode(body)
   const [expanded, setExpanded] = useState(reveal)
+  const [fullHeight, setFullHeight] = useState(false)
   useEffect(() => { if (reveal) setExpanded(true) }, [reveal, revealToken])
-  const shown = !long || expanded
+  const shown = true
+  const previewLines = long && !expanded ? lines.slice(0, 12) : lines
 
   const copy = () => {
     navigator.clipboard?.writeText(body).then(() => {
@@ -542,20 +664,22 @@ function CodeArea({ raw, styles, theme, head, scroll, reveal = false, revealToke
         {lang ? <span className={styles.langBadge}>{lang}</span> : null}
         {name ? <span className={styles.codeName} title={name}>{name}</span> : <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{head === '' ? '原始内容' : '代码'}</Text>}
         <span className={styles.foldCount}>{lines.length} 行</span>
-        {long ? <button className={styles.codeToggle} aria-expanded={shown} aria-controls={bodyId} onClick={() => setExpanded(value => !value)}>{shown ? '收起代码' : '展开代码'}</button> : null}
+        {long ? <button className={styles.codeToggle} aria-expanded={expanded} aria-controls={bodyId} onClick={() => setExpanded(value => !value)}>{expanded ? '收起为预览' : '展开完整代码'}</button> : null}
+        {long && expanded ? <button className={styles.codeToggle} onClick={() => setFullHeight(value => !value)}>{fullHeight ? '限高阅读' : '全部展开'}</button> : null}
         <button className={styles.codeCopy} onClick={copy}>
           {copied ? <CheckmarkRegular fontSize={12} /> : <CopyRegular fontSize={12} />}
           {copied ? '已复制' : '复制'}
         </button>
       </div>
-      <div id={bodyId} hidden={!shown}>{shown ? <div className={styles.codeBody} style={scroll ? { maxHeight: 360, overflowY: 'auto' } : undefined}>
+      <div id={bodyId} hidden={!shown}>{shown ? <div className={styles.codeBody} style={(scroll || (long && expanded && !fullHeight)) ? { maxHeight: 360, overflowY: 'auto' } : undefined}>
         <div className={styles.gutter}>
-          {lines.map((_, i) => <div key={i}>{i + 1}</div>)}
+          {previewLines.map((_, i) => <div key={i}>{i + 1}</div>)}
         </div>
         <div className={styles.codeText}>
-          {lines.map((l, i) => <div key={i}>{l ? highlight(l, theme) : ' '}</div>)}
+          {previewLines.map((l, i) => <div key={i}>{l ? highlight(l, theme) : ' '}</div>)}
         </div>
       </div> : null}</div>
+      {long && !expanded ? <div className="ad-source-note">显示前 12 / {lines.length} 行；复制包含完整已载入代码。</div> : null}
     </div>
   )
 }
