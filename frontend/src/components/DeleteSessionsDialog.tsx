@@ -19,8 +19,8 @@ export function DeleteSessionsDialog({ deletion: d }: { deletion: SessionDeletio
             <dt>将删除会话</dt><dd>{d.preview.sessions} 个（明确选择 {d.targets.length} 个）</dd>
             <dt>已知额外子会话</dt><dd>{d.preview.children} 个{d.includeChildren ? '（已包含）' : '（保留）'}</dd>
             <dt>将删除文件</dt><dd>{d.preview.native_files} 个</dd>
-            {d.preview.metadata_files ? <><dt>改写元数据</dt><dd>{d.preview.metadata_files} 个（状态库与共享索引，只删行不删文件）</dd></> : null}
-            <dt>将删除文件总大小</dt><dd>{(d.preview.bytes / 1024 / 1024).toFixed(2)} MB</dd>
+            {d.preview.metadata_files ? <><dt>改写元数据</dt><dd>{d.preview.metadata_files} 个（状态库与共享索引，只删行不删文件，不改变其大小）</dd></> : null}
+            <dt>将删除文件总大小</dt><dd>{(d.preview.bytes / 1024 / 1024).toFixed(2)} MB（仅统计上述删除的文件）</dd>
           </dl>
           <details className="ad-delete-scope" open><summary>核对会话与路径</summary>
             <ul>{d.preview.titles.map((title, index) => <li key={index}>{title || '未命名会话'}</li>)}</ul>
