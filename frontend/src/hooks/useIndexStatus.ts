@@ -4,16 +4,17 @@ import { useEffect, useState } from 'react'
 import { Events } from '@wailsio/runtime'
 import type { IndexStatus } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as search from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/searchservice'
+import { indexStatusFromEvent } from '../eventPayload'
 
 export function useIndexStatus() {
   const [status, setStatus] = useState<IndexStatus | null>(null)
   useEffect(() => {
     search.Status().then(setStatus).catch(() => {})
     const offProg = Events.On('index:progress', (e: unknown) => {
-      setStatus(extract(e))
+      setStatus(indexStatusFromEvent(e))
     })
     const offReady = Events.On('index:ready', (e: unknown) => {
-      setStatus(extract(e))
+      setStatus(indexStatusFromEvent(e))
     })
     return () => {
       offProg()
@@ -21,10 +22,4 @@ export function useIndexStatus() {
     }
   }, [])
   return status
-}
-
-// 事件载荷取 data[0]:Go 侧 Emit(event, IndexStatus) 单参数。
-function extract(e: unknown): IndexStatus | null {
-  const d = (e as { data?: unknown[] })?.data
-  return d && d[0] ? (d[0] as IndexStatus) : null
 }
