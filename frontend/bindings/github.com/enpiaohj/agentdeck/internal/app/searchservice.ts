@@ -26,11 +26,23 @@ export function Query(q: string, limit: number): $CancellablePromise<$models.Sea
 }
 
 /**
- * Rebuild 触发一次后台重建;构建中重复调用合并为一次后续重建。索引纯派生,
- * 每次 Rebuild 都是整库重建(与 Phase 1 的 Reset 语义一致)。
+ * Rebuild 触发一次后台更新;构建中重复调用合并为一次后续更新。
+ *
+ * 增量：索引库已存在且分词契约未变时，只 upsert 仍存在的会话、删掉已消失
+ * 的会话，不清库。整库 Reset 只在库不存在、schema 不符或调用方显式要求
+ * 全量时发生——28 万段 / 1.7 GB 的库每次启动都重写一遍，期间状态栏一直
+ * 停在 building，代价远大于增量。Add 的语义本就是按 Key 替换。
  */
 export function Rebuild(): $CancellablePromise<void> {
     return $Call.ByID(4181447405);
+}
+
+/**
+ * RebuildFull 强制整库重建（设置里的「重建索引」）。分词契约或脱敏规则
+ * 变更后用它，日常启动与刷新走 Rebuild 的增量路径。
+ */
+export function RebuildFull(): $CancellablePromise<void> {
+    return $Call.ByID(992268452);
 }
 
 /**

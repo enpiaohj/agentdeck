@@ -38,7 +38,7 @@ func TestImportedClaudeChatsPreviewSearchMarksAndExport(t *testing.T) {
 	if got, err := a.NewSearchService().Query("十月份", 20); err != nil || len(got.Hits) != 1 {
 		t.Fatalf("scan: %+v %v", got, err)
 	}
-	a.buildIndex()
+	a.buildIndex(true)
 	if got, err := a.NewSearchService().Query("十月份", 20); err != nil || got.Mode != "index" || len(got.Hits) != 1 {
 		t.Fatalf("index: %+v %v", got, err)
 	}

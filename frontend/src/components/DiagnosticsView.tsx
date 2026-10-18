@@ -58,9 +58,11 @@ export function DiagnosticsView({ revision = 0, embedded = false }: { revision?:
     load()
   }, [load, revision])
 
+  // 「重建索引」是用户显式要求的整库重建（RebuildFull）；启动与刷新走的
+  // 是增量路径（Rebuild），不会清库。
   const rebuild = () => {
     setErr('')
-    void searchService.Rebuild().then(() => setMsg('正在重建全文索引，进度显示在底部状态栏。')).catch(reason => setErr(`索引重建未能启动：${String(reason)}`))
+    void searchService.RebuildFull().then(() => setMsg('正在整库重建全文索引，进度显示在底部状态栏。')).catch(reason => setErr(`索引重建未能启动：${String(reason)}`))
   }
 
   return (
@@ -145,7 +147,7 @@ function IndexLine({ status }: { status: IndexStatus | null }) {
   if (!status) return <Spinner size="extra-tiny" />
   switch (status.state) {
     case 'ready': return <Text size={300}>索引就绪：{status.sessions} 会话 / {status.docs} 段</Text>
-    case 'building': return <Text size={300}><Spinner size="extra-tiny" /> 正在构建：{status.sessions} 会话…</Text>
+    case 'building': return <Text size={300}><Spinner size="extra-tiny" /> 正在构建：{status.sessions}{status.total ? ` / ${status.total}` : ''} 会话…</Text>
     case 'failed': return <Text size={300} style={{ color: tokens.colorPaletteRedForeground1 }}>索引构建失败：{status.error}（当前使用逐会话扫描）</Text>
     default: return <Text size={300}>索引未开始</Text>
   }

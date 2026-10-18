@@ -43,10 +43,12 @@ type Index struct {
 }
 
 // schema 一次性建齐：docs 存原文（rowid 表，其 rowid 即 FTS 行的
-// rowid），docs_fts 存分词后的串。
+// rowid），docs_fts 存分词后的串，doc_sources 记每个会话上次被索引时
+// 的文件状态，供增量更新判断「这个会话变了吗」。
 var schema = []string{
 	`CREATE TABLE IF NOT EXISTS docs (key TEXT PRIMARY KEY, text TEXT NOT NULL)`,
 	`CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(seg, tokenize='unicode61')`,
+	`CREATE TABLE IF NOT EXISTS doc_sources (key TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime INTEGER NOT NULL)`,
 }
 
 // Open 打开（必要时创建）位于 path 的索引库；path 为空时用内存库。
@@ -82,6 +84,7 @@ func (ix *Index) Reset() error {
 	for _, stmt := range []string{
 		`DROP TABLE IF EXISTS docs_fts`,
 		`DROP TABLE IF EXISTS docs`,
+		`DROP TABLE IF EXISTS doc_sources`,
 	} {
 		if _, err := tx.Exec(stmt); err != nil {
 			tx.Rollback()
@@ -155,6 +158,139 @@ func (ix *Index) Add(docs []Doc) error {
 				tx.Rollback()
 				return err
 			}
+		}
+	}
+	return tx.Commit()
+}
+
+// Keys 返回索引内已有的会话标识（doc Key 去掉 `#n` 后缀前的部分）。
+// 调用方据此判断哪些会话已被索引过，实现增量更新。
+func (ix *Index) Keys() ([]string, error) {
+	keys, _, err := ix.scanKeys()
+	return keys, err
+}
+
+// Totals 返回索引当前的规模：收录的会话数与正文段数。状态条要显示的是
+// 规模，而增量更新每一趟只处理变过的会话，那一趟的计数不是规模——用它
+// 会把 28 万段的库报成 4 万段。
+func (ix *Index) Totals() (int, int, error) {
+	keys, docs, err := ix.scanKeys()
+	if err != nil {
+		return 0, 0, err
+	}
+	return len(keys), docs, nil
+}
+
+// scanKeys 一趟扫过 docs 表：返回去重后的会话标识与正文段总数。Keys 与
+// Totals 都要这两样里的一个，扫两趟纯属浪费——28 万行的表。
+func (ix *Index) scanKeys() ([]string, int, error) {
+	rows, err := ix.db.Query(`SELECT key FROM docs`)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	seen := map[string]bool{}
+	var out []string
+	docs := 0
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			return nil, 0, err
+		}
+		docs++
+		// Key 形如 "agent:id#n"；会话标识是 "#" 之前的部分。
+		base := key
+		if i := strings.Index(key, "#"); i >= 0 {
+			base = key[:i]
+		}
+		if !seen[base] {
+			seen[base] = true
+			out = append(out, base)
+		}
+	}
+	return out, docs, rows.Err()
+}
+
+// SourceStamp 是调用方记录的某个会话上次被索引时的文件状态。mtime 用
+// UnixNano 存，避免时区与精度在往返中丢失。
+type SourceStamp struct {
+	Key   string
+	Size  int64
+	Mtime int64
+}
+
+// Stamps 取所有已记录的会话文件状态。
+func (ix *Index) Stamps() ([]SourceStamp, error) {
+	rows, err := ix.db.Query(`SELECT key, size, mtime FROM doc_sources`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SourceStamp
+	for rows.Next() {
+		var s SourceStamp
+		if err := rows.Scan(&s.Key, &s.Size, &s.Mtime); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// SaveStamps 批量更新会话文件状态。索引里没有对应 doc 的会话不记——
+// 记了会让下次增量把它当成「已索引过」而跳过。
+func (ix *Index) SaveStamps(stamps []SourceStamp) error {
+	if len(stamps) == 0 {
+		return nil
+	}
+	tx, err := ix.db.Begin()
+	if err != nil {
+		return err
+	}
+	for _, s := range stamps {
+		// 只给索引里仍有 doc 的会话留记录：删除流程先 Remove 再 SaveStamps，
+		// 顺序反了会留下永不匹配的孤儿行。
+		var has int
+		if err := tx.QueryRow(`SELECT count(*) FROM docs WHERE key = ? OR key LIKE ?`, s.Key, s.Key+"#%").Scan(&has); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if has == 0 {
+			continue
+		}
+		if _, err := tx.Exec(`INSERT INTO doc_sources(key, size, mtime) VALUES (?, ?, ?)
+			ON CONFLICT(key) DO UPDATE SET size = excluded.size, mtime = excluded.mtime`, s.Key, s.Size, s.Mtime); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// Remove 删除这些会话的全部 doc（原文与分词行）。会话在上游消失、导入库
+// 清理后调用；留着会让检索命中一个点进去只有「原始记录不存在」的会话。
+// 未知标识静默跳过——删除本来就不要求目标存在。
+func (ix *Index) Remove(sessionKeys []string) error {
+	if len(sessionKeys) == 0 {
+		return nil
+	}
+	tx, err := ix.db.Begin()
+	if err != nil {
+		return err
+	}
+	for _, key := range sessionKeys {
+		prefix := key + "#"
+		if _, err := tx.Exec(`DELETE FROM docs_fts WHERE rowid IN (SELECT rowid FROM docs WHERE key = ? OR key LIKE ?)`, key, prefix+"%"); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM docs WHERE key = ? OR key LIKE ?`, key, prefix+"%"); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM doc_sources WHERE key = ?`, key); err != nil {
+			tx.Rollback()
+			return err
 		}
 	}
 	return tx.Commit()

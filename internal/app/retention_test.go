@@ -45,7 +45,7 @@ func TestReadConversationSurvivesSourceRemovalRefreshAndRestart(t *testing.T) {
 	if cmd, err := reopened.NewResumeService().Command("claude:retained"); err != nil || cmd != "" {
 		t.Fatalf("本地保留副本误显示可恢复: %q %v", cmd, err)
 	}
-	reopened.buildIndex()
+	reopened.buildIndex(true)
 	if got, err := reopened.NewSearchService().Query("持久保存", 20); err != nil || len(got.Hits) != 1 {
 		t.Fatalf("持久正文不可检索: %+v %v", got, err)
 	}
@@ -64,7 +64,7 @@ func TestRetentionKeepsFullTextBeyondPreviewCutsAndIndexReset(t *testing.T) {
 	text := strings.Repeat("保留", 9000) + "末尾内容"
 	sess := claudeFixture(t, t.TempDir(), "full", text)
 	a.setList([]sessions.Session{sess})
-	a.buildIndex() // startup/rebuild captures sessions even before opening one
+	a.buildIndex(true) // startup/rebuild captures sessions even before opening one
 	preview, err := a.NewSessionService().Transcript("claude:full")
 	if err != nil || preview.Parts[0].Cut == 0 {
 		t.Fatalf("预览应保留显示上限: %+v %v", preview, err)
@@ -86,7 +86,7 @@ func TestRetentionKeepsFullTextBeyondPreviewCutsAndIndexReset(t *testing.T) {
 	if got, err := a.NewSearchService().Query("末尾内容", 20); err != nil || len(got.Hits) != 1 {
 		t.Fatalf("快速搜索不应裁切正文: %+v %v", got, err)
 	}
-	a.buildIndex() // reset must not erase the independent permanent library
+	a.buildIndex(true) // reset must not erase the independent permanent library
 	stats := a.NewSessionService().LibraryStatus()
 	if stats.Sessions != 1 || stats.Versions != 1 || stats.Error != "" {
 		t.Fatalf("索引重建/空读取损坏永久库: %+v", stats)

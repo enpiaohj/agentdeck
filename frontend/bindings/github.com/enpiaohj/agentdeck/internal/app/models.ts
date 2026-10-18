@@ -313,11 +313,14 @@ export class Filter {
 /**
  * IndexStatus 是全文索引的状态条数据。State: idle | building | ready |
  * failed。Sessions 是已索引会话数，Docs 是收录的正文块数。
+ * Total 是这批会话里待索引的总数（building 时给进度一个分母），
+ * 未开始或无法统计时为 0，此时前端只显示已索引数。
  */
 export class IndexStatus {
     "state": string;
     "sessions": number;
     "docs": number;
+    "total": number;
     "error"?: string;
 
     /** Creates a new IndexStatus instance. */
@@ -330,6 +333,9 @@ export class IndexStatus {
         }
         if (!("docs" in $$source)) {
             this["docs"] = 0;
+        }
+        if (!("total" in $$source)) {
+            this["total"] = 0;
         }
 
         Object.assign(this, $$source);

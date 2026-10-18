@@ -47,7 +47,7 @@ func TestRefreshDoesNotSearchStaleIndex(t *testing.T) {
 	dir := t.TempDir()
 	first := claudeFixture(t, dir, "first", "Original searchable content")
 	a.setList([]sessions.Session{first})
-	a.buildIndex()
+	a.buildIndex(true)
 	search := a.NewSearchService()
 	if got, err := search.Query("Original", 20); err != nil || got.Mode != "index" || len(got.Hits) != 1 {
 		t.Fatalf("initial query: %+v %v", got, err)
@@ -113,7 +113,7 @@ func TestRebuildRequestedDuringBuildIsNotLost(t *testing.T) {
 	var release sync.Once
 	unlock := func() { release.Do(a.mu.Unlock) }
 	t.Cleanup(unlock)
-	go a.buildIndex()
+	go a.buildIndex(true)
 	wait := func(check func() bool) {
 		t.Helper()
 		deadline := time.Now().Add(5 * time.Second)
@@ -150,7 +150,7 @@ func TestRebuildRequestedDuringBuildIsNotLost(t *testing.T) {
 func TestSearchDoesNotReturnOrphanedIndexRows(t *testing.T) {
 	a, _, _, _ := newTestApp(t)
 	a.setList([]sessions.Session{claudeFixture(t, t.TempDir(), "removed", "Orphaned indexed content")})
-	a.buildIndex()
+	a.buildIndex(true)
 	a.setList(nil)
 	got, err := a.NewSearchService().Query("Orphaned", 20)
 	if err != nil || len(got.Hits) != 0 {
