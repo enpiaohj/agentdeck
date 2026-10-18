@@ -45,6 +45,11 @@ desktop.ini
 .env.local
 *.local.json
 
+# ---- Claude Code 本地工作区 ----
+# 实施期笔记等本地文件:留在工作区,不随仓库分发。未跟踪文件会让
+# go build 判定 vcs.modified=true,正式构建要求干净工作区
+.claude/*.notes
+
 # ---- 发布快照中的大文件 ----
 # releases/ 保留 source/ 与 CHANGELOG.md，二进制产物上传 GitHub Releases
 releases/**/*.exe
