@@ -155,11 +155,21 @@ export function SearchIn(key: string, needle: string): $CancellablePromise<$mode
 }
 
 /**
+ * SearchInAll 按原始段顺序返回所有命中段，定位编号与 TranscriptWindow 一致。
+ * 每段只返回一个摘要，避免长工具输出中的重复词占满导航。
+ */
+export function SearchInAll(key: string, needle: string): $CancellablePromise<$models.SearchHitView[]> {
+    return $Call.ByID(2145851954, key, needle).then(($result: any) => {
+        return $$createType18($result);
+    });
+}
+
+/**
  * Transcript 会话全文。
  */
 export function Transcript(key: string): $CancellablePromise<$models.TranscriptView | null> {
     return $Call.ByID(4281957278, key).then(($result: any) => {
-        return $$createType19($result);
+        return $$createType20($result);
     });
 }
 
@@ -170,7 +180,7 @@ export function Transcript(key: string): $CancellablePromise<$models.TranscriptV
  */
 export function TranscriptWindow(key: string, at: number, before: boolean): $CancellablePromise<$models.TranscriptView | null> {
     return $Call.ByID(3007435842, key, at, before).then(($result: any) => {
-        return $$createType19($result);
+        return $$createType20($result);
     });
 }
 
@@ -193,5 +203,6 @@ const $$createType14 = $models.RestoreReport.createFrom;
 const $$createType15 = $models.ScanProgress.createFrom;
 const $$createType16 = $models.SearchHitView.createFrom;
 const $$createType17 = $Create.Nullable($$createType16);
-const $$createType18 = $models.TranscriptView.createFrom;
-const $$createType19 = $Create.Nullable($$createType18);
+const $$createType18 = $Create.Array($$createType16);
+const $$createType19 = $models.TranscriptView.createFrom;
+const $$createType20 = $Create.Nullable($$createType19);

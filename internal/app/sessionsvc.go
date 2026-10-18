@@ -138,23 +138,43 @@ func (s *SessionService) Transcript(key string) (*TranscriptView, error) {
 
 // SearchIn 单会话内检索（命中片段），走 sessions 层子串匹配。
 func (s *SessionService) SearchIn(key, needle string) (*SearchHitView, error) {
+	hits, err := s.SearchInAll(key, needle)
+	if err != nil || len(hits) == 0 {
+		return nil, err
+	}
+	return &hits[0], nil
+}
+
+// SearchInAll 按原始段顺序返回所有命中段，定位编号与 TranscriptWindow 一致。
+// 每段只返回一个摘要，避免长工具输出中的重复词占满导航。
+func (s *SessionService) SearchInAll(key, needle string) ([]SearchHitView, error) {
 	_, byKey, _ := s.a.snapshot()
 	sess, ok := byKey[key]
 	if !ok {
 		return nil, fmt.Errorf("会话不存在: %s", key)
 	}
+	out := make([]SearchHitView, 0)
+	needle = sessions.NeedleOf(needle)
+	if needle == "" {
+		return out, nil
+	}
 	tr, _, _, err := s.a.readConversation(sess)
 	if err != nil {
 		return nil, err
 	}
-	h, found := sessions.SearchRetainedTranscript(tr, sessions.NeedleOf(needle))
-	if !found {
-		return nil, err
+	for i := range tr.Parts {
+		part := tr
+		part.Parts = tr.Parts[i : i+1]
+		h, found := sessions.SearchRetainedTranscript(part, needle)
+		if found {
+			out = append(out, SearchHitView{
+				Key: key, Part: fmt.Sprintf("%s#%d", key, i), Agent: sess.Agent,
+				Title: sess.Title, Last: lastString(sess.Last), Match: h.Match,
+				Snippet: h.Before + h.Match + h.After,
+			})
+		}
 	}
-	return &SearchHitView{
-		Key: key, Agent: sess.Agent, Title: sess.Title, Last: lastString(sess.Last),
-		Match: h.Match, Snippet: h.Before + h.Match + h.After,
-	}, nil
+	return out, nil
 }
 
 // Agents 侧栏 agent 清单（计数含归档，前端按需展示）。
