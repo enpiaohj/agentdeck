@@ -13,7 +13,6 @@ import {
   CopyRegular,
   CheckmarkRegular,
   ArrowDownloadRegular,
-  CheckmarkCircleRegular,
   AddRegular,
   DocumentTextRegular,
   StarFilled,
@@ -21,7 +20,7 @@ import {
   ArchiveRegular,
   DeleteRegular,
 } from '@fluentui/react-icons'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Dialogs } from '@wailsio/runtime'
 import type { SessionView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
@@ -110,6 +109,8 @@ type Props = {
   onDeleteSessions: (items: SessionView[]) => void
 }
 
+const noteDrafts = new Map<string, string>()
+
 export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Props) {
   const styles = useStyles()
   const [tagDraft, setTagDraft] = useState('')
@@ -117,8 +118,10 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
   const [noteDraft, setNoteDraft] = useState(session?.note ?? '')
   const [copied, setCopied] = useState('')
   const [msg, setMsg] = useState('')
+  const currentKey = useRef(session?.key)
+  currentKey.current = session?.key
 
-  useEffect(() => { setNoteDraft(session?.note ?? '') }, [session?.key, session?.note])
+  useEffect(() => { setNoteDraft(session ? noteDrafts.get(session.key) ?? session.note : '') }, [session?.key, session?.note])
   useEffect(() => { setMsg(''); setAdding(false); setTagDraft('') }, [session?.key])
 
   if (!session) {
@@ -157,7 +160,13 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
     markService.SetTags(session.key, session.tags.filter((x) => x !== t)).then(onChanged).catch(e => setMsg(`移除标签失败：${String(e).slice(0, 120)}`))
   }
   const saveNote = () => {
-    markService.SetNote(session.key, noteDraft).then(() => { setMsg('备注已保存'); onChanged() }).catch((e) => setMsg(String(e)))
+    const key = session.key
+    const value = noteDraft
+    markService.SetNote(key, value).then(() => {
+      if (noteDrafts.get(key) === value) noteDrafts.delete(key)
+      if (currentKey.current === key) setMsg('备注已保存')
+      onChanged()
+    }).catch((e) => { if (currentKey.current === key) setMsg(String(e)) })
   }
   const toggleStar = () => {
     markService.SetFavorite(session.key, !session.favorite).then(onChanged).catch(e => setMsg(`收藏操作失败：${String(e).slice(0, 120)}`))
@@ -188,6 +197,7 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
       <div className={styles.body}>
         <div className={styles.titleRow}>
           <Text className={styles.paneTitle}>{session.title || '未命名会话'}</Text>
+          <Button size="small" appearance="subtle" icon={session.favorite ? <StarFilled /> : <StarRegular />} onClick={toggleStar} aria-label={session.favorite ? '取消收藏' : '收藏'} />
           <Button
             appearance="subtle" size="small"
             icon={copied === 'title' ? <CheckmarkRegular /> : <CopyRegular />}
@@ -199,46 +209,12 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
         <div className={styles.agentRow}>
           <AgentMark agent={session.agent} size={22} />
           <Text size={300}>{m.label}{session.source === 'wsl' ? '(WSL)' : ''}</Text>
-          <span className={styles.capability} style={{ color: session.resume ? undefined : tokens.colorNeutralForeground3 }}>{session.resume ? <><CheckmarkCircleRegular />支持继续会话</> : '仅支持查看'}</span>
+          {session.source === 'import' || session.source === 'retained' ? <Text size={200}>{session.source === 'import' ? '官方导入' : '永久保留副本'}</Text> : null}
         </div>
-
-        <div className={styles.kv}>
-          {session.role === 'subagent' ? <><span className={styles.k}>会话类型</span><span className={styles.v}>子 Agent 会话</span></> : null}
-          {session.account ? <><span className={styles.k}>账号</span><span className={styles.v}>{session.account}</span></> : null}
-          {session.source === 'import' ? <><span className={styles.k}>记录来源</span><span className={styles.v}>官方导出 · 本地副本</span></> : null}
-          {session.source === 'retained' ? <><span className={styles.k}>记录来源</span><span className={styles.v}>AgentDeck 永久保留</span></> : null}
-          <span className={styles.k}>保留策略</span><span className={styles.v}>读取后持久保存，不自动清理</span>
-          <span className={styles.k}>创建时间</span><span className={styles.v}>{fmtTime(session.created)}</span>
-          <span className={styles.k}>最后更新</span><span className={styles.v} title={fmtTime(session.last)}>{relTime(session.last)}</span>
-          <span className={styles.k}>消息数量</span><span className={styles.v}>{session.messages}</span>
-          {session.tokens > 0 ? (<>
-            <span className={styles.k}>Token 消耗</span>
-            <span className={styles.v}>约 {fmtTokens(session.tokens)}</span>
-          </>) : null}
-          <span className={styles.k}>项目</span><span className={styles.v}>{session.project || '未识别项目'}</span>
-          <span className={styles.k}>恢复能力</span>
-          <span className={styles.v} >
-            {session.resume ? '可恢复' : '仅支持查看历史'}
-          </span>
-        </div>
-
-        {session.cwd || session.source_path ? <details className={styles.advanced} key={session.key}>
-          <summary className={styles.advancedSummary}>工作目录与存储位置</summary>
-          <div className={styles.kv}>
-            {session.cwd ? <><span className={styles.k}>工作目录</span><span className={styles.v}>{session.cwd}</span></> : null}
-            {session.source_path ? <><span className={styles.k}>源路径</span><span className={styles.v}>{session.source_path}</span></> : null}
-          </div>
-        </details> : null}
 
         <div className={styles.section}>
           <div className={styles.sectionHead}>
             <span className={styles.sectionTitle}>标签</span>
-            <button
-              className={styles.linkBtn}
-              onClick={toggleStar}
-            >
-              {session.favorite ? <StarFilled style={{ color: tokens.colorStatusWarningForeground3 }} /> : <StarRegular />} {session.favorite ? '已收藏' : '收藏'}
-            </button>
           </div>
           <div className={styles.chips}>
             {session.tags.map((t) => (
@@ -267,6 +243,7 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
         <div className={styles.section}>
           <div className={styles.sectionHead}>
             <span className={styles.sectionTitle}>备注</span>
+            <Text size={200} role="status">{noteDraft !== session.note ? '未保存 · 本次运行保留草稿' : '已保存'}</Text>
             {noteDraft !== session.note ? (
               <button className={styles.linkBtn} title="Ctrl+Enter 保存备注" onClick={saveNote}>保存</button>
             ) : null}
@@ -275,13 +252,33 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
             size="small"
             placeholder="输入会话备注…" title="Ctrl+Enter 保存备注" aria-label="会话备注"
             value={noteDraft}
-            onChange={(_, d) => setNoteDraft(d.value)}
+            onChange={(_, d) => { noteDrafts.set(session.key, d.value); setNoteDraft(d.value) }}
             onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); saveNote() } }}
             rows={2}
             resize="vertical"
           />
         </div>
 
+        <details className={styles.advanced} key={`metadata-${session.key}`}>
+          <summary className={styles.advancedSummary}>完整会话信息</summary>
+          <div className={styles.kv}>
+            <span className={styles.k}>会话类型</span><span className={styles.v}>{session.role === 'subagent' ? '子 Agent 会话' : '主会话'}</span>
+            {session.account ? <><span className={styles.k}>账号</span><span className={styles.v}>{session.account}</span></> : null}
+            <span className={styles.k}>保留策略</span><span className={styles.v}>读取后持久保存，不自动清理</span>
+            <span className={styles.k}>创建时间</span><span className={styles.v}>{fmtTime(session.created)}</span>
+            <span className={styles.k}>最后更新</span><span className={styles.v} title={fmtTime(session.last)}>{relTime(session.last)}</span>
+            <span className={styles.k}>消息数量</span><span className={styles.v}>{session.messages}</span>
+            {session.tokens > 0 ? <><span className={styles.k}>Token 消耗</span><span className={styles.v}>约 {fmtTokens(session.tokens)}</span></> : null}
+            <span className={styles.k}>项目</span><span className={styles.v}>{session.project || '未识别项目'}</span>
+          </div>
+        </details>
+        {session.cwd || session.source_path ? <details className={styles.advanced} key={session.key}>
+          <summary className={styles.advancedSummary}>工作目录与存储位置</summary>
+          <div className={styles.kv}>
+            {session.cwd ? <><span className={styles.k}>工作目录</span><span className={styles.v}>{session.cwd}</span></> : null}
+            {session.source_path ? <><span className={styles.k}>源路径</span><span className={styles.v}>{session.source_path}</span></> : null}
+          </div>
+        </details> : null}
         <div className={styles.section}>
           <span className={styles.sectionTitle}>更多操作</span>
           <div className={styles.actions}>
