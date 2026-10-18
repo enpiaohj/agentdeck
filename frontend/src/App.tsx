@@ -422,14 +422,16 @@ export function App() {
             </div>
           ) : (
             <>
-              {searchQuery.trim() ? <SearchResults query={searchQuery} revision={listVersion} selectedKey={selected?.key ?? null} onFocusSearch={() => searchRef.current?.focus()} onJump={onJump} /> : <SessionList
+              <div style={{ display: searchQuery.trim() ? 'none' : 'contents' }}><SessionList
                 filter={filter}
+                onFilter={setFilter}
                 selectedKey={selected?.key ?? null}
                 onSelect={onSelect}
                 onOpenDetails={session => { onSelect(session); setInfoOpen(true) }}
                 onDeleteSessions={deletion.open}
                 listVersion={listVersion}
-              />}
+              /></div>
+              {searchQuery.trim() ? <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}><Button size="small" onClick={() => setSearchQuery('')}>返回会话列表 · 保留筛选与位置</Button><SearchResults query={searchQuery} revision={listVersion} selectedKey={selected?.key ?? null} onFocusSearch={() => searchRef.current?.focus()} onJump={onJump} /></div> : null}
               <MessagePane session={selected} sourceVersion={sourceVersion} jumpPart={jumpPart} jumpToken={jumpToken} infoOpen={infoOpen} onToggleInfo={() => setInfoOpen(value => !value)} onOpenInfo={() => setInfoOpen(true)} />
               {infoOpen ? (
                 <InfoPane
@@ -442,7 +444,7 @@ export function App() {
                 <button
                   className={styles.infoStrip}
                   onClick={() => setInfoOpen(true)}
-                  title="展开会话信息" aria-label="展开会话信息" aria-expanded={false} aria-controls="session-details"
+                  title="展开会话信息" aria-label="展开会话信息" aria-expanded={false}
                 >
                   <PanelRightRegular fontSize={16} />
                 </button>

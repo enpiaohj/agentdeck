@@ -152,9 +152,10 @@ type Props = {
   onOpenDetails: (s: SessionView) => void
   onDeleteSessions: (items: SessionView[]) => void
   listVersion?: number
+  onFilter: (filter: SidebarFilter) => void
 }
 
-export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDeleteSessions, listVersion }: Props) {
+export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDeleteSessions, listVersion, onFilter }: Props) {
   const styles = useStyles()
   const { rows, loading, error, reload } = useRows(filter, listVersion)
   const [selection, setSelection] = useState<SessionSelection>(() => ({ keys: new Set(selectedKey ? [selectedKey] : []), anchor: selectedKey, focus: selectedKey }))
@@ -353,15 +354,20 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
       <div className={styles.head}>
         <span className={styles.headTitle} title={filter.project || listTitle}>{listTitle}</span>
         <span className={styles.count} aria-live="polite" title="子会话收在主会话下，不重复计入会话数量">{query || month || account ? `${hierarchy.roots.length} / ${allFamilies.roots.length}` : allFamilies.roots.length} 个会话{hierarchy.childKeys.size ? ` · ${hierarchy.childKeys.size} 个子会话` : ''}</span>
-        <Tooltip content="全选当前列表 (Ctrl+A)" relationship="label"><Button size="small" appearance="subtle" icon={<SelectAllOnRegular />} aria-label="全选会话" disabled={busy || !visibleRows.length} onClick={selectAll} /></Tooltip>
+        <Tooltip content="全选筛选后当前展开的会话（含已展开子会话）(Ctrl+A)" relationship="label"><Button size="small" appearance="subtle" icon={<SelectAllOnRegular />} aria-label="全选会话" disabled={busy || !visibleRows.length} onClick={selectAll} /></Tooltip>
         <Tooltip content={order === 'latest' ? '切换为最早活动优先' : '切换为最近活动优先'} relationship="label">
         <button className={styles.headBtn} aria-label={order === 'latest' ? '最早活动优先' : '最近活动优先'} onClick={() => setOrder(order === 'latest' ? 'oldest' : 'latest')}>
           <ArrowSortRegular fontSize={15} />
         </button>
         </Tooltip>
       </div>
-      <span id={helpId} className="ad-sr-only">单击选中；Ctrl 点击切换；Shift 连选；Ctrl+Shift 追加连选；Ctrl+A 全选当前可见列表；Esc 清空选择。上下方向键移动，Home / End 到首尾；左右方向键展开或收起子会话。</span>
+      <span id={helpId} className="ad-sr-only">单击选中；Ctrl 点击切换；Shift 连选；Ctrl+Shift 追加连选；Ctrl+A 全选筛选后当前展开项（包含屏幕外行）；Esc 清空选择。上下方向键移动，Home / End 到首尾；左右方向键展开或收起子会话。</span>
       <div className={styles.tools}>
+        <div className="ad-filter-chips">
+          {filter.agent ? <Button size="small" onClick={() => onFilter({ ...filter, agent: undefined })}>{agentMeta(filter.agent).label} ×</Button> : null}
+          {filter.project ? <Button size="small" title={filter.project} onClick={() => onFilter({ ...filter, project: undefined })}>{projectName} ×</Button> : null}
+          {filter.favorites || filter.archived ? <Button size="small" onClick={() => onFilter({ ...filter, favorites: false, archived: false })}>{filter.archived ? '归档' : '收藏'} ×</Button> : null}
+        </div>
         <Input size="small" appearance="filled-lighter" aria-label="筛选当前会话列表" placeholder="筛选标题、项目、标签、账号…" value={query} onChange={(_, data) => setQuery(data.value)} contentBefore={<SearchRegular />} contentAfter={query || month || account ? <button className={styles.headBtn} aria-label="清除列表筛选" title="清除关键词、月份和账号筛选" onClick={() => { setQuery(''); setMonth(''); setAccount('') }}><DismissRegular /></button> : undefined} />
         <div className="ad-list-filters"><div className="ad-date-filter">
           <select aria-label="按活动月份筛选会话" value={month} onChange={event => setMonth(event.target.value)}>
@@ -419,7 +425,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
                 const selected = checked.has(s.key)
                 const active = selected && selectedKey === s.key
                 const m = agentMeta(s.agent)
-                const contextLabel = [s.account, s.project].filter(Boolean).join(' · ')
+                const contextLabel = [s.account, filter.project ? '' : s.project].filter(Boolean).join(' · ')
                 const detail = [m.label, s.role === 'subagent' ? '子会话' : '', contextLabel, s.tags.length ? `标签：${s.tags.join('、')}` : ''].filter(Boolean).join(' · ')
                 const childCount = hierarchy.children.get(s.key)?.length ?? 0
                 const nested = hierarchy.childKeys.has(s.key)
@@ -480,8 +486,8 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
                       <div className={styles.meta} title={detail}>
                         <AgentMark agent={s.agent} size={14} />
                         {s.role === 'subagent' ? <span className={styles.childLabel}>子会话</span> : null}
-                        {!filter.agent ? <><span className={styles.agentName}>{m.label}</span><span aria-hidden="true">·</span></> : null}
-                        <span className={styles.context}>{contextLabel || (filter.agent ? m.label : '无项目')}</span>
+                        {!filter.agent ? <><span className={styles.agentName} title={m.label}>{m.label}</span><span aria-hidden="true">·</span></> : null}
+                        <span className={styles.context}>{contextLabel || (filter.project ? '当前项目' : '无项目')}</span>
                         {childCount ? <button type="button" className={styles.familyToggle} aria-label={`${expandedFamilies.has(s.key) ? '收起' : '展开'} ${childCount} 个子会话`} aria-expanded={expandedFamilies.has(s.key)} disabled={busy} onClick={event => { event.stopPropagation(); toggleFamily(s) }}>
                           {expandedFamilies.has(s.key) ? <ChevronDownRegular fontSize={12} /> : <ChevronRightRegular fontSize={12} />}{childCount} 个子会话
                         </button> : null}
@@ -500,7 +506,8 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
       {contextOpen && context ? <SessionContextMenu key={`${context.key}:${context.x}:${context.y}`} items={contextItems} point={context} onClose={closeContext} onAction={action => void contextAction(action)} /> : null}
       {actionMessage ? <Text size={200} role="status" style={{ padding: '0 12px 8px', color: tokens.colorNeutralForeground3 }}>{actionMessage}</Text> : null}
       {bulkError ? <Text size={200} role="alert" style={{ padding: '0 12px 8px', color: tokens.colorPaletteRedForeground1, overflowWrap: 'anywhere' }}>{bulkError}</Text> : null}
-      {checked.size > 0 ? (
+      {checked.size === 1 ? <Text size={200} style={{ padding: '6px 16px', color: tokens.colorNeutralForeground3 }}>正在阅读 · Ctrl / Shift 多选，右键查看单项操作</Text> : null}
+      {checked.size > 1 ? (
         <div className={styles.bulkBar} role="group" aria-label="批量会话操作">
           <Text size={200} weight="semibold" aria-live="polite" style={{ marginRight: 'auto' }}>已选 {checked.size} 项</Text>
           <Button size="small" icon={<StarRegular />} disabled={busy}
@@ -511,7 +518,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
           <Button size="small" disabled={busy} aria-label="清空选择" title="清空选择 (Esc)" onClick={clearSelection}>清空</Button>
         </div>
       ) : null}
-      {checked.size > 0 && deleteReason ? <Text size={200} className="ad-delete-disabled-reason">{deleteReason}</Text> : null}
+      {checked.size > 1 && deleteReason ? <Text size={200} className="ad-delete-disabled-reason">{deleteReason}</Text> : null}
     </div>
   )
 }

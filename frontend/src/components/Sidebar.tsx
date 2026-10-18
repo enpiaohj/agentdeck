@@ -120,14 +120,18 @@ type Props = {
   onOpenDiagnostics?: () => void
 }
 
-function isAll(f: SidebarFilter) { return !f.agent && !f.favorites && !f.archived && !f.project }
+function isAll(f: SidebarFilter) { return !f.favorites && !f.archived }
 
 export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, onOpenDiagnostics }: Props) {
   const styles = useStyles()
   const agents = useAgents(listVersion)
   const projects = useProjects(listVersion)
 
-  const pick = (f: SidebarFilter) => () => onFilter(f)
+  const pick = (f: SidebarFilter) => () => {
+    if ('agent' in f) onFilter({ ...filter, agent: filter.agent === f.agent ? undefined : f.agent })
+    else if ('project' in f) onFilter({ ...filter, project: filter.project === f.project ? undefined : f.project })
+    else onFilter({ ...filter, favorites: !!f.favorites, archived: !!f.archived })
+  }
 
   if (collapsed) {
     return (
