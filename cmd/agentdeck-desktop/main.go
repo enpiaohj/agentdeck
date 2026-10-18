@@ -45,6 +45,13 @@ func main() {
 	}
 	defer a.Close()
 
+	// 单实例：已有窗口在运行时直接退出。此前只有 session.lock 文件标记，
+	// 多开一次就被误判成「上次未正常退出」，崩溃横幅会无端亮起。
+	if a.ClaimSingleInstance() {
+		fmt.Fprintln(os.Stderr, "AgentDeck 已在运行，本次启动已退出。")
+		os.Exit(0)
+	}
+
 	wails := application.New(application.Options{
 		Name:        "AgentDeck",
 		Description: "跨 Agent 历史会话工作台",

@@ -73,6 +73,8 @@ type App struct {
 	warmMu     sync.Mutex // serialize message scans across refreshed generations
 	generation uint64
 	search     *searchState
+	// singleRelease 释放单实例互斥锁；nil 表示本进程没有取得所有权。
+	singleRelease func()
 }
 
 // New 打开标注库并返回装配根。索引不在此建——Rebuild 触发后台重建。
@@ -124,6 +126,22 @@ func New(cfg Config) (*App, error) {
 	return a, nil
 }
 
+// singleInstanceMutexName 是本应用唯一实例的命名互斥锁名。与 session.lock
+// 文件标记不同，它是所有权而非存在性：已有实例时第二个进程直接退出，
+// session.lock 于是只在真正的异常退出后残留，不再被多开误判成崩溃。
+const singleInstanceMutexName = "AgentDeck-SingleInstance"
+
+// ClaimSingleInstance 供入口调用：已有一个实例在运行时返回 true，调用方
+// 应聚焦已有窗口并退出。取得的实例所有权随 Close 释放。
+func (a *App) ClaimSingleInstance() bool {
+	release, already := claimSingleInstance(singleInstanceMutexName)
+	if already {
+		return true
+	}
+	a.singleRelease = release
+	return false
+}
+
 // indexDefaultPath 是索引库的默认落盘位置:%LOCALAPPDATA%\AgentDeck\
 // index.db(缓存性质的用户数据,Local 而非 Roaming)。
 func indexDefaultPath() (string, error) {
@@ -151,6 +169,10 @@ func (a *App) Close() {
 	a.captureMu.Unlock()
 	a.marks.Close()
 	clearCrash(a.cfg.MarksPath)
+	if a.singleRelease != nil {
+		a.singleRelease()
+		a.singleRelease = nil
+	}
 }
 
 // 服务构造器:cmd 装配用(字段未导出,强制经此创建)。
