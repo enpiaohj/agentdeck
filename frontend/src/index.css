@@ -99,7 +99,10 @@ button:focus-visible, select:focus-visible, [role='button']:focus-visible, [role
 .ad-storage-path { font-size: 11px; overflow-wrap: anywhere; user-select: text; }
 .ad-storage-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
 .ad-storage-old { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--ad-line); }
-.ad-storage-progress, .ad-storage-message, .ad-storage-restart { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; line-height: 1.8; margin-top: 10px; overflow-wrap: anywhere; }
+.ad-storage-message, .ad-storage-restart { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; line-height: 1.8; margin-top: 10px; overflow-wrap: anywhere; }
+/* 进度行只有一段文字，按普通流排版：不必也不该用 flex——放进 flex 容器的
+   图标会自成一项，长文案一换行就把它单独留在上一行。 */
+.ad-storage-progress { font-size: 12px; line-height: 1.8; margin-top: 10px; overflow-wrap: anywhere; }
 .ad-storage-warn, .ad-storage-error { font-size: 12px; line-height: 1.8; margin-top: 10px; overflow-wrap: anywhere; }
 .ad-storage-warn { color: var(--colorPaletteYellowForeground1); }
 .ad-storage-error { color: var(--colorPaletteRedForeground1); }

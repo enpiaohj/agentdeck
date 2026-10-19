@@ -30,6 +30,7 @@ export {
     DiagRow,
     Filter,
     IndexStatus,
+    LibraryCompact,
     LibraryStatus,
     Mark,
     MigrateReport,

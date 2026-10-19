@@ -89,6 +89,12 @@ func hermesParts(m hermesMessage) []Part {
 		}
 		for _, tool := range hermesTools(m.tools) {
 			parts = append(parts, Part{Role: "assistant", Kind: "tool_use", Name: tool.Function.Name, Text: kimiArgs(tool.Function.Arguments)})
+			// What the call sent, when it is a card: the row's own words are the
+			// agent's note, and the card's body would otherwise be readable only
+			// as code inside the call (hermesCallCardText).
+			if card := hermesCallCardText(tool.Function.Arguments); card != "" {
+				parts = append(parts, Part{Role: "assistant", Kind: "card", Text: card})
+			}
 		}
 		return parts
 	case "tool":

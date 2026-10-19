@@ -14,6 +14,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
 	"strings"
 
 	_ "github.com/enpiaohj/agentdeck/internal/sqlitedb"
@@ -45,28 +46,15 @@ type Index struct {
 // schema 一次性建齐：docs 存原文（rowid 表，其 rowid 即 FTS 行的
 // rowid），docs_fts 存分词后的串，doc_sources 记每个会话上次被索引时
 // 的文件状态，供增量更新判断「这个会话变了吗」。
+//
+// docs_fts 是 contentless（FTS 的 content 选项留空）：分词串只该有一份
+// ——放在 FTS 表里就是 docs 之外再存一份 550 MB 以上的同内容。
+// contentless_delete 让增量替换仍能按 rowid 删行。（注释里不写那两个
+// 引号：gofmt 会把文档注释里的直引号换成排版引号。）
 var schema = []string{
 	`CREATE TABLE IF NOT EXISTS docs (key TEXT PRIMARY KEY, text TEXT NOT NULL)`,
-	`CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(seg, tokenize='unicode61')`,
+	`CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(seg, tokenize='unicode61', content='', contentless_delete=1)`,
 	`CREATE TABLE IF NOT EXISTS doc_sources (key TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime INTEGER NOT NULL)`,
-}
-
-// Open 打开（必要时创建）位于 path 的索引库；path 为空时用内存库。
-func Open(path string) (*Index, error) {
-	if path == "" {
-		path = ":memory:"
-	}
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		return nil, err
-	}
-	for _, stmt := range schema {
-		if _, err := db.Exec(stmt); err != nil {
-			db.Close()
-			return nil, err
-		}
-	}
-	return &Index{db: db}, nil
 }
 
 // Close 关闭底层库。
@@ -97,6 +85,12 @@ func (ix *Index) Reset() error {
 			return err
 		}
 	}
+	// 建的就是当前 schema，标记一并写上：否则下次 Open 会把这个刚建好的
+	// 空库当成旧库再升一遍（填 0 行，但多一次 VACUUM）。
+	if _, err := tx.Exec(`PRAGMA user_version = ` + strconv.Itoa(schemaVersion)); err != nil {
+		tx.Rollback()
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -108,17 +102,24 @@ func (ix *Index) Add(docs []Doc) error {
 	if len(docs) == 0 {
 		return nil
 	}
+	// 分词先做完，再开写事务：一批正文动辄几百 KB，分词那点 CPU 不该
+	// 占着写入锁，让并发的检索一起排队。
+	segs := make([]string, len(docs))
+	for i, d := range docs {
+		segs[i] = join(Segment(d.Text))
+	}
 	tx, err := ix.db.Begin()
 	if err != nil {
 		return err
 	}
-	for _, d := range docs {
-		toks := Segment(d.Text)
+	for i, d := range docs {
+		seg := segs[i]
+		indexable := seg != "" // 空串即一个词元都切不出来
 		var rowid int64
 		err := tx.QueryRow(`SELECT rowid FROM docs WHERE key = ?`, d.Key).Scan(&rowid)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
-			if len(toks) == 0 {
+			if !indexable {
 				continue
 			}
 			res, err := tx.Exec(`INSERT INTO docs(key, text) VALUES (?, ?)`, d.Key, d.Text)
@@ -131,7 +132,7 @@ func (ix *Index) Add(docs []Doc) error {
 				tx.Rollback()
 				return err
 			}
-			if _, err := tx.Exec(`INSERT INTO docs_fts(rowid, seg) VALUES (?, ?)`, rowid, join(toks)); err != nil {
+			if _, err := tx.Exec(`INSERT INTO docs_fts(rowid, seg) VALUES (?, ?)`, rowid, seg); err != nil {
 				tx.Rollback()
 				return err
 			}
@@ -143,7 +144,7 @@ func (ix *Index) Add(docs []Doc) error {
 				tx.Rollback()
 				return err
 			}
-			if len(toks) == 0 {
+			if !indexable {
 				if _, err := tx.Exec(`DELETE FROM docs WHERE rowid = ?`, rowid); err != nil {
 					tx.Rollback()
 					return err
@@ -154,7 +155,7 @@ func (ix *Index) Add(docs []Doc) error {
 				tx.Rollback()
 				return err
 			}
-			if _, err := tx.Exec(`INSERT INTO docs_fts(rowid, seg) VALUES (?, ?)`, rowid, join(toks)); err != nil {
+			if _, err := tx.Exec(`INSERT INTO docs_fts(rowid, seg) VALUES (?, ?)`, rowid, seg); err != nil {
 				tx.Rollback()
 				return err
 			}
@@ -237,6 +238,18 @@ func (ix *Index) Stamps() ([]SourceStamp, error) {
 	return out, rows.Err()
 }
 
+// docKeyRange 给出一个会话在 docs 里的 key 区间：会话 key 本身，加上它
+// 名下的每个 "key#n"。用它代替 `key = ? OR key LIKE ?`——LIKE 的右操作
+// 数是参数、又没有 NOCASE 索引，默认设置下用不上主键，每个会话就变成
+// 一次 30 万行全表扫描（写入路径每会话都要查一次）。
+//
+// 上界必须是 "key#" 之后再抬到 ￿，不能用 "key￿"：那样
+// "a:bc" 也落在区间里（'c' 0x63 < 0xEF），会把另一个会话的 doc 一起
+// 删掉或算进本会话。
+func docKeyRange(key string) (lo, hi string) {
+	return key + "#", key + "#￿"
+}
+
 // SaveStamps 批量更新会话文件状态。索引里没有对应 doc 的会话不记——
 // 记了会让下次增量把它当成「已索引过」而跳过。
 func (ix *Index) SaveStamps(stamps []SourceStamp) error {
@@ -250,8 +263,9 @@ func (ix *Index) SaveStamps(stamps []SourceStamp) error {
 	for _, s := range stamps {
 		// 只给索引里仍有 doc 的会话留记录：删除流程先 Remove 再 SaveStamps，
 		// 顺序反了会留下永不匹配的孤儿行。
+		lo, hi := docKeyRange(s.Key)
 		var has int
-		if err := tx.QueryRow(`SELECT count(*) FROM docs WHERE key = ? OR key LIKE ?`, s.Key, s.Key+"#%").Scan(&has); err != nil {
+		if err := tx.QueryRow(`SELECT count(*) FROM docs WHERE key = ? OR (key >= ? AND key < ?)`, s.Key, lo, hi).Scan(&has); err != nil {
 			tx.Rollback()
 			return err
 		}
@@ -279,12 +293,12 @@ func (ix *Index) Remove(sessionKeys []string) error {
 		return err
 	}
 	for _, key := range sessionKeys {
-		prefix := key + "#"
-		if _, err := tx.Exec(`DELETE FROM docs_fts WHERE rowid IN (SELECT rowid FROM docs WHERE key = ? OR key LIKE ?)`, key, prefix+"%"); err != nil {
+		lo, hi := docKeyRange(key)
+		if _, err := tx.Exec(`DELETE FROM docs_fts WHERE rowid IN (SELECT rowid FROM docs WHERE key = ? OR (key >= ? AND key < ?))`, key, lo, hi); err != nil {
 			tx.Rollback()
 			return err
 		}
-		if _, err := tx.Exec(`DELETE FROM docs WHERE key = ? OR key LIKE ?`, key, prefix+"%"); err != nil {
+		if _, err := tx.Exec(`DELETE FROM docs WHERE key = ? OR (key >= ? AND key < ?)`, key, lo, hi); err != nil {
 			tx.Rollback()
 			return err
 		}

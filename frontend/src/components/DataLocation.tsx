@@ -33,7 +33,9 @@ export function DataLocation() {
   useEffect(load, [load])
   useEffect(() => Events.On('storage:progress', (payload: unknown) => {
     const next = storageProgressFromEvent(payload)
-    if (next) setProgress(next)
+    // 同一个事件还带着索引升级与历史库压缩的进度（诊断页显示）；这里只
+    // 认迁移自己的阶段，免得别的进度串进迁移弹窗。
+    if (next && next.stage !== 'compact' && next.stage !== 'index-upgrade') setProgress(next)
   }), [])
   const choose = async () => {
     setError('')
@@ -247,16 +249,21 @@ export function DataLocation() {
 // MigrationProgress 是迁移进度的唯一渲染处：阶段 + 文件计数 + 百分比 + 当前
 // 文件 + 已用时间。
 //
+// 这一行没有转圈图标，是刻意的：Fluent 的 Spinner 根节点是 display:flex，在
+// Text（display:block）的普通流里就是块级盒，会独占一整行、并把自己的环居中到
+// 那一行的中间——弹窗正中于是悬着一个和任何文字都不相邻的圈。「正在动」由弹窗
+// 主按钮上的 Spinner 表示，这一行只负责说清在做什么。
+//
 // 百分比是按目标文件现有大小估出来的估算值，不是复制回调的精确值：三个库用
 // VACUUM INTO 生成一致副本，那是一条 SQL 语句，2 GB 级的会话库要跑几分钟，
 // 期间没有任何可挂的回调。所以除了百分比还一定显示已用时间——大小不动的长
 // 步骤里，它是「还在推进」的唯一凭据。progress 为 null 是首次心跳到达之前的
 // 那一秒，此时不能显示 0%，只能说明在准备。
 function MigrationProgress({ progress }: { progress: StorageProgress | null }) {
-  if (!progress) return <Text block role="status" className="ad-storage-progress"><Spinner size="extra-tiny" />正在准备迁移…</Text>
+  if (!progress) return <Text block role="status" className="ad-storage-progress">正在准备迁移…</Text>
   const elapsed = fmtElapsed(progress.elapsed)
   return <Text block role="status" className="ad-storage-progress">
-    <Spinner size="extra-tiny" />{stageLabel(progress.stage)}
+    {stageLabel(progress.stage)}
     {progress.files > 0 ? ` · ${progress.done_files}/${progress.files} 个文件` : ''}
     {progress.total > 0 ? ` ${fmtPercent(progress.done, progress.total)}` : ''}
     {progress.message ? ` · ${progress.message}` : ''}
@@ -273,6 +280,8 @@ function stageLabel(stage: string): string {
     case 'switch': return '切换数据位置'
     case 'done': return '迁移完成'
     case 'failed': return '迁移失败'
+    case 'compact': return '压缩历史库'
+    case 'index-upgrade': return '升级全文索引'
     default: return '正在处理…'
   }
 }

@@ -488,7 +488,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
                   </div> : null}
                   <div className={mergeClasses(styles.msgBody, !folded && isUser && styles.userMessage)}>
                     {!folded ? <div className={styles.msgHead}>
-                      <span className={styles.roleName}>{isUser ? '你' : p.role === 'tool' ? '工具' : m.label}</span>
+                      <span className={styles.roleName}>{isUser ? '你' : p.role === 'tool' ? '工具' : p.kind === 'card' ? '飞书卡片' : m.label}</span>
                       {time ? <span className={styles.msgTime}>{fmtTime(time)}</span> : null}
                       {p.model && !isUser ? <span className={styles.msgTime}>{p.model}</span> : null}
                       <button className={styles.msgCopy} onClick={() => copy(p.text, String(i))} title="复制此段">

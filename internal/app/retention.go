@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/enpiaohj/agentdeck/internal/sessions"
 )
@@ -15,6 +16,54 @@ type LibraryStatus struct {
 	Versions int    `json:"versions"`
 	Bytes    int64  `json:"bytes"`
 	Error    string `json:"error"`
+}
+
+// LibraryCompact 是一次历史库压缩的结果：压缩前后占用、压了多少个版本、
+// 用了多久。全部是字节与计数，前端自己格式化。
+type LibraryCompact struct {
+	Before   int64 `json:"before"`
+	After    int64 `json:"after"`
+	Versions int   `json:"versions"`
+	Elapsed  int64 `json:"elapsed"`
+}
+
+// CompactLibrary 把旧版留下的明文正文压缩，并回收文件空间。只改存储
+// 形态，不改内容：每一行写回前都解压比对过。可重复执行，没得可压时
+// 返回零改动。进度经 EventStorageProgress 推给前端（stage=compact）。
+func (s *SessionService) CompactLibrary() (LibraryCompact, error) {
+	a := s.a
+	// closing 由 captureMu 保护（见 App.Close）。只读一眼标志，不在整个
+	// 压缩期间占着它——那会把所有会话读取一起挡住。
+	a.captureMu.Lock()
+	closing := a.closing
+	a.captureMu.Unlock()
+	if closing {
+		return LibraryCompact{}, fmt.Errorf("程序正在关闭，未开始压缩")
+	}
+	start := time.Now()
+	before, err := a.history.Stats()
+	if err != nil {
+		return LibraryCompact{}, fmt.Errorf("读取历史库规模失败: %w", err)
+	}
+	var last time.Time
+	after, err := a.history.Compact(func(done, total int64) {
+		// 每批只有 16 行，全推会把前端刷屏；400ms 一次足够看出在动。
+		if now := time.Now(); now.Sub(last) >= 400*time.Millisecond || done >= total {
+			last = now
+			a.emit(EventStorageProgress, StorageProgress{
+				Stage: "compact", Done: done, Total: total,
+				Message: "正在压缩历史库", Elapsed: int64(time.Since(start).Seconds()),
+			})
+		}
+	})
+	if err != nil {
+		return LibraryCompact{}, fmt.Errorf("压缩历史库失败: %w", err)
+	}
+	a.emit(EventStorageProgress, StorageProgress{
+		Stage: "compact", Done: 1, Total: 1,
+		Message: "历史库压缩完成", Elapsed: int64(time.Since(start).Seconds()),
+	})
+	return LibraryCompact{Before: before.Bytes, After: after.Bytes, Versions: after.Versions, Elapsed: int64(time.Since(start).Seconds())}, nil
 }
 
 func (s *SessionService) LibraryStatus() LibraryStatus {

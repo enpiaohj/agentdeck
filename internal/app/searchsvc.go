@@ -219,7 +219,15 @@ func (a *App) buildIndex(full bool) {
 		}
 	}()
 
-	ix, err := search.Open(st.path)
+	// Open 可能顺带把旧版索引就地升级（docs_fts 改成 contentless，从
+	// docs 重新灌一遍，见 search.openDSN/schemaVersion）。那一步只重建
+	// FTS 表，不重读会话，进度按段数报。
+	ix, err := search.OpenWithProgress(st.path, func(done, total int) {
+		a.emit(EventStorageProgress, StorageProgress{
+			Stage: "index-upgrade", Done: int64(done), Total: int64(total),
+			Message: "正在升级全文索引",
+		})
+	})
 	if err != nil {
 		a.failIndex(err)
 		return

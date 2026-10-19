@@ -59,26 +59,45 @@ func ValidateBackup(path string) (Stats, error) {
 	if err != nil || bad != 0 {
 		return out, fmt.Errorf("历史库结构或内容无效：%v", err)
 	}
-	rows, err := db.Query(`SELECT key,hash,transcript,saved_at FROM history_versions`)
+	// 备份可能是升级前写的（没有 codec 列，正文一律明文），也可能是
+	// 升级后写的（正文按 zstd 存）。两种都要能校验：先按码解出明文，
+	// 再用明文核对哈希与 JSON。
+	hasCodec, err := hasCodecColumn(db, "main")
+	if err != nil {
+		return out, err
+	}
+	bodyQuery := `SELECT key,hash,transcript,saved_at FROM history_versions`
+	if hasCodec {
+		bodyQuery = `SELECT key,hash,transcript,saved_at,codec FROM history_versions`
+	}
+	rows, err := db.Query(bodyQuery)
 	if err != nil {
 		return out, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var key, hash, saved string
-		var body []byte
-		if err = rows.Scan(&key, &hash, &body, &saved); err != nil {
+		var body, plain []byte
+		var codec int
+		scan := []any{&key, &hash, &body, &saved}
+		if hasCodec {
+			scan = append(scan, &codec)
+		}
+		if err = rows.Scan(scan...); err != nil {
 			return out, err
 		}
+		if plain, err = decodeBody(body, codec); err != nil {
+			return out, fmt.Errorf("无效历史正文：%w", err)
+		}
 		var tr sessions.Transcript
-		if json.Unmarshal(body, &tr) != nil || len(tr.Parts) == 0 {
+		if json.Unmarshal(plain, &tr) != nil || len(tr.Parts) == 0 {
 			return out, fmt.Errorf("无效历史正文")
 		}
 		if _, e := time.Parse(time.RFC3339Nano, saved); e != nil {
 			return out, fmt.Errorf("无效历史时间")
 		}
-		sum := sha256.Sum256(body)
-		if hex.EncodeToString(sum[:]) != hash || !json.Valid(body) || key == "" {
+		sum := sha256.Sum256(plain)
+		if hex.EncodeToString(sum[:]) != hash || !json.Valid(plain) || key == "" {
 			return out, fmt.Errorf("历史版本校验失败")
 		}
 	}
@@ -116,7 +135,17 @@ func (s *Store) MergeBackup(path string) error {
 		return err
 	}
 	defer tx.Rollback()
-	for _, q := range []string{`INSERT OR IGNORE INTO history_versions SELECT key,hash,transcript,saved_at FROM recovery.history_versions`, `INSERT OR IGNORE INTO history_sessions SELECT key,metadata,hash FROM recovery.history_sessions`} {
+	// 合并的是用户手上的备份文件，可能是升级前写的：没有 codec 列时按
+	// 明文（0）并入。
+	backupCodec, err := hasCodecColumn(tx, "recovery")
+	if err != nil {
+		return err
+	}
+	versions := `INSERT OR IGNORE INTO history_versions(key,hash,transcript,saved_at,codec) SELECT key,hash,transcript,saved_at,0 FROM recovery.history_versions`
+	if backupCodec {
+		versions = `INSERT OR IGNORE INTO history_versions(key,hash,transcript,saved_at,codec) SELECT key,hash,transcript,saved_at,codec FROM recovery.history_versions`
+	}
+	for _, q := range []string{versions, `INSERT OR IGNORE INTO history_sessions(key,metadata,hash) SELECT key,metadata,hash FROM recovery.history_sessions`} {
 		if _, err = tx.Exec(q); err != nil {
 			return err
 		}

@@ -54,7 +54,12 @@ func (s *Store) DeleteKeys(keys []string) error {
 }
 
 type deletionVersion struct {
-	hash, transcript, savedAt string
+	hash string
+	// stored 是库里的字节（可能压缩过），plain 是解出来的 JSON。比对用
+	// plain：压缩形态只是存储方式，同一份正文在升级前后必须被认作同一份
+	// （否则迁移压缩过的会话，撤销删除会误报冲突）。
+	stored, plain, savedAt string
+	codec                  int
 }
 
 type deletionRecord struct {
@@ -63,23 +68,36 @@ type deletionRecord struct {
 	versions       []deletionVersion
 }
 
-func readDeletionRecord(tx *sql.Tx, key string) (deletionRecord, error) {
+func readDeletionRecord(q rowQuerier, key string, withCodec bool) (deletionRecord, error) {
 	var record deletionRecord
-	err := tx.QueryRow(`SELECT metadata,hash FROM history_sessions WHERE key=?`, key).Scan(&record.metadata, &record.hash)
+	err := q.QueryRow(`SELECT metadata,hash FROM history_sessions WHERE key=?`, key).Scan(&record.metadata, &record.hash)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return record, err
 	}
 	record.present = err == nil
-	rows, err := tx.Query(`SELECT hash,transcript,saved_at FROM history_versions WHERE key=? ORDER BY hash`, key)
+	query := `SELECT hash,transcript,saved_at FROM history_versions WHERE key=? ORDER BY hash`
+	if withCodec {
+		query = `SELECT hash,transcript,saved_at,codec FROM history_versions WHERE key=? ORDER BY hash`
+	}
+	rows, err := q.Query(query, key)
 	if err != nil {
 		return record, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var version deletionVersion
-		if err := rows.Scan(&version.hash, &version.transcript, &version.savedAt); err != nil {
+		scan := []any{&version.hash, &version.stored, &version.savedAt}
+		if withCodec {
+			scan = append(scan, &version.codec)
+		}
+		if err := rows.Scan(scan...); err != nil {
 			return record, err
 		}
+		plain, err := decodeBody([]byte(version.stored), version.codec)
+		if err != nil {
+			return record, err
+		}
+		version.plain = string(plain)
 		record.versions = append(record.versions, version)
 	}
 	return record, rows.Err()
@@ -114,8 +132,12 @@ func (s *Store) RestoreKeysFrom(path string, keys []string) error {
 	}
 	defer source.Rollback()
 	records := make(map[string]deletionRecord, len(keys))
+	backupCodec, err := hasCodecColumn(backup, "main")
+	if err != nil {
+		return err
+	}
 	for _, key := range keys {
-		record, err := readDeletionRecord(source, key)
+		record, err := readDeletionRecord(source, key, backupCodec)
 		if err != nil {
 			return err
 		}
@@ -128,8 +150,12 @@ func (s *Store) RestoreKeysFrom(path string, keys []string) error {
 		return err
 	}
 	defer tx.Rollback()
+	liveCodec, err := hasCodecColumn(tx, "main")
+	if err != nil {
+		return err
+	}
 	for _, key := range keys {
-		current, err := readDeletionRecord(tx, key)
+		current, err := readDeletionRecord(tx, key, liveCodec)
 		if err != nil {
 			return err
 		}
@@ -141,7 +167,7 @@ func (s *Store) RestoreKeysFrom(path string, keys []string) error {
 			continue
 		}
 		for _, version := range record.versions {
-			if _, err := tx.Exec(`INSERT INTO history_versions(key,hash,transcript,saved_at) VALUES(?,?,?,?)`, key, version.hash, []byte(version.transcript), version.savedAt); err != nil {
+			if _, err := tx.Exec(`INSERT INTO history_versions(key,hash,transcript,saved_at,codec) VALUES(?,?,?,?,?)`, key, version.hash, []byte(version.stored), version.savedAt, version.codec); err != nil {
 				return err
 			}
 		}

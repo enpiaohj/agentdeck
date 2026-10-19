@@ -599,6 +599,43 @@ export class IndexStatus {
 }
 
 /**
+ * LibraryCompact 是一次历史库压缩的结果：压缩前后占用、压了多少个版本、
+ * 用了多久。全部是字节与计数，前端自己格式化。
+ */
+export class LibraryCompact {
+    "before": number;
+    "after": number;
+    "versions": number;
+    "elapsed": number;
+
+    /** Creates a new LibraryCompact instance. */
+    constructor($$source: Partial<LibraryCompact> = {}) {
+        if (!("before" in $$source)) {
+            this["before"] = 0;
+        }
+        if (!("after" in $$source)) {
+            this["after"] = 0;
+        }
+        if (!("versions" in $$source)) {
+            this["versions"] = 0;
+        }
+        if (!("elapsed" in $$source)) {
+            this["elapsed"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new LibraryCompact instance from a string or object.
+     */
+    static createFrom($$source: any = {}): LibraryCompact {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new LibraryCompact($$parsedSource as Partial<LibraryCompact>);
+    }
+}
+
+/**
  * LibraryStatus reports permanent storage, not the rebuildable FTS cache.
  */
 export class LibraryStatus {

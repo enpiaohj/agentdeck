@@ -498,9 +498,16 @@ func hermesTools(raw string) []hermesTool {
 	return tools
 }
 
+// hermesText is what a message row says. A payload Hermes encoded as a list of
+// typed parts carries its words in the type "text" ones; a Feishu card stored as
+// the card itself carries them inside its elements (hermesCardText). Everything
+// else is returned as it stands.
 func hermesText(raw string) string {
-	encoded, ok := strings.CutPrefix(raw, "\x00json:")
+	encoded, ok := strings.CutPrefix(raw, hermesJSONContentPrefix)
 	if !ok {
+		if text, ok := hermesCardText(raw); ok {
+			return text
+		}
 		return raw
 	}
 	raw = encoded

@@ -29,17 +29,28 @@ export function BackupData(destDir: string, preferences: string): $CancellablePr
 }
 
 /**
+ * CompactLibrary 把旧版留下的明文正文压缩，并回收文件空间。只改存储
+ * 形态，不改内容：每一行写回前都解压比对过。可重复执行，没得可压时
+ * 返回零改动。进度经 EventStorageProgress 推给前端（stage=compact）。
+ */
+export function CompactLibrary(): $CancellablePromise<$models.LibraryCompact> {
+    return $Call.ByID(2311187332).then(($result: any) => {
+        return $$createType2($result);
+    });
+}
+
+/**
  * Counts 统计侧栏入口数量，口径与列表一致（子会话收在主会话下不重复计）。
  */
 export function Counts(): $CancellablePromise<$models.NavCounts> {
     return $Call.ByID(2918551640).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType3($result);
     });
 }
 
 export function DeleteSessions(token: string): $CancellablePromise<$models.DeleteReport> {
     return $Call.ByID(3531059678, token).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType4($result);
     });
 }
 
@@ -48,7 +59,7 @@ export function DeleteSessions(token: string): $CancellablePromise<$models.Delet
  */
 export function Diagnostics(): $CancellablePromise<$models.DiagRow[]> {
     return $Call.ByID(4237459432).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType6($result);
     });
 }
 
@@ -65,7 +76,7 @@ export function ExportMarkdown(key: string, destDir: string): $CancellablePromis
  */
 export function Get(key: string): $CancellablePromise<$models.SessionView | null> {
     return $Call.ByID(2633753760, key).then(($result: any) => {
-        return $$createType7($result);
+        return $$createType8($result);
     });
 }
 
@@ -75,13 +86,13 @@ export function Get(key: string): $CancellablePromise<$models.SessionView | null
  */
 export function ImportClaudeHistory(path: string, account: string): $CancellablePromise<$models.ClaudeImportReport> {
     return $Call.ByID(1797313045, path, account).then(($result: any) => {
-        return $$createType8($result);
+        return $$createType9($result);
     });
 }
 
 export function InspectBackup(src: string): $CancellablePromise<$models.BackupInfo> {
     return $Call.ByID(1962923398, src).then(($result: any) => {
-        return $$createType9($result);
+        return $$createType10($result);
     });
 }
 
@@ -94,7 +105,7 @@ export function LastCrashed(): $CancellablePromise<boolean> {
 
 export function LibraryStatus(): $CancellablePromise<$models.LibraryStatus> {
     return $Call.ByID(2993559161).then(($result: any) => {
-        return $$createType10($result);
+        return $$createType11($result);
     });
 }
 
@@ -103,7 +114,7 @@ export function LibraryStatus(): $CancellablePromise<$models.LibraryStatus> {
  */
 export function List(f: $models.Filter): $CancellablePromise<$models.SessionView[]> {
     return $Call.ByID(2411886668, f).then(($result: any) => {
-        return $$createType11($result);
+        return $$createType12($result);
     });
 }
 
@@ -112,7 +123,7 @@ export function List(f: $models.Filter): $CancellablePromise<$models.SessionView
  */
 export function PreviewDeleteSessions(keys: string[], includeChildren: boolean): $CancellablePromise<$models.DeletePreview> {
     return $Call.ByID(3571029474, keys, includeChildren).then(($result: any) => {
-        return $$createType12($result);
+        return $$createType13($result);
     });
 }
 
@@ -127,7 +138,7 @@ export function PreviewDeleteSessions(keys: string[], includeChildren: boolean):
  */
 export function Projects(): $CancellablePromise<$models.ProjectView[]> {
     return $Call.ByID(2744492366).then(($result: any) => {
-        return $$createType14($result);
+        return $$createType15($result);
     });
 }
 
@@ -141,7 +152,7 @@ export function Refresh(): $CancellablePromise<void> {
 
 export function RestoreData(src: string, currentPreferences: string): $CancellablePromise<$models.RestoreReport> {
     return $Call.ByID(2278399566, src, currentPreferences).then(($result: any) => {
-        return $$createType15($result);
+        return $$createType16($result);
     });
 }
 
@@ -157,7 +168,7 @@ export function RestoreDeletedSessions(token: string): $CancellablePromise<strin
  */
 export function ScanProgress(): $CancellablePromise<$models.ScanProgress> {
     return $Call.ByID(2378428406).then(($result: any) => {
-        return $$createType16($result);
+        return $$createType17($result);
     });
 }
 
@@ -166,7 +177,7 @@ export function ScanProgress(): $CancellablePromise<$models.ScanProgress> {
  */
 export function SearchIn(key: string, needle: string): $CancellablePromise<$models.SearchHitView | null> {
     return $Call.ByID(2754701431, key, needle).then(($result: any) => {
-        return $$createType18($result);
+        return $$createType19($result);
     });
 }
 
@@ -176,7 +187,7 @@ export function SearchIn(key: string, needle: string): $CancellablePromise<$mode
  */
 export function SearchInAll(key: string, needle: string): $CancellablePromise<$models.SearchHitView[]> {
     return $Call.ByID(2145851954, key, needle).then(($result: any) => {
-        return $$createType19($result);
+        return $$createType20($result);
     });
 }
 
@@ -185,7 +196,7 @@ export function SearchInAll(key: string, needle: string): $CancellablePromise<$m
  */
 export function Transcript(key: string): $CancellablePromise<$models.TranscriptView | null> {
     return $Call.ByID(4281957278, key).then(($result: any) => {
-        return $$createType21($result);
+        return $$createType22($result);
     });
 }
 
@@ -196,30 +207,31 @@ export function Transcript(key: string): $CancellablePromise<$models.TranscriptV
  */
 export function TranscriptWindow(key: string, at: number, before: boolean): $CancellablePromise<$models.TranscriptView | null> {
     return $Call.ByID(3007435842, key, at, before).then(($result: any) => {
-        return $$createType21($result);
+        return $$createType22($result);
     });
 }
 
 // Private type creation functions
 const $$createType0 = $models.AgentView.createFrom;
 const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = $models.NavCounts.createFrom;
-const $$createType3 = $models.DeleteReport.createFrom;
-const $$createType4 = $models.DiagRow.createFrom;
-const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = $models.SessionView.createFrom;
-const $$createType7 = $Create.Nullable($$createType6);
-const $$createType8 = $models.ClaudeImportReport.createFrom;
-const $$createType9 = $models.BackupInfo.createFrom;
-const $$createType10 = $models.LibraryStatus.createFrom;
-const $$createType11 = $Create.Array($$createType6);
-const $$createType12 = $models.DeletePreview.createFrom;
-const $$createType13 = $models.ProjectView.createFrom;
-const $$createType14 = $Create.Array($$createType13);
-const $$createType15 = $models.RestoreReport.createFrom;
-const $$createType16 = $models.ScanProgress.createFrom;
-const $$createType17 = $models.SearchHitView.createFrom;
-const $$createType18 = $Create.Nullable($$createType17);
-const $$createType19 = $Create.Array($$createType17);
-const $$createType20 = $models.TranscriptView.createFrom;
-const $$createType21 = $Create.Nullable($$createType20);
+const $$createType2 = $models.LibraryCompact.createFrom;
+const $$createType3 = $models.NavCounts.createFrom;
+const $$createType4 = $models.DeleteReport.createFrom;
+const $$createType5 = $models.DiagRow.createFrom;
+const $$createType6 = $Create.Array($$createType5);
+const $$createType7 = $models.SessionView.createFrom;
+const $$createType8 = $Create.Nullable($$createType7);
+const $$createType9 = $models.ClaudeImportReport.createFrom;
+const $$createType10 = $models.BackupInfo.createFrom;
+const $$createType11 = $models.LibraryStatus.createFrom;
+const $$createType12 = $Create.Array($$createType7);
+const $$createType13 = $models.DeletePreview.createFrom;
+const $$createType14 = $models.ProjectView.createFrom;
+const $$createType15 = $Create.Array($$createType14);
+const $$createType16 = $models.RestoreReport.createFrom;
+const $$createType17 = $models.ScanProgress.createFrom;
+const $$createType18 = $models.SearchHitView.createFrom;
+const $$createType19 = $Create.Nullable($$createType18);
+const $$createType20 = $Create.Array($$createType18);
+const $$createType21 = $models.TranscriptView.createFrom;
+const $$createType22 = $Create.Nullable($$createType21);
