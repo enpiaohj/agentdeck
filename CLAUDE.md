@@ -196,6 +196,25 @@ MSIX 实测不符，见前四份中的实测报告。
     "no Go files"；加 `-clean` 更会把已有 bindings 清空且不重新生成，
     需要用 `git checkout -- frontend/bindings` 恢复。
 
+17. **恢复命令交给终端时必须编码，不能靠补引号**。恢复命令是
+    `<Set-Location ...>; <agent> resume <id>` 这样的复合语句。交给 `wt.exe`
+    或 `cmd /c start` 的 `-Command` 时，中间层会重新解析命令行、按空格拆参数，
+    分号后的半句被当成另一条参数丢掉，终端开在正确目录却报
+    「系统找不到指定的文件」（`启动 "" codex resume <id>"" 时`，0x80070002）。
+    现在一律编码成 UTF-16LE base64 交给 `powershell -EncodedCommand`
+    （`internal/app/resumectl_windows.go` 的 `encodedCommand`）：编码后不含
+    空格、分号与引号，谁也拆不开。`cmd /c start` 那条路虽然子进程
+    `IsOutputRedirected=false`（真 TTY），但**窗口在 WT 托管的机器上标题是
+    「管理员: 」且用户看不到**，实测弃用。
+
+18. **GUI 父进程直接 `CREATE_NEW_CONSOLE` 起 powershell，子进程 stdout 不是终端**。
+    AgentDeck 是 `-H windowsgui`、自身没有控制台，`exec.Cmd` 会把子进程的
+    标准句柄接成 NUL：实测 `[Console]::IsOutputRedirected=true`，node 的
+    `isTTY` 为 false，agent CLI 因此不上色。修法是显式补 `FORCE_COLOR=1`
+    （`resumeEnv`，用户自己设了则不覆盖）——claude.exe 与 codex.exe 都读它。
+    走 `wt.exe` 时 stdout 是真 TTY（`IsOutputRedirected=false`），补不补都行，
+    统一补上使两条路一致。
+
 ## 安全约定
 
 - **默认只读访问上游存储**：发现、读取、索引、导出全链路不写入上游。
