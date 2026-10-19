@@ -7,31 +7,32 @@ package app
 // SessionView 是列表与会话卡片的一行。Resume 非空 = 可原生命令恢复；
 // 空 = 仅可查看历史。Source 区分本机/WSL/网关来源。
 type SessionView struct {
-	Role       string   `json:"role"`       // confirmed main | subagent | unknown
-	ParentKey  string   `json:"parent_key"` // original parent, when known
-	GroupKey   string   `json:"group_key"`  // present main in the current list
-	Account    string   `json:"account"`    // imported cloud-chat account label
-	Key        string   `json:"key"`        // agent:id
-	Agent      string   `json:"agent"`
-	ID         string   `json:"id"`
-	Cwd        string   `json:"cwd"`
-	Project    string   `json:"project"` // 归一化后的项目展示名
-	Title      string   `json:"title"`
-	Last       string   `json:"last"`        // RFC3339
-	Created    string   `json:"created"`     // RFC3339;零值空串
-	SourcePath string   `json:"source_path"` // 会话源文件路径(详情「源路径」,只读展示)
-	Messages   int      `json:"messages"`
-	Resume     string   `json:"resume"`
-	Transcript bool     `json:"transcript"`
-	Tokens     int      `json:"tokens"`
-	Cost       float64  `json:"cost"`
-	Source     string   `json:"source"` // local | wsl | gateway
-	ReadOnly   bool     `json:"read_only"`
-	Favorite   bool     `json:"favorite"`
-	Archived   bool     `json:"archived"`
-	Tags       []string `json:"tags"`
-	HasNote    bool     `json:"has_note"`
-	Note       string   `json:"note"`
+	Role          string   `json:"role"`       // confirmed main | subagent | unknown
+	ParentKey     string   `json:"parent_key"` // original parent, when known
+	GroupKey      string   `json:"group_key"`  // present main in the current list
+	Account       string   `json:"account"`    // imported cloud-chat account label
+	Key           string   `json:"key"`        // agent:id
+	Agent         string   `json:"agent"`
+	ID            string   `json:"id"`
+	Cwd           string   `json:"cwd"`
+	Project       string   `json:"project"` // 归一化后的项目展示名
+	Title         string   `json:"title"`
+	OriginalTitle string   `json:"original_title"`
+	Last          string   `json:"last"`        // RFC3339
+	Created       string   `json:"created"`     // RFC3339;零值空串
+	SourcePath    string   `json:"source_path"` // 会话源文件路径(详情「源路径」,只读展示)
+	Messages      int      `json:"messages"`
+	Resume        string   `json:"resume"`
+	Transcript    bool     `json:"transcript"`
+	Tokens        int      `json:"tokens"`
+	Cost          float64  `json:"cost"`
+	Source        string   `json:"source"` // local | wsl | gateway
+	ReadOnly      bool     `json:"read_only"`
+	Favorite      bool     `json:"favorite"`
+	Archived      bool     `json:"archived"`
+	Tags          []string `json:"tags"`
+	HasNote       bool     `json:"has_note"`
+	Note          string   `json:"note"`
 }
 
 type ClaudeImportReport struct {
@@ -95,6 +96,7 @@ type ProjectView struct {
 	Count     int    `json:"count"`
 	Favorites int    `json:"favorites"`
 	Last      string `json:"last"` // RFC3339
+	Declared  bool   `json:"declared"`
 }
 
 // IndexStatus 是全文索引的状态条数据。State: idle | building | ready |

@@ -27,7 +27,7 @@ export function Query(q: string, limit: number): $CancellablePromise<$models.Sea
 
 /**
  * Rebuild 触发一次后台更新;构建中重复调用合并为一次后续更新。
- *
+ * 
  * 增量：索引库已存在且分词契约未变时，只 upsert 仍存在的会话、删掉已消失
  * 的会话，不清库。整库 Reset 只在库不存在、schema 不符或调用方显式要求
  * 全量时发生——28 万段 / 1.7 GB 的库每次启动都重写一遍，期间状态栏一直

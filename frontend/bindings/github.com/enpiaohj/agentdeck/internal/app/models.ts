@@ -107,6 +107,34 @@ export class ClaudeImportReport {
     }
 }
 
+/**
+ * DeclaredProjectView 是声明项目的视图：只有路径与展示名，别的都还没有。
+ */
+export class DeclaredProjectView {
+    "path": string;
+    "name": string;
+
+    /** Creates a new DeclaredProjectView instance. */
+    constructor($$source: Partial<DeclaredProjectView> = {}) {
+        if (!("path" in $$source)) {
+            this["path"] = "";
+        }
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DeclaredProjectView instance from a string or object.
+     */
+    static createFrom($$source: any = {}): DeclaredProjectView {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new DeclaredProjectView($$parsedSource as Partial<DeclaredProjectView>);
+    }
+}
+
 export class DeletePreview {
     "token": string;
     "sessions": number;
@@ -399,6 +427,7 @@ export class Mark {
     "archived": boolean;
     "tags": string[];
     "note": string;
+    "title": string;
     "updated": number;
 
     /** Creates a new Mark instance. */
@@ -417,6 +446,9 @@ export class Mark {
         }
         if (!("note" in $$source)) {
             this["note"] = "";
+        }
+        if (!("title" in $$source)) {
+            this["title"] = "";
         }
         if (!("updated" in $$source)) {
             this["updated"] = 0;
@@ -455,6 +487,7 @@ export class ProjectView {
      * RFC3339
      */
     "last": string;
+    "declared": boolean;
 
     /** Creates a new ProjectView instance. */
     constructor($$source: Partial<ProjectView> = {}) {
@@ -475,6 +508,9 @@ export class ProjectView {
         }
         if (!("last" in $$source)) {
             this["last"] = "";
+        }
+        if (!("declared" in $$source)) {
+            this["declared"] = false;
         }
 
         Object.assign(this, $$source);
@@ -687,6 +723,7 @@ export class SessionView {
      */
     "project": string;
     "title": string;
+    "original_title": string;
 
     /**
      * RFC3339
@@ -751,6 +788,9 @@ export class SessionView {
         if (!("title" in $$source)) {
             this["title"] = "";
         }
+        if (!("original_title" in $$source)) {
+            this["original_title"] = "";
+        }
         if (!("last" in $$source)) {
             this["last"] = "";
         }
@@ -804,10 +844,10 @@ export class SessionView {
      * Creates a new SessionView instance from a string or object.
      */
     static createFrom($$source: any = {}): SessionView {
-        const $$createField22_0 = $$createType0;
+        const $$createField23_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tags" in $$parsedSource) {
-            $$parsedSource["tags"] = $$createField22_0($$parsedSource["tags"]);
+            $$parsedSource["tags"] = $$createField23_0($$parsedSource["tags"]);
         }
         return new SessionView($$parsedSource as Partial<SessionView>);
     }

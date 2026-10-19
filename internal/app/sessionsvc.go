@@ -89,7 +89,7 @@ func (s *SessionService) List(f Filter) []SessionView {
 		if f.Project != "" && !strings.EqualFold(projects.Normalize(sess.Cwd), projects.Normalize(f.Project)) {
 			continue
 		}
-		if searchKey != "" && !strings.Contains(foldTitle(sess.Title), searchKey) {
+		if searchKey != "" && !strings.Contains(foldTitle(displayTitle(sess, m)), searchKey) {
 			continue
 		}
 		out = append(out, view(sess, key, m, msgs, msgReady))
@@ -148,7 +148,7 @@ func (s *SessionService) SearchIn(key, needle string) (*SearchHitView, error) {
 // SearchInAll 按原始段顺序返回所有命中段，定位编号与 TranscriptWindow 一致。
 // 每段只返回一个摘要，避免长工具输出中的重复词占满导航。
 func (s *SessionService) SearchInAll(key, needle string) ([]SearchHitView, error) {
-	_, byKey, _ := s.a.snapshot()
+	_, byKey, ms := s.a.snapshot()
 	sess, ok := byKey[key]
 	if !ok {
 		return nil, fmt.Errorf("会话不存在: %s", key)
@@ -169,7 +169,7 @@ func (s *SessionService) SearchInAll(key, needle string) ([]SearchHitView, error
 		if found {
 			out = append(out, SearchHitView{
 				Key: key, Part: fmt.Sprintf("%s#%d", key, i), Agent: sess.Agent,
-				Title: sess.Title, Last: lastString(sess.Last), Match: h.Match,
+				Title: displayTitle(sess, ms[sessionMarkKey(sess, key, ms)]), Last: lastString(sess.Last), Match: h.Match,
 				Snippet: h.Before + h.Match + h.After,
 			})
 		}
@@ -201,12 +201,26 @@ func (s *SessionService) Agents() []AgentView {
 	return out
 }
 
-// Projects 项目聚合视图。
+// Projects 项目聚合视图：会话聚合出来的项目，与用户声明的项目（还没有
+// 任何会话的目录）按路径合并。
+//
+// 同一路径两处都有时只出一行：用聚合出的统计数据（会话数、收藏、最后
+// 活动）填上，Declared 标为真——声明只贡献「这个项目是用户特意建的」，
+// 不该把真有会话的那个挤掉，也不该让它显示成 0 个会话。
+// 声明的排在前面：它往往是用户刚建、最想立刻看到的那一个。
 func (s *SessionService) Projects() []ProjectView {
 	list, byKey, ms := s.a.snapshot()
-	ps := projects.Group(list)
-	out := make([]ProjectView, 0, len(ps))
-	for _, p := range ps {
+	declared, err := s.a.declared.All()
+	if err != nil {
+		declared = nil // 读不出来不影响聚合结果，只是少了声明的那几个
+	}
+	aggregated := map[string]ProjectView{} // 小写归一化路径 → 聚合行
+	order := make([]string, 0, len(list))  // 聚合顺序（Group 已按最后活动降序）
+	for _, p := range projects.Group(list) {
+		key := strings.ToLower(p.Path)
+		if _, dup := aggregated[key]; dup {
+			continue
+		}
 		fav := 0
 		members := make([]sessions.Session, 0, len(p.Keys))
 		for _, k := range p.Keys {
@@ -223,10 +237,35 @@ func (s *SessionService) Projects() []ProjectView {
 				fav++
 			}
 		}
-		out = append(out, ProjectView{
+		aggregated[key] = ProjectView{
 			Path: p.Path, Name: p.Name, Drive: p.Drive,
 			Count: count, Favorites: fav, Last: lastString(p.Last),
-		})
+		}
+		order = append(order, key)
+	}
+	out := make([]ProjectView, 0, len(declared)+len(aggregated))
+	seen := map[string]bool{}
+	for _, d := range declared {
+		key := strings.ToLower(projects.Normalize(d.Path))
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		row := ProjectView{
+			Path: d.Path, Name: d.Name, Drive: projects.Drive(d.Path), Declared: true,
+		}
+		if agg, ok := aggregated[key]; ok {
+			row.Count, row.Favorites, row.Last = agg.Count, agg.Favorites, agg.Last
+		}
+		out = append(out, row)
+	}
+	// 聚合部分保持 Group 的顺序（按最后活动降序），不能遍历 map。
+	for _, key := range order {
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, aggregated[key])
 	}
 	return out
 }
@@ -240,7 +279,7 @@ func (s *SessionService) ScanProgress() ScanProgress {
 // ExportMarkdown 把会话导出为 Markdown 文件，写到 destDir 目录，返回
 // 文件全路径。这是桌面端唯一一处写用户盘（导出目录由前端对话框传入）。
 func (s *SessionService) ExportMarkdown(key, destDir string) (string, error) {
-	_, byKey, _ := s.a.snapshot()
+	_, byKey, ms := s.a.snapshot()
 	sess, ok := byKey[key]
 	if !ok {
 		return "", fmt.Errorf("会话不存在: %s", key)
@@ -253,22 +292,30 @@ func (s *SessionService) ExportMarkdown(key, destDir string) (string, error) {
 		return "", fmt.Errorf("导出目录不存在: %s", dir)
 	}
 	name := fmt.Sprintf("%s-%s-%s.md", time.Now().Format("20060102-150405"), sess.Agent, safeFile(sess.ID))
+	tr, _, _, err := s.a.readConversation(sess)
+	if err != nil {
+		return "", err
+	}
 	f, err := os.Create(filepath.Join(dir, name))
 	if err != nil {
 		return "", err
 	}
 	defer f.Close()
-	tr, _, _, err := s.a.readConversation(sess)
-	if err != nil {
-		return "", err
-	}
-	if err := sessions.WriteRetainedMarkdown(f, sess, sess.Title, tr); err != nil {
+	sess.Title = displayTitle(sess, ms[sessionMarkKey(sess, key, ms)])
+	if err := sessions.WriteRetainedMarkdown(f, sess, sess.Agent, tr); err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, name), nil
 }
 
 // ---- 内部 ----
+
+func displayTitle(s sessions.Session, m marks.Mark) string {
+	if m.Title != "" {
+		return m.Title
+	}
+	return s.Title
+}
 
 // view 是 Session → SessionView 的唯一装配点。
 func view(s sessions.Session, key string, m marks.Mark, msgs map[string]int, msgReady bool) SessionView {
@@ -290,16 +337,17 @@ func view(s sessions.Session, key string, m marks.Mark, msgs map[string]int, msg
 			}
 			return ""
 		}(),
-		Key:        key,
-		Agent:      s.Agent,
-		Account:    s.Account,
-		ID:         s.ID,
-		Cwd:        s.Cwd,
-		Project:    projects.DisplayName(projects.Normalize(s.Cwd)),
-		Title:      s.Title,
-		Last:       lastString(s.Last),
-		Created:    lastString(s.Start),
-		SourcePath: s.Path,
+		Key:           key,
+		Agent:         s.Agent,
+		Account:       s.Account,
+		ID:            s.ID,
+		Cwd:           s.Cwd,
+		Project:       projects.DisplayName(projects.Normalize(s.Cwd)),
+		Title:         displayTitle(s, m),
+		OriginalTitle: s.Title,
+		Last:          lastString(s.Last),
+		Created:       lastString(s.Start),
+		SourcePath:    s.Path,
 		Messages: func() int {
 			if s.Imported || s.Retained {
 				return s.MessageCount

@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/base64"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"time"
 	"unicode/utf16"
 
+	"github.com/enpiaohj/agentdeck/internal/proc"
 	"github.com/enpiaohj/agentdeck/internal/sessions"
 )
 
@@ -44,10 +46,11 @@ func newTestApp(t *testing.T) (*App, *recorder, *[]string, *[]string) {
 	rec := &recorder{}
 	var clip, ran []string
 	a, err := New(Config{
-		MarksPath: filepath.Join(t.TempDir(), "marks.db"),
-		IndexPath: ":memory:", // 空路径表示默认磁盘库；测试显式使用独立内存库。
-		Emit:      rec.emit,
-		Clipboard: func(text string) error { clip = append(clip, text); return nil },
+		MarksPath:    filepath.Join(t.TempDir(), "marks.db"),
+		ProjectsPath: filepath.Join(t.TempDir(), "projects.db"), // 独立库，避免共用临时目录
+		IndexPath:    ":memory:",                                // 空路径表示默认磁盘库；测试显式使用独立内存库。
+		Emit:         rec.emit,
+		Clipboard:    func(text string) error { clip = append(clip, text); return nil },
 		Runner: func(name string, args ...string) error {
 			ran = append(ran, name+" "+strings.Join(args, " "))
 			return nil
@@ -72,6 +75,53 @@ func claudeFixture(t *testing.T, dir, id, text string) sessions.Session {
 		Agent: "claude", ID: id, Cwd: `D:\Work\Demo`, Title: "演示会话",
 		Last: time.Date(2026, 10, 16, 10, 0, 0, 0, time.Local),
 		Path: path, Resume: "claude --resume " + id,
+	}
+}
+
+func TestLocalTitleAcrossViewsAndExport(t *testing.T) {
+	a, rec, _, _ := newTestApp(t)
+	original := claudeFixture(t, t.TempDir(), "rename1", "检索正文")
+	a.setList([]sessions.Session{original})
+	key := "claude:rename1"
+	service := &SessionService{a: a}
+	marks := &MarkService{a: a}
+	if err := marks.SetTitle(key, "本地会话名"); err != nil {
+		t.Fatal(err)
+	}
+	if !rec.has(EventSessionsChanged) {
+		t.Fatal("改名未通知列表更新")
+	}
+	view, err := service.Get(key)
+	if err != nil || view.Title != "本地会话名" || view.OriginalTitle != "演示会话" {
+		t.Fatalf("详情标题 = %+v, %v", view, err)
+	}
+	if rows := service.List(Filter{Search: "本地会话"}); len(rows) != 1 || rows[0].Title != "本地会话名" {
+		t.Fatalf("列表改名筛选 = %+v", rows)
+	}
+	if rows := service.List(Filter{Search: "演示会话"}); len(rows) != 0 {
+		t.Fatalf("原始标题仍参与筛选 = %+v", rows)
+	}
+	hits, err := service.SearchInAll(key, "检索")
+	if err != nil || len(hits) != 1 || hits[0].Title != "本地会话名" {
+		t.Fatalf("会话内命中标题 = %+v, %v", hits, err)
+	}
+	path, err := service.ExportMarkdown(key, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "# 本地会话名") || !strings.Contains(string(body), "- **Agent:** claude") {
+		t.Fatalf("导出标题或 Agent 元数据错误：%s", body)
+	}
+	if err := marks.SetTitle(key, ""); err != nil {
+		t.Fatal(err)
+	}
+	view, err = service.Get(key)
+	if err != nil || view.Title != "演示会话" {
+		t.Fatalf("恢复原名 = %+v, %v", view, err)
 	}
 }
 
@@ -210,6 +260,13 @@ func TestQueryDegradeThenIndex(t *testing.T) {
 	if r2.Hits[0].Title != "演示会话" {
 		t.Errorf("命中未关联会话标题: %q", r2.Hits[0].Title)
 	}
+	if err := (&MarkService{a: a}).SetTitle("claude:"+s1.ID, "远程问题记录"); err != nil {
+		t.Fatal(err)
+	}
+	r3, err := q.Query("远程连接", 10)
+	if err != nil || r3.Mode != "index" || len(r3.Hits) != 1 || r3.Hits[0].Title != "远程问题记录" {
+		t.Fatalf("改名后的索引命中 = %+v, %v", r3, err)
+	}
 }
 
 func TestResumeActions(t *testing.T) {
@@ -250,6 +307,209 @@ func TestResumeActions(t *testing.T) {
 		}
 	} else if !strings.Contains(got, "powershell.exe") || !strings.Contains(got, "-EncodedCommand") {
 		t.Errorf("回退形态: %q", got)
+	}
+}
+
+// 改名后恢复:Claude Code 收 --name,CLI 内部才显示 AgentDeck 里的名字。
+// 没有本地改名时不加参数——不能拿来源标题去覆盖原生名字。
+func TestResumeCommandCarriesLocalTitle(t *testing.T) {
+	a, _, clip, _ := newTestApp(t)
+	dir := t.TempDir()
+	plain := claudeFixture(t, dir, "named1", "hi")
+	quoted := claudeFixture(t, dir, "named2", "hi")
+	codex := sessions.Session{Agent: "codex", ID: "cx1", Cwd: dir,
+		Resume: "codex resume cx1", Path: filepath.Join(dir, "cx1.jsonl")}
+	wsl := sessions.Session{Agent: "claude", ID: "wsl1", WSL: "Ubuntu-22.04",
+		Resume: `wsl.exe -d 'Ubuntu' -e sh -lc 'claude --resume wsl1'`}
+	a.setList([]sessions.Session{plain, quoted, codex, wsl})
+	marks := &MarkService{a: a}
+	r := &ResumeService{a: a}
+
+	// 未改名:恢复命令保持原样。
+	cmd, err := r.Command("claude:named1")
+	if err != nil || cmd != "claude --resume named1" {
+		t.Fatalf("未改名的恢复命令 = %q, %v", cmd, err)
+	}
+	if err := marks.SetTitle("claude:named1", "定价问题排查"); err != nil {
+		t.Fatal(err)
+	}
+	cmd, err = r.Command("claude:named1")
+	if err != nil || cmd != "claude --resume named1 --name '定价问题排查'" {
+		t.Fatalf("改名后的恢复命令 = %q, %v", cmd, err)
+	}
+	// 复制命令与直开终端走同一条,不能只在一条路上生效。
+	if err := r.CopyToClipboard("claude:named1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(*clip) != 1 || (*clip)[0] != cmd {
+		t.Fatalf("剪贴板 = %v", *clip)
+	}
+
+	// 标题里的单引号必须按 PowerShell 规则翻倍,否则命令被截断。
+	if err := marks.SetTitle("claude:named2", "it's 会话"); err != nil {
+		t.Fatal(err)
+	}
+	cmd, err = r.Command("claude:named2")
+	if err != nil || cmd != "claude --resume named2 --name 'it''s 会话'" {
+		t.Fatalf("含引号的恢复命令 = %q, %v", cmd, err)
+	}
+
+	// 其余 agent 未实测支持该参数,改名后也不能加。
+	if err := marks.SetTitle("codex:cx1", "Codex 本地名"); err != nil {
+		t.Fatal(err)
+	}
+	if cmd, err = r.Command("codex:cx1"); err != nil || cmd != "codex resume cx1" {
+		t.Fatalf("codex 恢复命令 = %q, %v", cmd, err)
+	}
+	// WSL 命令是整条 wsl.exe -e sh -lc '…',参数塞不进内层引号,保持原样。
+	if err := marks.SetTitle("claude:wsl1", "WSL 本地名"); err != nil {
+		t.Fatal(err)
+	}
+	if cmd, err = r.Command("claude:wsl1"); err != nil || strings.Contains(cmd, "--name") {
+		t.Fatalf("WSL 恢复命令 = %q, %v", cmd, err)
+	}
+}
+
+// Codex 没有 claude 那种 --name 入口,恢复前得用它自己的 app-server 写一次
+// 原生名(session_index.jsonl 的 thread_name)。没改名不碰上游;失败不阻断
+// 恢复——终端照开,但错误必须带出来,不能悄悄吞掉。
+func TestOpenInTerminalSyncsCodexName(t *testing.T) {
+	a, _, _, ran := newTestApp(t)
+	dir := t.TempDir()
+	const thread = "01a152e7-bee6-79d1-8b11-5aa8530fb63f"
+	codex := sessions.Session{Agent: "codex", ID: thread, Cwd: dir,
+		Resume: "codex resume " + thread, Path: filepath.Join(dir, "rollout.jsonl")}
+	claude := claudeFixture(t, dir, "claude1", "hi")
+	wsl := sessions.Session{Agent: "codex", ID: "wslcx", WSL: "Ubuntu-22.04", Resume: "wsl codex resume wslcx"}
+	a.setList([]sessions.Session{codex, claude, wsl})
+	var calls [][2]string
+	var fail error
+	a.codexName = func(threadID, name string) error {
+		calls = append(calls, [2]string{threadID, name})
+		return fail
+	}
+	r := &ResumeService{a: a}
+	marks := &MarkService{a: a}
+
+	if err := r.OpenInTerminal("codex:" + thread); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 0 {
+		t.Fatalf("未改名却写了原生名: %v", calls)
+	}
+	if err := marks.SetTitle("codex:"+thread, "Codex 改名验证"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.OpenInTerminal("codex:" + thread); err != nil {
+		t.Fatal(err)
+	}
+	// 传的必须是 thread id(不是 key)与本地标题。
+	if len(calls) != 1 || calls[0][0] != thread || calls[0][1] != "Codex 改名验证" {
+		t.Fatalf("原生名写入 = %v", calls)
+	}
+	// Claude 走 --name,WSL 的 codex 在另一侧——两条路都不该碰 app-server。
+	if err := marks.SetTitle("claude:claude1", "Claude 改名"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.OpenInTerminal("claude:claude1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := marks.SetTitle("codex:wslcx", "WSL Codex"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.OpenInTerminal("codex:wslcx"); err == nil || !strings.Contains(err.Error(), "WSL") {
+		t.Fatalf("WSL 直开应被拒: %v", err)
+	}
+	if len(calls) != 1 {
+		t.Fatalf("claude/WSL 不该写 Codex 原生名: %v", calls)
+	}
+	if len(*ran) != 3 {
+		t.Fatalf("终端启动次数 = %v", *ran)
+	}
+
+	// 写失败:终端仍然要开,错误里既要说明「已经开了」也要带上原因。
+	fail = errors.New("codex 不可用")
+	err := r.OpenInTerminal("codex:" + thread)
+	if err == nil || !strings.Contains(err.Error(), "已在终端中打开会话") || !strings.Contains(err.Error(), "codex 不可用") {
+		t.Fatalf("失败时的报错 = %v", err)
+	}
+	if len(*ran) != 4 {
+		t.Fatalf("写原生名失败却挡下了终端: %v", *ran)
+	}
+}
+
+// 线程 id 来自会话文件,是不可信输入,会被写进 JSON-RPC 参数:白名单外一律拒。
+func TestCodexThreadNameRejectsUnsafeID(t *testing.T) {
+	for _, id := range []string{"", "../x", "a b", `a"b`, "a\nb", "a:b"} {
+		if err := setCodexThreadName(id, "名"); err == nil {
+			t.Fatalf("接受了非法线程 id: %q", id)
+		}
+	}
+	if err := setCodexThreadName("ok-id_1", ""); err == nil {
+		t.Fatal("接受了空名字")
+	}
+}
+
+// needsCodexName 只对**本机原生**的 codex 会话写原生名。网关与导入来源的 ID
+// 未必是本地线程,拿它去改本地记录是猜;保留会话没有可恢复的命令。这几条是
+// 防止「猜着写上游」的守卫,回归的后果是拿一个来历不明的 ID 改本地 Codex 索引。
+func TestCodexNameOnlyForNativeSessions(t *testing.T) {
+	const thread = "01a152e7-bee6-79d1-8b11-5aa8530fb63f"
+	base := sessions.Session{Agent: "codex", ID: thread, Resume: "codex resume " + thread}
+	cases := []struct {
+		name string
+		sess sessions.Session
+		want bool
+	}{
+		{"本机原生", base, true},
+		{"网关来源", sessions.Session{Agent: "codex", ID: thread, Gateway: true}, false},
+		{"导入来源", sessions.Session{Agent: "codex", ID: thread, Imported: true}, false},
+		{"只读", sessions.Session{Agent: "codex", ID: thread, ReadOnly: true}, false},
+		{"保留会话", sessions.Session{Agent: "codex", ID: thread, Retained: true}, false},
+		{"WSL", sessions.Session{Agent: "codex", ID: thread, WSL: "Ubuntu-22.04"}, false},
+		{"别的 agent", sessions.Session{Agent: "claude", ID: thread}, false},
+	}
+	for _, c := range cases {
+		if got := needsCodexName(c.sess, "本地标题"); got != c.want {
+			t.Errorf("%s: needsCodexName = %v, 期望 %v", c.name, got, c.want)
+		}
+	}
+	// 没有本地标题时没什么可写。
+	if needsCodexName(base, "") {
+		t.Error("空标题仍要写原生名")
+	}
+}
+
+// app-server 不答复时必须靠本地预算返回,不能只靠 ctx:proc.CommandContext
+// 的 ctx 结束只杀直接子进程,而 codex 是 .cmd、真身 node 是孙进程,它会一直
+// 抱着 stdout,卡在读取上的 goroutine 等不到 EOF(实测 1s 的 ctx、6s 后仍
+// 未返回)。这里用一个装了同样包装层、永远不说话的假 codex 复现那个形态。
+func TestCodexThreadNameTimesOutOnSilentServer(t *testing.T) {
+	dir := t.TempDir()
+	shim := filepath.Join(dir, "codex.cmd")
+	// 孙进程活过预算,所以读取不可能自己结束——超时只能由 setCodexThreadName
+	// 自己兜住。
+	if err := os.WriteFile(shim, []byte("@echo off\r\npowershell -NoProfile -Command \"Start-Sleep 8\"\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := codexNameTimeout
+	codexNameTimeout = time.Second
+	t.Cleanup(func() { codexNameTimeout = old })
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	proc.Forget()
+
+	start := time.Now()
+	err := setCodexThreadName("ok-id_1", "改名验证")
+	spent := time.Since(start)
+	if err == nil {
+		t.Fatal("不说话的 app-server 竟被当成成功")
+	}
+	if err == nil || !strings.Contains(err.Error(), "没有答复") {
+		t.Fatalf("报错文案 = %v", err)
+	}
+	// 预算 1s,给足启动开销:超过 7s 说明等的是插件进程而不是自己的预算。
+	if spent > 7*time.Second {
+		t.Fatalf("超时没有兜住,等了 %v", spent)
 	}
 }
 

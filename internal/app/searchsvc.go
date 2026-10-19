@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/enpiaohj/agentdeck/internal/marks"
 	"github.com/enpiaohj/agentdeck/internal/search"
 	"github.com/enpiaohj/agentdeck/internal/sessions"
 )
@@ -97,7 +98,7 @@ func (s *SearchService) Query(q string, limit int) (*SearchReply, error) {
 	// Lock order is search -> app; no app lock is held while acquiring search.
 	st.mu.Lock()
 	s.a.mu.Lock()
-	generation, byKey := s.a.generation, s.a.byKey
+	generation, byKey, ms := s.a.generation, s.a.byKey, s.a.marksAll
 	s.a.mu.Unlock()
 	ready := st.state == "ready" && st.ix != nil && st.generation == generation
 	var ix *search.Index
@@ -105,14 +106,14 @@ func (s *SearchService) Query(q string, limit int) (*SearchReply, error) {
 		ix = st.ix
 		// Keep replacement/Close from invalidating a query's index handle.
 		defer st.mu.Unlock()
-		return s.queryIndex(ix, byKey, q, limit)
+		return s.queryIndex(ix, byKey, ms, q, limit)
 	}
 	st.mu.Unlock()
 	return s.queryScan(q, limit)
 }
 
 // queryIndex 全文索引路径。
-func (s *SearchService) queryIndex(ix *search.Index, byKey map[string]sessions.Session, q string, limit int) (*SearchReply, error) {
+func (s *SearchService) queryIndex(ix *search.Index, byKey map[string]sessions.Session, ms map[string]marks.Mark, q string, limit int) (*SearchReply, error) {
 	rs, err := ix.Search(context.Background(), q, limit)
 	if err != nil {
 		return nil, err
@@ -132,7 +133,7 @@ func (s *SearchService) queryIndex(ix *search.Index, byKey map[string]sessions.S
 			Key:     key,
 			Part:    r.Key,
 			Agent:   sess.Agent,
-			Title:   sess.Title,
+			Title:   displayTitle(sess, ms[sessionMarkKey(sess, key, ms)]),
 			Last:    lastString(sess.Last),
 			Match:   search.Anchor(r.Text, q),
 			Snippet: search.Excerpt(r.Text, q, 36, 120),
@@ -147,7 +148,7 @@ func (s *SearchService) queryScan(q string, limit int) (*SearchReply, error) {
 	if needle == "" {
 		return &SearchReply{Mode: "scan", Hits: []SearchHitView{}}, nil
 	}
-	list, _, _ := s.a.snapshot()
+	list, _, ms := s.a.snapshot()
 	out := make([]SearchHitView, 0, limit)
 	for _, sess := range list {
 		if len(out) >= limit {
@@ -167,7 +168,7 @@ func (s *SearchService) queryScan(q string, limit int) (*SearchReply, error) {
 		out = append(out, SearchHitView{
 			Key:   sess.Agent + ":" + sess.ID,
 			Part:  sess.Agent + ":" + sess.ID,
-			Agent: sess.Agent, Title: sess.Title, Last: lastString(sess.Last),
+			Agent: sess.Agent, Title: displayTitle(sess, ms[sessionMarkKey(sess, sess.Agent+":"+sess.ID, ms)]), Last: lastString(sess.Last),
 			Match: h.Match, Snippet: h.Before + h.Match + h.After,
 		})
 	}

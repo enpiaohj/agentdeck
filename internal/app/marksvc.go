@@ -67,6 +67,24 @@ func (s *MarkService) SetNote(key, note string) error {
 	return nil
 }
 
+// SetTitle 仅写 AgentDeck 的标注库；空标题清除本地覆盖。
+func (s *MarkService) SetTitle(key, title string) error {
+	s.a.dataMu.Lock()
+	defer s.a.dataMu.Unlock()
+	if err := s.a.checkDeletedMark(key); err != nil {
+		return err
+	}
+	_, byKey, _ := s.a.snapshot()
+	if _, exists := byKey[key]; !exists {
+		return fmt.Errorf("会话不存在: %s", key)
+	}
+	if err := s.a.marks.SetTitle(s.a.markKey(key), title); err != nil {
+		return err
+	}
+	s.a.changed(key)
+	return nil
+}
+
 func (s *MarkService) TagsInUse() ([]string, error) {
 	return s.a.marks.TagsInUse()
 }
@@ -79,7 +97,7 @@ func (s *MarkService) Get(key string) (Mark, error) {
 	}
 	return Mark{
 		Key: key, Favorite: m.Favorite, Archived: m.Archived,
-		Tags: m.Tags, Note: m.Note, Updated: m.Updated.UnixMilli(),
+		Tags: m.Tags, Note: m.Note, Title: m.Title, Updated: m.Updated.UnixMilli(),
 	}, nil
 }
 
@@ -90,6 +108,7 @@ type Mark struct {
 	Archived bool     `json:"archived"`
 	Tags     []string `json:"tags"`
 	Note     string   `json:"note"`
+	Title    string   `json:"title"`
 	Updated  int64    `json:"updated"`
 }
 

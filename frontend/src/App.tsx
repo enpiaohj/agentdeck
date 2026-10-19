@@ -39,6 +39,7 @@ import { deletedSessionKeys } from './sessionDeletion'
 import type { SessionView, ClaudeImportReport } from '../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as searchService from '../bindings/github.com/enpiaohj/agentdeck/internal/app/searchservice'
 import * as sessionService from '../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
+import * as resumeService from '../bindings/github.com/enpiaohj/agentdeck/internal/app/resumeservice'
 
 const useStyles = makeStyles({
   outer: {
@@ -415,6 +416,16 @@ export function App() {
             onFilter={(f) => { setFilter(f); setSearchQuery(''); setView('sessions') }}
             listVersion={listVersion}
             onOpenDiagnostics={() => setView('diagnostics')}
+            onRefresh={() => setListVersion(value => value + 1)}
+            onNewSession={async (project: string) => {
+              // 后端起 agent CLI，新会话由它自己建；AgentDeck 不写上游。
+              try {
+                await resumeService.NewSession(project, filter.agent ?? '')
+                setNotice('已在新终端里开始会话；等它产生第一条消息后就会出现在列表里。')
+              } catch (reason) {
+                setNotice(String(reason))
+              }
+            }}
           /> : null}
           {view === 'diagnostics' || view === 'imports' ? (
             <div style={{ gridColumn: view === 'diagnostics' ? '1 / -1' : 'span 3', minWidth: 0, overflow: 'hidden' }}>

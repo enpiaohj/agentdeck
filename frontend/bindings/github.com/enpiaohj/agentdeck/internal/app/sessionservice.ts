@@ -107,7 +107,13 @@ export function PreviewDeleteSessions(keys: string[], includeChildren: boolean):
 }
 
 /**
- * Projects 项目聚合视图。
+ * Projects 项目聚合视图：会话聚合出来的项目，与用户声明的项目（还没有
+ * 任何会话的目录）按路径合并。
+ * 
+ * 同一路径两处都有时只出一行：用聚合出的统计数据（会话数、收藏、最后
+ * 活动）填上，Declared 标为真——声明只贡献「这个项目是用户特意建的」，
+ * 不该把真有会话的那个挤掉，也不该让它显示成 0 个会话。
+ * 声明的排在前面：它往往是用户刚建、最想立刻看到的那一个。
  */
 export function Projects(): $CancellablePromise<$models.ProjectView[]> {
     return $Call.ByID(2744492366).then(($result: any) => {

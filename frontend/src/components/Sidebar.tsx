@@ -4,6 +4,11 @@ import {
   mergeClasses,
   tokens,
   Text,
+  Menu,
+  MenuPopover,
+  MenuList,
+  MenuItem,
+  Input,
 } from '@fluentui/react-components'
 import {
   ArchiveRegular,
@@ -13,12 +18,17 @@ import {
   StarRegular,
   FolderRegular,
   SettingsRegular,
+  OpenRegular,
+  EditRegular,
+  DeleteRegular,
 } from '@fluentui/react-icons'
 import { useEffect, useState } from 'react'
 import type { AgentView, ProjectView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
+import * as projectService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/projectservice'
 import { agentMeta } from '../util'
 import { AgentMark } from '../icons/AgentMark'
+import { NewProjectDialog } from './NewProjectDialog'
 
 export type SidebarFilter = {
   agent?: string
@@ -118,14 +128,43 @@ type Props = {
   filter: SidebarFilter
   onFilter: (f: SidebarFilter) => void
   onOpenDiagnostics?: () => void
+  /** 在某个项目目录里开新的 agent 会话（后端起 CLI）。 */
+  onNewSession: (project: string) => void
+  /** 项目清单或标注变化后重新拉取。 */
+  onRefresh: () => void
 }
 
 function isAll(f: SidebarFilter) { return !f.favorites && !f.archived }
 
-export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, onOpenDiagnostics }: Props) {
+// pointTarget 把「右键的那个坐标点」伪装成一个定位目标：Menu 的
+// positioning 只认元素，而这里只有坐标（写法同 SessionContextMenu）。
+function pointTarget(point: { x: number; y: number }) {
+  return { getBoundingClientRect: () => DOMRect.fromRect({ x: point.x, y: point.y, width: 0, height: 0 }) }
+}
+
+export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, onOpenDiagnostics, onNewSession, onRefresh }: Props) {
   const styles = useStyles()
   const agents = useAgents(listVersion)
   const projects = useProjects(listVersion)
+  const [menu, setMenu] = useState<{ path: string; name: string; declared: boolean; x: number; y: number } | null>(null)
+  const [renaming, setRenaming] = useState<{ path: string; name: string } | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+  const [notice, setNotice] = useState('')
+
+  const renameProject = async (m: { path: string; name: string }) => {
+    setRenameDraft(m.name)
+    setRenaming({ path: m.path, name: m.name })
+  }
+
+  const removeProject = async (m: { path: string; name: string }) => {
+    try {
+      await projectService.Remove(m.path)
+      setNotice(`已取消声明「${m.name}」，文件没有动。`)
+      onRefresh()
+    } catch (reason) {
+      setNotice(String(reason))
+    }
+  }
 
   const pick = (f: SidebarFilter) => () => {
     if ('agent' in f) onFilter({ ...filter, agent: filter.agent === f.agent ? undefined : f.agent })
@@ -203,14 +242,22 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
       ))}
       </div>
 
-      <div className={styles.sectionTitle}>项目</div>
+      <div className={styles.sectionTitle} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '8px' }}>
+        <span>项目</span>
+        <NewProjectDialog
+          current={filter.project}
+          onCreated={p => onFilter({ ...filter, project: p })}
+          onChanged={onRefresh}
+        />
+      </div>
       <div className={styles.projectScroll}>
         {projects.map((p) => (
           <button
             key={p.path}
             className={mergeClasses(styles.item, filter.project === p.path && styles.itemActive)}
             onClick={pick({ project: p.path })}
-            title={`${p.path}(${p.favorites} 收藏)`}
+            onContextMenu={event => { event.preventDefault(); event.stopPropagation(); setMenu({ path: p.path, name: p.name, declared: p.declared, x: event.clientX, y: event.clientY }) }}
+            title={`${p.path}(${p.favorites} 收藏)${p.declared ? ' · AgentDeck 新建' : ''}`}
           >
             <FolderRegular fontSize={16} style={{ flexShrink: 0, color: tokens.colorNeutralForeground3 }} />
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -221,6 +268,49 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
         ))}
         {projects.length === 0 ? <div className={styles.status}>暂无项目</div> : null}
       </div>
+      {menu ? (
+        <Menu open closeOnScroll
+          positioning={{ target: pointTarget(menu), position: 'below', align: 'start', offset: 2 }}
+          onOpenChange={(_, d) => { if (!d.open) setMenu(null) }}>
+          <MenuPopover onKeyDown={event => event.stopPropagation()}>
+            <MenuList aria-label="项目操作菜单">
+              <div className="ad-context-heading">{menu.name}</div>
+              <MenuItem icon={<OpenRegular />} onClick={() => { const m = menu; setMenu(null); void onNewSession(m.path) }}>
+                在此新建会话
+              </MenuItem>
+              {menu.declared ? <>
+                <MenuItem icon={<EditRegular />} onClick={() => { const m = menu; setMenu(null); void renameProject(m) }}>重命名</MenuItem>
+                <MenuItem icon={<DeleteRegular />} onClick={() => { const m = menu; setMenu(null); void removeProject(m) }}>取消声明（不删文件）</MenuItem>
+              </> : null}
+            </MenuList>
+          </MenuPopover>
+        </Menu>
+      ) : null}
+      {notice ? <div role="status" style={{ margin: '0 8px 8px', fontSize: 12, color: tokens.colorNeutralForeground2 }}>{notice}</div> : null}
+      {renaming ? (
+        <div style={{ padding: '6px 8px 10px' }}>
+          <Input
+            autoFocus
+            size="small"
+            value={renameDraft}
+            aria-label="项目显示名"
+            onChange={(_, d) => setRenameDraft(d.value)}
+            onKeyDown={async event => {
+              if (event.key === 'Enter') {
+                const next = renameDraft.trim()
+                if (next && next !== renaming.name) {
+                  try {
+                    await projectService.Rename(renaming.path, next)
+                    onRefresh()
+                  } catch (reason) { setNotice(String(reason)) }
+                }
+                setRenaming(null)
+              }
+              if (event.key === 'Escape') setRenaming(null)
+            }}
+          />
+        </div>
+      ) : null}
       <div className={styles.foot}>
         {onOpenDiagnostics ? (
           <button

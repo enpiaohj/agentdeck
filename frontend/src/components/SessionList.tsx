@@ -166,6 +166,11 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
   const [bulkError, setBulkError] = useState('')
   const [actionMessage, setActionMessage] = useState('')
   const [context, setContext] = useState<{ key: string; keys: string[]; x: number; y: number; scope: string } | null>(null)
+  const [renamingKey, setRenamingKey] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+  const [renameSaving, setRenameSaving] = useState(false)
+  const renamePending = useRef(false)
+  const renameCancelled = useRef(false)
   const [query, setQuery] = useState('')
   const [month, setMonth] = useState('')
   const [account, setAccount] = useState('')
@@ -196,6 +201,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
       setSelection({ keys: new Set(), anchor: null, focus: null })
       setBulkError('')
       setContext(null)
+      setRenamingKey(null)
       setActionMessage('')
     }
   }, [scope])
@@ -289,6 +295,20 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
     if (context) rowRefs.current.get(context.key)?.focus({ preventScroll: true })
     setContext(null)
   }
+  const saveRename = async (key: string, previousTitle: string, draft: string) => {
+    if (renameCancelled.current || renamePending.current) return
+    const title = draft.trim()
+    if (!title || title === previousTitle) { setRenamingKey(null); return }
+    renamePending.current = true
+    setRenameSaving(true); setBulkError('')
+    try {
+      await markService.SetTitle(key, title)
+      setRenamingKey(null)
+      reload()
+    } catch (reason) { setBulkError(`重命名失败：${String(reason).slice(0, 240)}`) }
+    finally { renamePending.current = false; setRenameSaving(false) }
+  }
+
   const contextAction = async (action: SessionAction) => {
     if (!contextOpen || !context || busy) return
     const items = contextItems
@@ -296,6 +316,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
     closeContext()
     if (action === 'open') { onSelect(item); return }
     if (action === 'details') { onOpenDetails(item); return }
+    if (action === 'rename') { onSelect(item); renameCancelled.current = false; setRenamingKey(item.key); setRenameDraft(item.title); return }
     if (action === 'delete') { onDeleteSessions(items); return }
     if (action === 'favorite' || action === 'archive') {
       const value = !items.every(row => action === 'favorite' ? row.favorite : row.archived)
@@ -309,7 +330,10 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
         await navigator.clipboard.writeText(action === 'copyCwd' ? item.cwd : items.map(row => row.title || '未命名会话').join('\n'))
         setActionMessage(action === 'copyCwd' ? '工作目录已复制。' : '会话标题已复制。')
       } else if (action === 'resume') {
-        await resumeService.OpenInTerminal(item.key); setActionMessage('已在终端中打开会话。')
+        // 这条路径的错误消息后端保证自解释（其中一条是「终端已打开、只是
+        // 附带动作失败」），不再套「操作失败：」前缀，否则与事实相反。
+        try { await resumeService.OpenInTerminal(item.key); setActionMessage('已在终端中打开会话。') }
+        catch (reason) { setBulkError(String(reason).slice(0, 240)) }
       } else if (action === 'copyResume') {
         await resumeService.CopyToClipboard(item.key); setActionMessage('恢复命令已复制。')
       } else if (action === 'export') {
@@ -436,8 +460,8 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
                     className={mergeClasses('sessionRow', styles.row, nested && styles.childRow, selected && styles.rowSelected, active && styles.rowActive)}
                     data-session-key={s.key}
                     data-child-session={nested || undefined}
-                    onMouseDown={event => { if (event.shiftKey || event.ctrlKey || event.metaKey) event.preventDefault() }}
-                    onClick={event => { if ((event.target as HTMLElement).closest('button')) return; choose(s, { toggle: event.ctrlKey || event.metaKey, range: event.shiftKey }); event.currentTarget.focus() }}
+                    onMouseDown={event => { if (!renamingKey && (event.shiftKey || event.ctrlKey || event.metaKey)) event.preventDefault() }}
+                    onClick={event => { if ((event.target as HTMLElement).closest('button, input')) return; choose(s, { toggle: event.ctrlKey || event.metaKey, range: event.shiftKey }); event.currentTarget.focus() }}
                     onContextMenu={event => { event.preventDefault(); event.stopPropagation(); openContext(s, event.clientX, event.clientY) }}
                     tabIndex={(visibleSelection.focus ?? visibleKeys[0]) === s.key ? 0 : -1}
                     role="row"
@@ -470,7 +494,19 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
                   >
                     <div className={styles.rowBody} role="gridcell">
                       <div className={styles.titleLine}>
-                        <Text title={s.title || '未命名会话'} className={mergeClasses(styles.title, selected && styles.titleOn)}>{s.title || '未命名会话'}</Text>
+                        {renamingKey === s.key ? <Input
+                          className={styles.title} size="small" autoFocus aria-label={`重命名会话 ${s.title || '未命名会话'}`}
+                          value={renameDraft} disabled={renameSaving}
+                          onClick={event => event.stopPropagation()}
+                          onChange={(_, data) => setRenameDraft(data.value)}
+                          onBlur={event => { if (!renameCancelled.current) void saveRename(s.key, s.title, event.currentTarget.value) }}
+                          onKeyDown={event => {
+                            event.stopPropagation()
+                            if (event.nativeEvent.isComposing || event.keyCode === 229) return
+                            if (event.key === 'Enter') { event.preventDefault(); void saveRename(s.key, s.title, event.currentTarget.value) }
+                            if (event.key === 'Escape' && !renameSaving) { event.preventDefault(); renameCancelled.current = true; setRenamingKey(null) }
+                          }}
+                        /> : <Text title={s.title || '未命名会话'} className={mergeClasses(styles.title, selected && styles.titleOn)}>{s.title || '未命名会话'}</Text>}
                         <span className={styles.time} title={fmtTime(s.last)}>{relTime(s.last)}</span>
                         <button
                           data-favorite={s.favorite}

@@ -25,9 +25,26 @@ export function CopyToClipboard(key: string): $CancellablePromise<void> {
 }
 
 /**
+ * NewSession 在指定项目目录里开一个**新的** agent 会话：不挑历史会话，
+ * 直接起该 agent 的 CLI，由它自己建会话。这正是「新建会话」——AgentDeck
+ * 不写任何上游存储，只是把用户「在这个项目里开一个」的决定交给 CLI
+ * （与自己敲 `claude` 等价）。
+ * 
+ * agent 为空时用当前列表里最多的那个 agent（前端一般已带上下文）。
+ * 返回的错误自解释，与 OpenInTerminal 同一套措辞（前端不套前缀）。
+ */
+export function NewSession(project: string, agent: string): $CancellablePromise<void> {
+    return $Call.ByID(642767699, project, agent);
+}
+
+/**
  * OpenInTerminal 在终端里打开会话原工作目录并执行恢复命令(Windows 上
  * 直接启动 wt.exe / powershell.exe,恢复命令经 -EncodedCommand 交付,
  * 见 terminalCommand)。WSL 会话不支持直开——只提供复制。
+ * 
+ * 返回的每条错误消息都自解释(前端对这条路径不再套「操作失败：」前缀),
+ * 因为其中一条是「终端已经开出来了,只是附带动作失败」,扣「操作失败」的
+ * 帽子与事实相反。
  */
 export function OpenInTerminal(key: string): $CancellablePromise<void> {
     return $Call.ByID(1096260450, key);

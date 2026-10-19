@@ -57,6 +57,13 @@ export function SetTags(key: string, tags: string[]): $CancellablePromise<void> 
     return $Call.ByID(4175942704, key, tags);
 }
 
+/**
+ * SetTitle 仅写 AgentDeck 的标注库；空标题清除本地覆盖。
+ */
+export function SetTitle(key: string, title: string): $CancellablePromise<void> {
+    return $Call.ByID(3791174073, key, title);
+}
+
 export function TagsInUse(): $CancellablePromise<string[]> {
     return $Call.ByID(2916691884).then(($result: any) => {
         return $$createType1($result);

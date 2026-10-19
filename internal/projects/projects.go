@@ -95,6 +95,10 @@ func drive(p string) string {
 	return strings.TrimSuffix(vol, ":")
 }
 
+// Drive 是 drive 的导出形式：取盘符（"D"）或 UNC 共享名。装配
+// ProjectView.Drive 用，声明项目没有会话可聚合时也走这条。
+func Drive(p string) string { return drive(p) }
+
 // DisplayName 是项目展示名：末级目录；盘符根本身就是名（"D:\"）。
 // 导出给 app 服务层装配 SessionView.Project 用。
 func DisplayName(p string) string {

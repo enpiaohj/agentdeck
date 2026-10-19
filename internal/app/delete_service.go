@@ -161,7 +161,7 @@ func (s *SessionService) PreviewDeleteSessions(keys []string, includeChildren bo
 		}
 		plan, err := sessions.PrepareNativeDelete(sess)
 		if err != nil {
-			return DeletePreview{}, fmt.Errorf("%s：%w", sess.Title, err)
+			return DeletePreview{}, fmt.Errorf("%s：%w", displayTitle(sess, ms[sessionMarkKey(sess, key, ms)]), err)
 		}
 		job.keys, job.sessions, job.native = append(job.keys, key), append(job.sessions, sess), append(job.native, plan)
 		owned[key] = true
@@ -170,7 +170,7 @@ func (s *SessionService) PreviewDeleteSessions(keys []string, includeChildren bo
 				owned[legacy] = true
 			}
 		}
-		preview.Titles = append(preview.Titles, sess.Title)
+		preview.Titles = append(preview.Titles, displayTitle(sess, ms[sessionMarkKey(sess, key, ms)]))
 		// Only the unlinked files count toward "deleted files" and bytes; the
 		// rewritten state DB and shared indexes keep their file on disk.
 		for _, path := range plan.Files {

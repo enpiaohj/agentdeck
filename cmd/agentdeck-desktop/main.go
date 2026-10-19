@@ -63,6 +63,7 @@ func main() {
 			application.NewService(a.NewSearchService()),
 			application.NewService(a.NewMarkService()),
 			application.NewService(a.NewResumeService()),
+			application.NewService(a.NewProjectService()),
 		},
 	})
 

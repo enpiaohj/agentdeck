@@ -34,6 +34,7 @@ type Mark struct {
 	Archived bool      `json:"archived"`
 	Tags     []string  `json:"tags"`
 	Note     string    `json:"note"`
+	Title    string    `json:"title"`
 	Updated  time.Time `json:"updated"`
 }
 
@@ -45,7 +46,7 @@ type Store struct {
 	mu   sync.Mutex
 }
 
-// schema 是本包的表结构。演进只加列不改列，user_version 从 1 起。
+// schema 是新库的表结构。旧库通过 migrate 增列升级。
 var schema = [...]string{
 	`CREATE TABLE IF NOT EXISTS marks (
 		key      TEXT PRIMARY KEY,
@@ -53,9 +54,10 @@ var schema = [...]string{
 		archived INTEGER NOT NULL DEFAULT 0,
 		tags     TEXT    NOT NULL DEFAULT '[]',
 		note     TEXT    NOT NULL DEFAULT '',
+		title    TEXT    NOT NULL DEFAULT '',
 		updated  TEXT    NOT NULL DEFAULT ''
 	)`,
-	`PRAGMA user_version = 1`,
+	`PRAGMA user_version = 2`,
 }
 
 // keyRe 是会话 key 的白名单：agent 段小写字母数字连字符，id 段是各
@@ -65,9 +67,10 @@ var keyRe = regexp.MustCompile(`^[a-z0-9-]+:[0-9A-Za-z_-]+$`)
 
 // 限制：标签个数与单个标签长度、备注长度，防一条会话的备注写满一行。
 const (
-	maxTags    = 32
-	maxTagLen  = 64
-	maxNoteRun = 10000
+	maxTags     = 32
+	maxTagLen   = 64
+	maxNoteRun  = 10000
+	maxTitleRun = 200
 )
 
 // DefaultPath 是标注库的默认位置：%APPDATA%\AgentDeck\marks.db。
@@ -90,13 +93,93 @@ func Open(path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, stmt := range schema {
-		if _, err := db.Exec(stmt); err != nil {
-			db.Close()
-			return nil, err
-		}
+	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, err
 	}
 	return &Store{db: db, path: path}, nil
+}
+
+// migrate 在单个事务里升级旧标注库，失败时保留原库版本与内容。
+func migrate(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var version int
+	if err := tx.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		return err
+	}
+	switch version {
+	case 0:
+		var exists int
+		if err := tx.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type='table' AND name='marks'`).Scan(&exists); err != nil {
+			return err
+		}
+		if exists != 0 {
+			return fmt.Errorf("标注库未标版本且已有 marks 表，拒绝迁移")
+		}
+		for _, stmt := range schema {
+			if _, err := tx.Exec(stmt); err != nil {
+				return err
+			}
+		}
+	case 1:
+		// 旧版程序重开已升级的库时会把 user_version 写回 1；列仍在。
+		if err := validateMarkColumns(tx, 1); err != nil {
+			return err
+		}
+		var titleColumns int
+		if err := tx.QueryRow(`SELECT count(*) FROM pragma_table_info('marks') WHERE name='title'`).Scan(&titleColumns); err != nil {
+			return err
+		}
+		if titleColumns == 0 {
+			if _, err := tx.Exec(`ALTER TABLE marks ADD COLUMN title TEXT NOT NULL DEFAULT ''`); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.Exec(`PRAGMA user_version = 2`); err != nil {
+			return err
+		}
+	case 2:
+		if err := validateMarkColumns(tx, 2); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("不支持的标注库 schema 版本 %d", version)
+	}
+	return tx.Commit()
+}
+
+func validateMarkColumns(tx *sql.Tx, version int) error {
+	rows, err := tx.Query(`PRAGMA table_info(marks)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	columns := map[string]bool{}
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, kind string
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &kind, &notnull, &defaultValue, &pk); err != nil {
+			return err
+		}
+		columns[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, name := range []string{"key", "favorite", "archived", "tags", "note", "updated"} {
+		if !columns[name] {
+			return fmt.Errorf("标注库缺少 %s 列", name)
+		}
+	}
+	if version == 2 && !columns["title"] {
+		return fmt.Errorf("标注库缺少 title 列")
+	}
+	return nil
 }
 
 // Close 关闭底层库。
@@ -117,8 +200,7 @@ func (s *Store) BackupTo(dest string) error {
 	return err
 }
 
-// Validate 校验 path 是合法的 AgentDeck 标注库(user_version=1 且
-// marks 表存在),恢复前检查用。
+// Validate 校验 path 是合法的 AgentDeck 标注库，恢复前检查用。
 func Validate(path string) error {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -129,8 +211,8 @@ func Validate(path string) error {
 	if err := db.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil {
 		return err
 	}
-	if v != 1 {
-		return fmt.Errorf("schema 版本 %d 不是本程序标注库(期望 1)", v)
+	if v != 1 && v != 2 {
+		return fmt.Errorf("schema 版本 %d 不是本程序标注库(期望 1 或 2)", v)
 	}
 	var n int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='marks'`).Scan(&n); err != nil {
@@ -147,8 +229,8 @@ func (s *Store) Get(key string) (Mark, error) {
 	m := Mark{Key: key}
 	var tags string
 	var updated string
-	err := s.db.QueryRow(`SELECT favorite, archived, tags, note, updated FROM marks WHERE key = ?`, key).
-		Scan(&m.Favorite, &m.Archived, &tags, &m.Note, &updated)
+	err := s.db.QueryRow(`SELECT favorite, archived, tags, note, title, updated FROM marks WHERE key = ?`, key).
+		Scan(&m.Favorite, &m.Archived, &tags, &m.Note, &m.Title, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return m, nil
 	}
@@ -162,7 +244,7 @@ func (s *Store) Get(key string) (Mark, error) {
 
 // All 取全部标注，供列表一次性合成。
 func (s *Store) All() (map[string]Mark, error) {
-	rows, err := s.db.Query(`SELECT key, favorite, archived, tags, note, updated FROM marks`)
+	rows, err := s.db.Query(`SELECT key, favorite, archived, tags, note, title, updated FROM marks`)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +253,7 @@ func (s *Store) All() (map[string]Mark, error) {
 	for rows.Next() {
 		var m Mark
 		var tags, updated string
-		if err := rows.Scan(&m.Key, &m.Favorite, &m.Archived, &tags, &m.Note, &updated); err != nil {
+		if err := rows.Scan(&m.Key, &m.Favorite, &m.Archived, &tags, &m.Note, &m.Title, &updated); err != nil {
 			return nil, err
 		}
 		m.Tags = decodeTags(tags)
@@ -220,6 +302,20 @@ func (s *Store) SetNote(key string, note string) error {
 	return s.update(key, func(m *Mark) { m.Note = note })
 }
 
+// SetTitle 保存本地显示标题；空串清除覆盖，恢复来源标题。
+func (s *Store) SetTitle(key, title string) error {
+	title = strings.TrimSpace(title)
+	if len([]rune(title)) > maxTitleRun {
+		return fmt.Errorf("标题最多 %d 字", maxTitleRun)
+	}
+	for _, r := range title {
+		if r < 0x20 || r == 0x7f || r == 0x2028 || r == 0x2029 {
+			return fmt.Errorf("标题不能包含换行或控制字符")
+		}
+	}
+	return s.update(key, func(m *Mark) { m.Title = title })
+}
+
 // TagsInUse 是库里出现过的全部标签（去重、原顺序），侧栏标签清单用。
 func (s *Store) TagsInUse() ([]string, error) {
 	rows, err := s.db.Query(`SELECT tags FROM marks`)
@@ -258,8 +354,8 @@ func (s *Store) update(key string, change func(*Mark)) error {
 	}
 	m := Mark{Key: key}
 	var tags, updated string
-	err = tx.QueryRow(`SELECT favorite, archived, tags, note, updated FROM marks WHERE key = ?`, key).
-		Scan(&m.Favorite, &m.Archived, &tags, &m.Note, &updated)
+	err = tx.QueryRow(`SELECT favorite, archived, tags, note, title, updated FROM marks WHERE key = ?`, key).
+		Scan(&m.Favorite, &m.Archived, &tags, &m.Note, &m.Title, &updated)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 	case err != nil:
@@ -271,12 +367,12 @@ func (s *Store) update(key string, change func(*Mark)) error {
 	}
 	change(&m)
 	m.Updated = time.Now().UTC()
-	if _, err := tx.Exec(`INSERT INTO marks(key, favorite, archived, tags, note, updated)
-		VALUES (?, ?, ?, ?, ?, ?)
+	if _, err := tx.Exec(`INSERT INTO marks(key, favorite, archived, tags, note, title, updated)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(key) DO UPDATE SET
 			favorite = excluded.favorite, archived = excluded.archived,
-			tags = excluded.tags, note = excluded.note, updated = excluded.updated`,
-		key, b2i(m.Favorite), b2i(m.Archived), encodeTags(m.Tags), m.Note,
+			tags = excluded.tags, note = excluded.note, title = excluded.title, updated = excluded.updated`,
+		key, b2i(m.Favorite), b2i(m.Archived), encodeTags(m.Tags), m.Note, m.Title,
 		m.Updated.Format(time.RFC3339Nano)); err != nil {
 		tx.Rollback()
 		return err

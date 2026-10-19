@@ -21,6 +21,7 @@ import (
 	"github.com/enpiaohj/agentdeck/internal/claudehistory"
 	"github.com/enpiaohj/agentdeck/internal/history"
 	"github.com/enpiaohj/agentdeck/internal/marks"
+	"github.com/enpiaohj/agentdeck/internal/projects"
 	"github.com/enpiaohj/agentdeck/internal/sessions"
 )
 
@@ -36,6 +37,9 @@ type Config struct {
 	ImportDir string
 	// LibraryPath is permanent history, independent from the rebuildable index.
 	LibraryPath string
+	// ProjectsPath 声明项目清单库路径；空用默认（与 marks 同目录）。
+	// 测试传 :memory: 得独立内存库。
+	ProjectsPath string
 	// Emit 前端事件推送；nil 时构建进度只落在 Status() 里。
 	Emit Emitter
 	// Clipboard 写剪贴板；nil 时复制动作报错。
@@ -49,6 +53,7 @@ type App struct {
 	dataMu        sync.Mutex // serializes owned-data backup, restore, import and mark mutations
 	cfg           Config
 	marks         *marks.Store
+	declared      *projects.Store // 用户声明的项目（尚无会话的目录）
 	history       *history.Store
 	captureMu     sync.Mutex // serialize reads and commits, including index/preview callers
 	libraryError  string
@@ -59,6 +64,7 @@ type App struct {
 	deleteUndos   map[string]*deleteJob                  // guarded by dataMu
 	deleted       map[string]bool                        // guarded by mu
 	nativeDelete  func(*sessions.NativeDeletePlan) error // fault injection for rollback tests
+	codexName     func(threadID, name string) error      // 写 Codex 原生名；测试替换成假的，不去起真进程
 
 	mu          sync.Mutex
 	list        []sessions.Session // 装配缓存：sessions.List(All) 的快照
@@ -107,22 +113,38 @@ func New(cfg Config) (*App, error) {
 		}
 		cfg.LibraryPath = filepath.Join(base, "library", "history.db")
 	}
+	// 声明项目与 marks 一样是用户数据（Roaming），跟随它的目录；
+	// 测试把 MarksPath 设成 :memory: 时没有目录可用，落临时目录。
+	if cfg.ProjectsPath == "" {
+		base := filepath.Dir(cfg.MarksPath)
+		if cfg.MarksPath == ":memory:" {
+			base = os.TempDir()
+		}
+		cfg.ProjectsPath = filepath.Join(base, "projects.db")
+	}
 	m, err := marks.Open(cfg.MarksPath)
 	if err != nil {
 		return nil, err
 	}
+	d, err := projects.Open(cfg.ProjectsPath)
+	if err != nil {
+		m.Close()
+		return nil, fmt.Errorf("打开声明项目库失败: %w", err)
+	}
 	h, err := history.Open(cfg.LibraryPath)
 	if err != nil {
 		m.Close()
+		d.Close()
 		return nil, fmt.Errorf("打开永久会话库失败: %w", err)
 	}
 	deleted, err := loadDeletedKeys(cfg.LibraryPath)
 	if err != nil {
 		m.Close()
+		d.Close()
 		h.Close()
 		return nil, fmt.Errorf("读取删除恢复状态失败：%w", err)
 	}
-	a := &App{cfg: cfg, marks: m, history: h, search: newSearchState(cfg.IndexPath), crashed: checkCrash(cfg.MarksPath), captureErrors: map[string]string{}, readNative: sessions.TranscriptForRetention, deleted: deleted}
+	a := &App{cfg: cfg, marks: m, declared: d, history: h, search: newSearchState(cfg.IndexPath), crashed: checkCrash(cfg.MarksPath), captureErrors: map[string]string{}, readNative: sessions.TranscriptForRetention, deleted: deleted, codexName: setCodexThreadName}
 	return a, nil
 }
 
@@ -168,6 +190,7 @@ func (a *App) Close() {
 	a.history.Close()
 	a.captureMu.Unlock()
 	a.marks.Close()
+	a.declared.Close()
 	clearCrash(a.cfg.MarksPath)
 	if a.singleRelease != nil {
 		a.singleRelease()
@@ -180,6 +203,9 @@ func (a *App) NewSessionService() *SessionService { return &SessionService{a: a}
 func (a *App) NewSearchService() *SearchService   { return &SearchService{a: a} }
 func (a *App) NewMarkService() *MarkService       { return &MarkService{a: a} }
 func (a *App) NewResumeService() *ResumeService   { return &ResumeService{a: a} }
+func (a *App) NewProjectService() *ProjectService {
+	return &ProjectService{a: a}
+}
 
 // emit nil 安全的事件推送。
 func (a *App) emit(event string, data any) {

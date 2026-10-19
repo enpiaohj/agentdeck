@@ -46,15 +46,21 @@ func (s *Store) DeleteKeys(keys []string) error {
 }
 
 type deletionRecord struct {
-	present             bool
-	favorite, archived  int
-	tags, note, updated string
+	present                    bool
+	favorite, archived         int
+	tags, note, title, updated string
 }
 
-func readDeletionRecord(tx *sql.Tx, key string) (deletionRecord, error) {
+func readDeletionRecord(tx *sql.Tx, key string, oldSchema bool) (deletionRecord, error) {
 	var record deletionRecord
-	err := tx.QueryRow(`SELECT favorite,archived,tags,note,updated FROM marks WHERE key=?`, key).
-		Scan(&record.favorite, &record.archived, &record.tags, &record.note, &record.updated)
+	var err error
+	if oldSchema {
+		err = tx.QueryRow(`SELECT favorite,archived,tags,note,updated FROM marks WHERE key=?`, key).
+			Scan(&record.favorite, &record.archived, &record.tags, &record.note, &record.updated)
+	} else {
+		err = tx.QueryRow(`SELECT favorite,archived,tags,note,title,updated FROM marks WHERE key=?`, key).
+			Scan(&record.favorite, &record.archived, &record.tags, &record.note, &record.title, &record.updated)
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return record, nil
 	}
@@ -89,9 +95,13 @@ func (s *Store) RestoreKeysFrom(path string, keys []string) error {
 		return err
 	}
 	defer source.Rollback()
+	hasTitle, err := backupHasTitle(source, "main")
+	if err != nil {
+		return err
+	}
 	records := make(map[string]deletionRecord, len(keys))
 	for _, key := range keys {
-		record, err := readDeletionRecord(source, key)
+		record, err := readDeletionRecord(source, key, !hasTitle)
 		if err != nil {
 			return err
 		}
@@ -105,7 +115,7 @@ func (s *Store) RestoreKeysFrom(path string, keys []string) error {
 	}
 	defer tx.Rollback()
 	for _, key := range keys {
-		current, err := readDeletionRecord(tx, key)
+		current, err := readDeletionRecord(tx, key, false)
 		if err != nil {
 			return err
 		}
@@ -117,7 +127,7 @@ func (s *Store) RestoreKeysFrom(path string, keys []string) error {
 			continue
 		}
 		if record.present {
-			if _, err := tx.Exec(`INSERT INTO marks(key,favorite,archived,tags,note,updated) VALUES(?,?,?,?,?,?)`, key, record.favorite, record.archived, record.tags, record.note, record.updated); err != nil {
+			if _, err := tx.Exec(`INSERT INTO marks(key,favorite,archived,tags,note,title,updated) VALUES(?,?,?,?,?,?,?)`, key, record.favorite, record.archived, record.tags, record.note, record.title, record.updated); err != nil {
 				return err
 			}
 		}

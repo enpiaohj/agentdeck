@@ -1,10 +1,10 @@
 import { Menu, MenuPopover, MenuList, MenuItem, MenuDivider } from '@fluentui/react-components'
-import { OpenRegular, PanelRightRegular, StarRegular, ArchiveRegular, ArchiveArrowBackRegular, CopyRegular, ArrowDownloadRegular, CodeRegular, DeleteRegular } from '@fluentui/react-icons'
+import { OpenRegular, PanelRightRegular, EditRegular, StarRegular, ArchiveRegular, ArchiveArrowBackRegular, CopyRegular, ArrowDownloadRegular, CodeRegular, DeleteRegular } from '@fluentui/react-icons'
 import { useMemo } from 'react'
 import type { SessionView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import { deletionUnavailableReason } from '../sessionDeletion'
 
-export type SessionAction = 'open' | 'details' | 'resume' | 'copyResume' | 'copyTitle' | 'copyCwd' | 'export' | 'favorite' | 'archive' | 'delete'
+export type SessionAction = 'open' | 'details' | 'rename' | 'resume' | 'copyResume' | 'copyTitle' | 'copyCwd' | 'export' | 'favorite' | 'archive' | 'delete'
 
 export function SessionContextMenu({ items, point, onClose, onAction }: {
   items: SessionView[]; point: { x: number; y: number }; onClose: () => void; onAction: (action: SessionAction) => void
@@ -22,6 +22,7 @@ export function SessionContextMenu({ items, point, onClose, onAction }: {
         {single ? <>
           <MenuItem icon={<OpenRegular />} onClick={() => onAction('open')}>打开会话</MenuItem>
           <MenuItem icon={<PanelRightRegular />} onClick={() => onAction('details')}>管理标签与备注</MenuItem>
+          <MenuItem icon={<EditRegular />} onClick={() => onAction('rename')}>重命名</MenuItem>
           <MenuItem icon={<CodeRegular />} disabled={!canResume || items[0].source === 'wsl'} onClick={() => onAction('resume')}>在终端中继续会话</MenuItem>
           <MenuItem icon={<CopyRegular />} disabled={!canResume} onClick={() => onAction('copyResume')}>复制恢复命令</MenuItem>
           <MenuDivider />

@@ -19,6 +19,8 @@ import {
   StarRegular,
   ArchiveRegular,
   DeleteRegular,
+  EditRegular,
+  ArrowResetRegular,
 } from '@fluentui/react-icons'
 import { useEffect, useRef, useState } from 'react'
 import { Dialogs } from '@wailsio/runtime'
@@ -58,6 +60,7 @@ const useStyles = makeStyles({
     borderBottom: `1px solid ${tokens.colorNeutralStroke3}`,
   },
   paneTitle: { flex: 1, minWidth: 0, fontSize: '13px', lineHeight: 1.6, overflowWrap: 'anywhere', fontWeight: 600 },
+  titleInput: { flex: 1, minWidth: 0 },
   agentRow: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', backgroundColor: tokens.colorNeutralBackground2, ...shorthands.borderRadius('6px') },
   advanced: { borderTop: `1px solid ${tokens.colorNeutralStroke3}`, paddingTop: '12px', fontSize: '12px', color: tokens.colorNeutralForeground2, lineHeight: 1.6 },
   advancedSummary: { cursor: 'pointer', color: tokens.colorNeutralForeground3, marginBottom: '8px' },
@@ -118,11 +121,14 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
   const [noteDraft, setNoteDraft] = useState(session?.note ?? '')
   const [copied, setCopied] = useState('')
   const [msg, setMsg] = useState('')
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState('')
+  const [savingTitle, setSavingTitle] = useState(false)
   const currentKey = useRef(session?.key)
   currentKey.current = session?.key
 
   useEffect(() => { setNoteDraft(session ? noteDrafts.get(session.key) ?? session.note : '') }, [session?.key, session?.note])
-  useEffect(() => { setMsg(''); setAdding(false); setTagDraft('') }, [session?.key])
+  useEffect(() => { setMsg(''); setAdding(false); setTagDraft(''); setEditingTitle(false); setTitleDraft(''); setSavingTitle(false) }, [session?.key])
 
   if (!session) {
     return (
@@ -141,6 +147,17 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
 
   const m = agentMeta(session.agent)
   const deleteReason = deletionUnavailableReason([session])
+
+  const saveTitle = (value: string) => {
+    const key = session.key
+    setSavingTitle(true)
+    setMsg('')
+    markService.SetTitle(key, value).then(() => {
+      if (currentKey.current === key) { setEditingTitle(false); setMsg(value ? '标题已保存' : '已恢复原名') }
+      onChanged()
+    }).catch((e: unknown) => { if (currentKey.current === key) setMsg(`修改标题失败：${String(e).slice(0, 120)}`) })
+      .finally(() => { if (currentKey.current === key) setSavingTitle(false) })
+  }
 
   const copy = (text: string, tag: string) => {
     navigator.clipboard?.writeText(text).then(() => {
@@ -196,14 +213,26 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
 
       <div className={styles.body}>
         <div className={styles.titleRow}>
-          <Text className={styles.paneTitle}>{session.title || '未命名会话'}</Text>
-          <Button size="small" appearance="subtle" icon={session.favorite ? <StarFilled /> : <StarRegular />} onClick={toggleStar} aria-label={session.favorite ? '取消收藏' : '收藏'} />
-          <Button
-            appearance="subtle" size="small"
-            icon={copied === 'title' ? <CheckmarkRegular /> : <CopyRegular />}
-            onClick={() => copy(session.title, 'title')}
-            title="复制标题"
-          />
+          {editingTitle ? <>
+            <Input
+              className={styles.titleInput} size="small" autoFocus aria-label="会话标题"
+              value={titleDraft} disabled={savingTitle}
+              onChange={(_, data) => setTitleDraft(data.value)}
+              onKeyDown={event => {
+                if (event.nativeEvent.isComposing || event.keyCode === 229) return
+                if (event.key === 'Enter') { event.preventDefault(); if (!savingTitle) { const title = titleDraft.trim(); if (title && title !== session.title) saveTitle(title); else if (title) setEditingTitle(false) } }
+                if (event.key === 'Escape') { event.stopPropagation(); setEditingTitle(false) }
+              }}
+            />
+            <Button size="small" appearance="subtle" icon={<CheckmarkRegular />} aria-label="保存标题" disabled={savingTitle || !titleDraft.trim()} onClick={() => { const title = titleDraft.trim(); if (title === session.title) setEditingTitle(false); else saveTitle(title) }} />
+            <Button size="small" appearance="subtle" icon={<DismissRegular />} aria-label="取消编辑标题" disabled={savingTitle} onClick={() => setEditingTitle(false)} />
+          </> : <>
+            <Text className={styles.paneTitle}>{session.title || '未命名会话'}</Text>
+            <Button size="small" appearance="subtle" icon={<EditRegular />} aria-label="编辑标题" disabled={savingTitle} onClick={() => { setTitleDraft(session.title); setEditingTitle(true); setMsg('') }} />
+            {session.title !== session.original_title ? <Button size="small" appearance="subtle" icon={<ArrowResetRegular />} aria-label="恢复原名" title={`恢复原名：${session.original_title || '未命名会话'}`} disabled={savingTitle} onClick={() => saveTitle('')} /> : null}
+            <Button size="small" appearance="subtle" icon={session.favorite ? <StarFilled /> : <StarRegular />} onClick={toggleStar} aria-label={session.favorite ? '取消收藏' : '收藏'} />
+            <Button appearance="subtle" size="small" icon={copied === 'title' ? <CheckmarkRegular /> : <CopyRegular />} onClick={() => copy(session.title, 'title')} aria-label="复制标题" />
+          </>}
         </div>
 
         <div className={styles.agentRow}>
