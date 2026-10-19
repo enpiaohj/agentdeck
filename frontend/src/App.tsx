@@ -417,14 +417,9 @@ export function App() {
             listVersion={listVersion}
             onOpenDiagnostics={() => setView('diagnostics')}
             onRefresh={() => setListVersion(value => value + 1)}
-            onNewSession={async (project: string) => {
-              // 后端起 agent CLI，新会话由它自己建；AgentDeck 不写上游。
-              try {
-                await resumeService.NewSession(project, filter.agent ?? '')
-                setNotice('已在新终端里开始会话；等它产生第一条消息后就会出现在列表里。')
-              } catch (reason) {
-                setNotice(String(reason))
-              }
+            onNewSession={async (project: string, agent: string) => {
+              await resumeService.NewSession(project, agent)
+              setNotice('已打开终端并请求启动智能体。生成会话记录后，可刷新列表查看。')
             }}
           /> : null}
           {view === 'diagnostics' || view === 'imports' ? (

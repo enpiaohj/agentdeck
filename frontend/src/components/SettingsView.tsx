@@ -4,10 +4,12 @@ import { useId, useState, type ReactNode } from 'react'
 import { usePreferences } from '../hooks/usePreferences'
 import { DiagnosticsView } from './DiagnosticsView'
 import { ReadingPreview } from './MessagePane'
+import { AgentSelect } from './AgentSelect'
 
 const categories = [
   {id:'appearance',label:'外观',icon:<PaintBrushRegular />},
   {id:'reading',label:'会话阅读',icon:<TextFontRegular />},
+  {id:'launch',label:'新建与启动',icon:<SettingsRegular />},
   {id:'data',label:'数据与诊断',icon:<DatabaseRegular />},
   {id:'shortcuts',label:'快捷键',icon:<KeyboardRegular />},
 ] as const
@@ -20,6 +22,9 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
   const q = query.trim().toLocaleLowerCase()
   const matches = (section: string, text: string) => q ? text.toLocaleLowerCase().includes(q) : section === category
   const groups: {id:string;title:string;description:string;rows:{key:string;title:string;description:string;control:(id:string)=>ReactNode}[]}[] = [
+    {id:'launch',title:'新建与启动',description:'设置新建项目和会话时默认使用的智能体。',rows:[
+      {key:'defaultAgent',title:'默认智能体',description:'默认使用 Claude Code CLI。项目已设置默认智能体时优先使用项目设置；从智能体右键菜单新建时优先使用所选智能体。新建会话时可临时更改。',control:id=><AgentSelect id={id} value={p.defaultAgent} onChange={agent=>update({defaultAgent:agent})} />},
+    ]},
     {id:'appearance',title:'外观',description:'设置工作台主题、正文字号与阅读宽度。',rows:[
       {key:'theme',title:'颜色主题',description:'跟随系统，或固定使用浅色 / 深色。',control:id=><select id={id} value={p.theme} onChange={e=>update({theme:e.target.value as typeof p.theme})}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>},
       {key:'fontSize',title:'正文字号',description:'应用于会话正文；列表和工具栏字号保持不变。',control:id=><select id={id} value={p.fontSize} onChange={e=>update({fontSize:Number(e.target.value)})}>{[13,14,15,16,18].map(n=><option key={n} value={n}>{n} px</option>)}</select>},
@@ -42,7 +47,7 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
         <nav className="ad-settings-nav" aria-label="设置分类">
           {categories.map(item=><button key={item.id} aria-pressed={!q&&category===item.id} onClick={()=>{setCategory(item.id);setQuery('')}}>{item.icon}{item.label}</button>)}
         </nav>
-        <p className="ad-settings-local">本机配置<span>界面偏好仅保存在本机</span></p>
+        <p className="ad-settings-local">本机配置<span>界面与启动偏好仅保存在本机</span></p>
       </aside>
       <div className="ad-settings-main">
         <div className="ad-settings-content">
@@ -52,7 +57,7 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
           </header>
           <div className="ad-settings-toolbar">
             <Input value={query} onChange={(_,data)=>setQuery(data.value)} contentBefore={<SearchRegular />} placeholder="搜索设置…" aria-label="搜索设置" />
-            <Button size="small" appearance="subtle" icon={<ArrowResetRegular />} onClick={reset} title="仅重置界面偏好，不影响会话、收藏与备注">恢复默认设置</Button>
+            <Button size="small" appearance="subtle" icon={<ArrowResetRegular />} onClick={reset} title="恢复界面偏好和应用默认智能体，不影响项目设置、会话、收藏与备注">恢复默认设置</Button>
           </div>
           {shown.map(group=><section className="ad-settings-section" key={group.id}>
             <h2>{group.title}</h2><p className="ad-settings-description">{group.description}</p>

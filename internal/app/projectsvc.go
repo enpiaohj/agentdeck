@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/enpiaohj/agentdeck/internal/projects"
 )
@@ -18,47 +21,103 @@ import (
 // 边界：声明只写 AgentDeck 自己的 projects.db，不碰任何 agent 的存储。
 type ProjectService struct{ a *App }
 
-// Create 声明一个项目并在磁盘上建出目录（「新建」的含义就是这个目录还不
-// 存在）。父目录不存在时如实报错——不层层替用户建一路目录，那超出了
-// 「新建这个项目」的授权范围。
+// Create 声明项目并创建目录；旧接口保留既有项目的默认平台。
 func (s *ProjectService) Create(path, name string) (string, error) {
-	p, err := s.a.declared.Add(path, name)
+	return s.create(path, name, "", false)
+}
+
+// CreateWithAgent 显式设置项目默认平台；空平台表示使用会话统计回退。
+func (s *ProjectService) CreateWithAgent(path, name, agent string) (string, error) {
+	if agent != "" && !cliAllowed(agent) {
+		return "", fmt.Errorf("暂不支持使用此智能体新建会话：%s", agent)
+	}
+	return s.create(path, name, agent, true)
+}
+
+func (s *ProjectService) create(path, name, agent string, setAgent bool) (string, error) {
+	p, err := projects.ValidatePath(path)
 	if err != nil {
 		return "", err
 	}
+	if name != "" {
+		name, err = projectName(name)
+		if err != nil {
+			return "", err
+		}
+	}
+	s.a.dataMu.Lock()
+	defer s.a.dataMu.Unlock()
+	if setAgent {
+		exists, err := s.a.declared.Has(p)
+		if err != nil {
+			return "", err
+		}
+		if exists {
+			return "", fmt.Errorf("该目录已添加到项目列表。请通过项目右键菜单新建会话或修改显示名称。")
+		}
+	}
+	// 先建目录：失败时既有声明（名称、平台、时间）必须原样保留。
 	if err := os.MkdirAll(p, 0o755); err != nil {
-		// 目录没建成：撤掉声明，别留一个指着一片空的项目。
-		_ = s.a.declared.Remove(p)
 		return "", fmt.Errorf("创建项目目录失败: %w", err)
 	}
-	s.a.changed("")
+	if setAgent {
+		_, err = s.a.declared.AddWithAgent(p, name, agent)
+	} else {
+		_, err = s.a.declared.Add(p, name)
+	}
+	if err != nil {
+		return "", err
+	}
+	s.a.emit(EventSessionsChanged, "")
 	return p, nil
+}
+
+func projectName(name string) (string, error) {
+	if strings.ContainsFunc(name, unicode.IsControl) {
+		return "", fmt.Errorf("项目显示名称不能包含控制字符")
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", fmt.Errorf("项目显示名称不能为空")
+	}
+	if utf8.RuneCountInString(name) > 200 {
+		return "", fmt.Errorf("项目显示名称不能超过 200 个字符")
+	}
+	return name, nil
 }
 
 // Rename 改展示名。未声明过的路径拒绝——聚合出来的项目名来自目录本身，
 // 改它没有意义（也改不动上游）。
 func (s *ProjectService) Rename(path, name string) error {
-	ok, err := s.a.declared.Has(path)
+	p, err := projects.ValidatePath(path)
 	if err != nil {
 		return err
 	}
-	if !ok {
-		return fmt.Errorf("只能重命名 AgentDeck 里新建的项目")
-	}
-	if _, err := s.a.declared.Add(path, name); err != nil {
+	name, err = projectName(name)
+	if err != nil {
 		return err
 	}
-	s.a.changed("")
+	s.a.dataMu.Lock()
+	defer s.a.dataMu.Unlock()
+	if err := s.a.declared.Rename(p, name); err != nil {
+		return err
+	}
+	s.a.emit(EventSessionsChanged, "")
 	return nil
 }
 
 // Remove 取消声明。目录与里面的文件一概不删——声明只是 AgentDeck 列表里
 // 的一行，删它不该动用户的数据。
 func (s *ProjectService) Remove(path string) error {
+	if _, err := projects.ValidatePath(path); err != nil {
+		return err
+	}
+	s.a.dataMu.Lock()
+	defer s.a.dataMu.Unlock()
 	if err := s.a.declared.Remove(path); err != nil {
 		return err
 	}
-	s.a.changed("")
+	s.a.emit(EventSessionsChanged, "")
 	return nil
 }
 
@@ -70,7 +129,7 @@ func (s *ProjectService) Declared() ([]DeclaredProjectView, error) {
 	}
 	out := make([]DeclaredProjectView, 0, len(all))
 	for _, d := range all {
-		out = append(out, DeclaredProjectView{Path: d.Path, Name: d.Name})
+		out = append(out, DeclaredProjectView{Path: d.Path, Name: d.Name, Agent: d.Agent})
 	}
 	return out, nil
 }
@@ -85,8 +144,8 @@ func (s *ProjectService) Exists(path string) bool {
 	return err == nil && fi.IsDir()
 }
 
-// DefaultPathFor 给「新建项目」对话框一个初始目录：当前项目目录下的一个
-// 新子目录名（跟着当前项目走最自然）；没有当前项目时用主目录下的
+// DefaultPathFor 给「新建项目」对话框建议当前项目旁的同级目录；
+// 没有当前项目时用主目录下的
 // Documents——不往用户主目录根上塞东西，也不猜某个固定的工作区路径。
 // 这只是对话框的初始值，用户随时可改；目录不存在时由 Create 建出来。
 func (s *ProjectService) DefaultPathFor(current, name string) string {
@@ -94,6 +153,9 @@ func (s *ProjectService) DefaultPathFor(current, name string) string {
 		name = "新项目"
 	}
 	base := projects.Normalize(current)
+	if base != "" {
+		base = filepath.Dir(base)
+	}
 	if base == "" {
 		if home, err := os.UserHomeDir(); err == nil {
 			base = filepath.Join(home, "Documents")
@@ -106,6 +168,7 @@ func (s *ProjectService) DefaultPathFor(current, name string) string {
 
 // DeclaredProjectView 是声明项目的视图：只有路径与展示名，别的都还没有。
 type DeclaredProjectView struct {
-	Path string `json:"path"`
-	Name string `json:"name"`
+	Path  string `json:"path"`
+	Name  string `json:"name"`
+	Agent string `json:"agent"`
 }

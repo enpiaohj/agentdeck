@@ -113,6 +113,7 @@ export class ClaudeImportReport {
 export class DeclaredProjectView {
     "path": string;
     "name": string;
+    "agent": string;
 
     /** Creates a new DeclaredProjectView instance. */
     constructor($$source: Partial<DeclaredProjectView> = {}) {
@@ -121,6 +122,9 @@ export class DeclaredProjectView {
         }
         if (!("name" in $$source)) {
             this["name"] = "";
+        }
+        if (!("agent" in $$source)) {
+            this["agent"] = "";
         }
 
         Object.assign(this, $$source);
@@ -475,6 +479,11 @@ export class Mark {
  */
 export class ProjectView {
     /**
+     * 保存的默认 CLI；空表示按本机会话回退
+     */
+    "agent": string;
+
+    /**
      * 归一化代表路径
      */
     "path": string;
@@ -491,6 +500,9 @@ export class ProjectView {
 
     /** Creates a new ProjectView instance. */
     constructor($$source: Partial<ProjectView> = {}) {
+        if (!("agent" in $$source)) {
+            this["agent"] = "";
+        }
         if (!("path" in $$source)) {
             this["path"] = "";
         }

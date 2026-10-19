@@ -3,7 +3,6 @@ package app
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -88,28 +87,37 @@ func (s *ResumeService) CopyToClipboard(key string) error {
 // 不写任何上游存储，只是把用户「在这个项目里开一个」的决定交给 CLI
 // （与自己敲 `claude` 等价）。
 //
-// agent 为空时用当前列表里最多的那个 agent（前端一般已带上下文）。
+// agent 为空时先取项目平台，再按可启动的本机会话统计回退；无记录时用 claude。
 // 返回的错误自解释，与 OpenInTerminal 同一套措辞（前端不套前缀）。
 func (s *ResumeService) NewSession(project, agent string) error {
-	dir := projects.Normalize(project)
-	if dir == "" || !filepath.IsAbs(dir) {
-		return fmt.Errorf("项目路径必须是绝对路径: %s", project)
+	dir, err := projects.ValidatePath(project)
+	if err != nil {
+		return err
 	}
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 		return fmt.Errorf("项目目录不存在: %s", dir)
 	}
-	cli := agent
+	if agent == "" {
+		declared, err := s.a.declared.All()
+		if err != nil {
+			return err
+		}
+		for _, p := range declared {
+			if strings.EqualFold(p.Path, dir) {
+				agent = p.Agent
+				break
+			}
+		}
+		if agent == "" {
+			agent = s.defaultAgent()
+		}
+	}
+	cli := cliCommand(agent)
 	if cli == "" {
-		cli = s.defaultAgent()
+		return fmt.Errorf("暂不支持使用此智能体新建会话：%s", agent)
 	}
-	if cli == "" {
-		return fmt.Errorf("没有可用的 agent，请先在本机产生至少一个会话")
-	}
-	if !cliAllowed(cli) {
-		return fmt.Errorf("不支持的 agent: %s", cli)
-	}
-	// 新会话不带 resume 参数：命令行就是 agent 自己的名字，落在项目目录。
-	script := fmt.Sprintf("Set-Location %s; %s", quotePowerShellPath(dir), cli)
+	// LiteralPath 保留方括号等字符；切目录失败时禁止在错误目录启动 CLI。
+	script := fmt.Sprintf("Set-Location -LiteralPath %s -ErrorAction Stop; %s", quotePowerShellPath(dir), cli)
 	return s.launchInTerminal(dir, script)
 }
 
@@ -118,7 +126,7 @@ func (s *ResumeService) defaultAgent() string {
 	list, _, _ := s.a.snapshot()
 	counts := map[string]int{}
 	for _, sess := range list {
-		if sess.WSL != "" || sess.Gateway || sess.Imported {
+		if sess.WSL != "" || sess.Gateway || sess.Imported || sess.ReadOnly || sess.Retained || !cliAllowed(sess.Agent) {
 			continue
 		}
 		counts[sess.Agent]++
@@ -129,18 +137,28 @@ func (s *ResumeService) defaultAgent() string {
 			best, bestN = agent, n
 		}
 	}
+	if best == "" {
+		return "claude"
+	}
 	return best
 }
 
-// cliAllowed 是新建会话可用的 agent 白名单：只放本机实测过 `cli` 能直接
-// 起新会话的。导入/网关来源的「agent」名不是本机命令，不能拿来起进程。
-func cliAllowed(agent string) bool {
+// cliCommand 将会话的平台标识映射为固定命令，禁止把任意输入当命令执行。
+func cliCommand(agent string) string {
 	switch agent {
-	case "claude", "codex", "zcode", "opencode", "qoder", "grok", "droid", "cursor-agent", "hermes":
-		return true
+	case "qoder":
+		return "qodercli"
+	case "qoder-cn":
+		return "qoderclicn"
+	case "cursor", "cursor-agent":
+		return "cursor-agent"
+	case "claude", "codex", "zcode", "opencode", "grok", "droid", "hermes":
+		return agent
 	}
-	return false
+	return ""
 }
+
+func cliAllowed(agent string) bool { return cliCommand(agent) != "" }
 
 // quotePowerShellPath 给 PowerShell 的 Set-Location 引路径。与恢复命令
 // 不同，这里整条脚本交给 -EncodedCommand（见 terminalCommand），不会

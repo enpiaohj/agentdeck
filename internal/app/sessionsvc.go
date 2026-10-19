@@ -252,7 +252,7 @@ func (s *SessionService) Projects() []ProjectView {
 		}
 		seen[key] = true
 		row := ProjectView{
-			Path: d.Path, Name: d.Name, Drive: projects.Drive(d.Path), Declared: true,
+			Path: d.Path, Name: d.Name, Agent: d.Agent, Drive: projects.Drive(d.Path), Declared: true,
 		}
 		if agg, ok := aggregated[key]; ok {
 			row.Count, row.Favorites, row.Last = agg.Count, agg.Favorites, agg.Last

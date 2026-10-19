@@ -15,16 +15,19 @@ import (
 // 新建项目：还没有任何会话的目录也要能进项目列表，且不与会话聚合的重复。
 func TestDeclaredProjectsAppearBesideAggregatedOnes(t *testing.T) {
 	a, _, _, _ := newTestApp(t)
+	root := t.TempDir()
+	knownPath := filepath.Join(root, "KnownProject")
+	freshPath := filepath.Join(root, "Fresh")
 	a.setList([]sessions.Session{
-		{Agent: "codex", ID: "c1", Cwd: `D:\Work\AgentDeck`, Last: time.Unix(10, 0)},
-		{Agent: "claude", ID: "k1", Cwd: `D:\Work\AgentDeck`, Last: time.Unix(20, 0)},
+		{Agent: "codex", ID: "c1", Cwd: knownPath, Last: time.Unix(10, 0)},
+		{Agent: "claude", ID: "k1", Cwd: knownPath, Last: time.Unix(20, 0)},
 	})
 	ps := a.NewProjectService()
-	created, err := ps.Create(`D:\Work\Fresh`, "")
+	created, err := ps.Create(freshPath, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if created != `D:\Work\Fresh` {
+	if created != freshPath {
 		t.Fatalf("创建返回路径 = %q", created)
 	}
 	// 目录真的建出来了。
@@ -34,7 +37,7 @@ func TestDeclaredProjectsAppearBesideAggregatedOnes(t *testing.T) {
 	// 已经聚出会话的那个路径再声明一次，只更新名字、不多出一行；聚合出来的
 	// 统计数据（会话数）要填进这一行，不能显示成 0 个会话。
 	// 注意：行里的 Path 取用户最后一次书写的大小写（这里故意用小写）。
-	if _, err := ps.Create(`D:\Work\agentdeck`, "本仓库"); err != nil {
+	if _, err := ps.Create(strings.ToLower(knownPath), "本仓库"); err != nil {
 		t.Fatal(err)
 	}
 	rows := a.NewSessionService().Projects()
@@ -45,23 +48,23 @@ func TestDeclaredProjectsAppearBesideAggregatedOnes(t *testing.T) {
 	for _, r := range rows {
 		byPath[r.Path] = r
 	}
-	fresh, ok := byPath[`D:\Work\Fresh`]
+	fresh, ok := byPath[freshPath]
 	if !ok || !fresh.Declared || fresh.Count != 0 || fresh.Name != "Fresh" {
 		t.Fatalf("声明的项目行不对: %+v", fresh)
 	}
-	known, ok := byPath[`D:\Work\agentdeck`]
+	known, ok := byPath[strings.ToLower(knownPath)]
 	if !ok || !known.Declared || known.Count != 2 || known.Name != "本仓库" {
 		t.Fatalf("重名的聚合项目行不对: %+v", known)
 	}
 	// 取消声明：目录与文件不动，列表里消失。
-	if err := ps.Remove(`D:\Work\Fresh`); err != nil {
+	if err := ps.Remove(freshPath); err != nil {
 		t.Fatal(err)
 	}
-	if !ps.Exists(`D:\Work\Fresh`) {
+	if !ps.Exists(freshPath) {
 		t.Fatal("取消声明把目录删了")
 	}
 	for _, r := range a.NewSessionService().Projects() {
-		if r.Path == `D:\Work\Fresh` {
+		if r.Path == freshPath {
 			t.Fatal("取消声明后仍出现在列表里")
 		}
 	}
@@ -138,7 +141,7 @@ func TestDefaultPathForNewProject(t *testing.T) {
 	a, _, _, _ := newTestApp(t)
 	ps := a.NewProjectService()
 	got := ps.DefaultPathFor(`D:\Work\AgentDeck`, "")
-	if got != filepath.Join(`D:\Work\AgentDeck`, "新项目") {
+	if got != filepath.Join(`D:\Work`, "新项目") {
 		t.Fatalf("有当前项目时 = %q", got)
 	}
 	home, err := os.UserHomeDir()
@@ -151,6 +154,72 @@ func TestDefaultPathForNewProject(t *testing.T) {
 	}
 	if strings.EqualFold(blank, filepath.Join(home, "新项目")) {
 		t.Fatalf("回落到了用户主目录根: %q", blank)
+	}
+}
+
+func TestProjectAgentAndFailedCreatePreserveDeclaration(t *testing.T) {
+	a, _, _, ran := newTestApp(t)
+	ps := a.NewProjectService()
+	dir := filepath.Join(t.TempDir(), "project[1]'s")
+	if _, err := ps.CreateWithAgent(dir, "原名", "qoder"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ps.Rename(dir, "新名"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ps.CreateWithAgent(dir, "不应覆盖", "claude"); err == nil {
+		t.Fatal("重复新建覆盖了已有项目")
+	}
+	rows := a.NewSessionService().Projects()
+	if len(rows) != 1 || rows[0].Name != "新名" || rows[0].Agent != "qoder" {
+		t.Fatalf("项目平台或名称丢失: %+v", rows)
+	}
+	if err := a.NewResumeService().NewSession(dir, ""); err != nil {
+		t.Fatal(err)
+	}
+	script := decodeLaunched(t, (*ran)[0])
+	if want := "Set-Location -LiteralPath " + quotePowerShellPath(dir) + " -ErrorAction Stop; qodercli"; script != want {
+		t.Fatalf("script = %q, want %q", script, want)
+	}
+	blocked := filepath.Join(t.TempDir(), "blocked")
+	if err := os.WriteFile(blocked, []byte("keep"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.declared.AddWithAgent(blocked, "保留", "codex"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ps.Create(blocked, "覆盖"); err == nil {
+		t.Fatal("文件被当作目录")
+	}
+	all, err := ps.Declared()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range all {
+		if p.Path == blocked && (p.Name != "保留" || p.Agent != "codex") {
+			t.Fatalf("失败创建改写声明: %+v", p)
+		}
+	}
+	for _, bad := range []string{"claude-desktop", "claude; bad"} {
+		if _, err := ps.CreateWithAgent(filepath.Join(t.TempDir(), "unused"), "", bad); err == nil {
+			t.Fatalf("接受平台 %q", bad)
+		}
+	}
+	if err := a.NewResumeService().NewSession(dir+"\n", "claude"); err == nil {
+		t.Fatal("接受控制字符路径")
+	}
+}
+
+func TestCLICommandsAndReadOnlyFallback(t *testing.T) {
+	for agent, want := range map[string]string{"qoder": "qodercli", "qoder-cn": "qoderclicn", "cursor": "cursor-agent", "cursor-agent": "cursor-agent", "claude": "claude"} {
+		if got := cliCommand(agent); got != want {
+			t.Fatalf("%s: %s != %s", agent, got, want)
+		}
+	}
+	a, _, _, _ := newTestApp(t)
+	a.setList([]sessions.Session{{Agent: "claude-desktop", ID: "d1", ReadOnly: true}, {Agent: "claude-desktop", ID: "d2", ReadOnly: true}, {Agent: "codex", ID: "c1"}, {Agent: "claude", ID: "r1", Retained: true}})
+	if got := a.NewResumeService().defaultAgent(); got != "codex" {
+		t.Fatalf("fallback = %q", got)
 	}
 }
 

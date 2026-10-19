@@ -1,6 +1,7 @@
 package projects
 
 import (
+	"database/sql"
 	"path/filepath"
 	"testing"
 )
@@ -51,6 +52,50 @@ func TestDeclaredStoreRoundTrip(t *testing.T) {
 	// 删未声明过的不算错。
 	if err := s.Remove(`D:\ nowhere`); err != nil {
 		t.Fatalf("删未声明的路径报错: %v", err)
+	}
+}
+
+func TestDeclaredMigratesAgentAndPreservesItOnRename(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(schema); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(t.TempDir(), "Project")
+	if _, err := db.Exec(`INSERT INTO declared_projects(lkey,path,name,added) VALUES(lower(?),?,'旧名','')`, p, p); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	all, err := s.All()
+	if err != nil || len(all) != 1 || all[0].Agent != "" {
+		t.Fatalf("migration: %+v %v", all, err)
+	}
+	if _, err := s.AddWithAgent(p, "平台项目", "codex"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Add(p, "改名"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Rename(p, "再次改名"); err != nil {
+		t.Fatal(err)
+	}
+	all, err = s.All()
+	if err != nil || all[0].Agent != "codex" || all[0].Name != "再次改名" {
+		t.Fatalf("平台丢失: %+v %v", all, err)
+	}
+	if err := s.Remove(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Rename(p, "不能复活"); err == nil {
+		t.Fatal("重命名复活已移除的项目")
 	}
 }
 

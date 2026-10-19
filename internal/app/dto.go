@@ -90,7 +90,8 @@ type SearchHitView struct {
 
 // ProjectView 是聚合出的项目一行。
 type ProjectView struct {
-	Path      string `json:"path"` // 归一化代表路径
+	Agent     string `json:"agent"` // 保存的默认 CLI；空表示按本机会话回退
+	Path      string `json:"path"`  // 归一化代表路径
 	Name      string `json:"name"`
 	Drive     string `json:"drive"`
 	Count     int    `json:"count"`

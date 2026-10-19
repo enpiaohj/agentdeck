@@ -22,12 +22,17 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 import * as $models from "./models.js";
 
 /**
- * Create 声明一个项目并在磁盘上建出目录（「新建」的含义就是这个目录还不
- * 存在）。父目录不存在时如实报错——不层层替用户建一路目录，那超出了
- * 「新建这个项目」的授权范围。
+ * Create 声明项目并创建目录；旧接口保留既有项目的默认平台。
  */
 export function Create(path: string, name: string): $CancellablePromise<string> {
     return $Call.ByID(2427986377, path, name);
+}
+
+/**
+ * CreateWithAgent 显式设置项目默认平台；空平台表示使用会话统计回退。
+ */
+export function CreateWithAgent(path: string, name: string, agent: string): $CancellablePromise<string> {
+    return $Call.ByID(2848889310, path, name, agent);
 }
 
 /**
@@ -40,8 +45,8 @@ export function Declared(): $CancellablePromise<$models.DeclaredProjectView[]> {
 }
 
 /**
- * DefaultPathFor 给「新建项目」对话框一个初始目录：当前项目目录下的一个
- * 新子目录名（跟着当前项目走最自然）；没有当前项目时用主目录下的
+ * DefaultPathFor 给「新建项目」对话框建议当前项目旁的同级目录；
+ * 没有当前项目时用主目录下的
  * Documents——不往用户主目录根上塞东西，也不猜某个固定的工作区路径。
  * 这只是对话框的初始值，用户随时可改；目录不存在时由 Create 建出来。
  */
