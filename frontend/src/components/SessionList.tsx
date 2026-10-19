@@ -21,6 +21,7 @@ import {
   DismissRegular,
   TagRegular,
   SelectAllOnRegular,
+  SelectAllOffRegular,
   ChevronRightRegular,
   ChevronDownRegular,
   DeleteRegular,
@@ -375,7 +376,17 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
   }, [hierarchy, expandedFamilies])
 
   const projectName = filter.project?.split(/[\\/]/).filter(Boolean).pop()
-  const listTitle = filter.archived ? '归档会话' : filter.favorites ? '收藏会话' : projectName ? projectName : filter.agent ? agentMeta(filter.agent).label : '全部会话'
+  // 侧栏允许 Ctrl+单击叠加维度，标题必须如实反映全部条件：单项沿用原措辞，
+  // 组合时用「·」连起来，否则「某项目的收藏」会只显示成项目名。
+  const titleParts = [
+    filter.archived ? '归档' : '',
+    filter.favorites ? '收藏' : '',
+    projectName ?? '',
+    filter.agent ? agentMeta(filter.agent).label : '',
+  ].filter(Boolean)
+  const listTitle = titleParts.length === 0 ? '全部会话'
+    : titleParts.length === 1 ? (filter.archived ? '归档会话' : filter.favorites ? '收藏会话' : titleParts[0])
+    : titleParts.join(' · ')
 
   return (
     <div className={styles.wrap} onKeyDown={event => {
@@ -387,7 +398,16 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
       <div className={styles.head}>
         <span className={styles.headTitle} title={filter.project || listTitle}>{listTitle}</span>
         <span className={styles.count} aria-live="polite" title="子会话收在主会话下，不重复计入会话数量">{query || month || account ? `${hierarchy.roots.length} / ${allFamilies.roots.length}` : allFamilies.roots.length} 个会话{hierarchy.childKeys.size ? ` · ${hierarchy.childKeys.size} 个子会话` : ''}</span>
-        <Tooltip content="全选筛选后当前展开的会话（含已展开子会话）(Ctrl+A)" relationship="label"><Button size="small" appearance="subtle" icon={<SelectAllOnRegular />} aria-label="全选会话" disabled={busy || !visibleRows.length} onClick={selectAll} /></Tooltip>
+        {/* 全选与清空是同一个位置的一个图标：没有选中项时是全选，选中后是清空。
+            此前两个动作分在两端——头部是全选，底部批量条里才有「清空」，而且
+            只在多选时才出现，单选一项时反而没有清空的入口。 */}
+        <Tooltip content={checked.size ? '清空选择 (Esc)' : '全选筛选后当前展开的会话（含已展开子会话）(Ctrl+A)'} relationship="label">
+          <Button size="small" appearance="subtle"
+            icon={checked.size ? <SelectAllOffRegular /> : <SelectAllOnRegular />}
+            aria-label={checked.size ? '清空选择' : '全选会话'}
+            disabled={busy || (!checked.size && !visibleRows.length)}
+            onClick={checked.size ? clearSelection : selectAll} />
+        </Tooltip>
         <Tooltip content={order === 'latest' ? '切换为最早活动优先' : '切换为最近活动优先'} relationship="label">
         <button className={styles.headBtn} aria-label={order === 'latest' ? '最早活动优先' : '最近活动优先'} onClick={() => setOrder(order === 'latest' ? 'oldest' : 'latest')}>
           <ArrowSortRegular fontSize={15} />
@@ -560,7 +580,6 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
           <Button size="small" icon={filter.archived ? <ArchiveArrowBackRegular /> : <ArchiveRegular />} disabled={busy}
             onClick={bulk((k) => markService.SetArchived(k, !filter.archived))}>{filter.archived ? '取消归档' : '归档'}</Button>
           <Button size="small" icon={<DeleteRegular />} disabled={busy || !!deleteReason} title={deleteReason || '删除原始记录及全部保留版本'} onClick={() => onDeleteSessions(deletionTargets)}>删除会话…</Button>
-          <Button size="small" disabled={busy} aria-label="清空选择" title="清空选择 (Esc)" onClick={clearSelection}>清空</Button>
         </div>
       ) : null}
       {checked.size > 1 && deleteReason ? <Text size={200} className="ad-delete-disabled-reason">{deleteReason}</Text> : null}

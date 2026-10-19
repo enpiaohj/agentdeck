@@ -21,3 +21,14 @@ export function fmtPercent(done: number, total: number): string {
   if (!total || total <= 0) return ''
   return `${Math.min(100, Math.round((done / total) * 100))}%`
 }
+
+// fmtElapsed 把已用秒数写成「N 秒」/「N 分 M 秒」/「N 小时 M 分」。非正数或
+// 非有限值给空串：迁移刚开始的那一秒不该显示「已用 0 秒」。
+export function fmtElapsed(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return ''
+  const total = Math.floor(seconds)
+  if (total < 60) return `${total} 秒`
+  const minutes = Math.floor(total / 60)
+  if (minutes < 60) return `${minutes} 分 ${total % 60} 秒`
+  return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`
+}

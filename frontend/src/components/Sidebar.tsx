@@ -171,6 +171,7 @@ type Props = {
   listVersion: number
   onToggle: () => void
   filter: SidebarFilter
+  /** 侧栏各入口默认单选（单击替换整个筛选），Ctrl+单击才把该维度并入当前筛选。 */
   onFilter: (f: SidebarFilter) => void
   /** 点「全部会话」：清除全部筛选（智能体 / 项目 / 收藏 / 归档、顶栏搜索词与列表内筛选）。 */
   onSelectAll: () => void
@@ -184,7 +185,12 @@ type Props = {
   onRefresh: () => void
 }
 
-function isAll(f: SidebarFilter) { return !f.favorites && !f.archived }
+// isAll 说当前是不是「全部会话」这个绝对视图。
+//
+// 四个维度（智能体 / 项目 / 收藏 / 归档）都为空才算：只要缺一项，点过项目或
+// 智能体之后「全部会话」仍会高亮，与已选的项目行同时亮着，看起来就是多字段
+// 筛选状态，而列表里其实只剩那个项目。
+function isAll(f: SidebarFilter) { return !f.favorites && !f.archived && !f.agent && !f.project }
 
 // folderName 取目录名，用于「使用目录名」这一动作。
 function folderName(path: string): string {
@@ -320,10 +326,29 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
     </FormDialog>
   </>
 
-  const pick = (f: SidebarFilter) => () => {
-    if ('agent' in f) onFilter({ ...filter, agent: filter.agent === f.agent ? undefined : f.agent })
-    else if ('project' in f) onFilter({ ...filter, project: filter.project === f.project ? undefined : f.project })
-    else onFilter({ ...filter, favorites: !!f.favorites, archived: !!f.archived })
+  // pick 是侧栏各入口唯一的改动点：默认**单选**，按住 Ctrl（macOS 上为 Cmd）
+  // 单击才**叠加**。
+  //
+  // 此前一律用 `{ ...filter, ... }` 扩散：点了项目再点智能体，两个字段同时
+  // 生效，列表变成两者的交集（常常只剩几条甚至空），侧栏同时高亮「全部会话」
+  // 「智能体」「项目」三行，看起来就是意外进入的多字段筛选状态。
+  // 现在：普通单击替换整个筛选（只保留点中的那一项），Ctrl+单击把该维度并入
+  // 当前筛选、再点一次只去掉这一项——「某项目的收藏」这类组合仍然可达，但是
+  // 显式动作。再次单击已选中的唯一项退回全集，与「全部会话」一致。
+  const pick = (f: SidebarFilter) => (event: MouseEvent<HTMLButtonElement>) => {
+    const add = event.ctrlKey || event.metaKey
+    const key = 'agent' in f ? 'agent' : 'project' in f ? 'project' : f.favorites ? 'favorites' : 'archived'
+    const on = key === 'agent' ? filter.agent === f.agent
+      : key === 'project' ? filter.project === f.project
+      : key === 'favorites' ? !!filter.favorites
+      : !!filter.archived
+    const next: SidebarFilter = add ? { ...filter } : {}
+    if (on) delete next[key]
+    else if (key === 'agent') next.agent = f.agent
+    else if (key === 'project') next.project = f.project
+    else if (key === 'favorites') next.favorites = true
+    else next.archived = true
+    onFilter(next)
   }
 
   if (collapsed) {
@@ -335,10 +360,10 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
         <button className={mergeClasses(styles.item, isAll(filter) && styles.itemActive)} onClick={onSelectAll} title="全部会话" style={{ justifyContent: 'center' }}>
           <AppsRegular />
         </button>
-        <button className={mergeClasses(styles.item, filter.favorites && styles.itemActive)} onClick={pick({ favorites: true })} title="收藏" style={{ justifyContent: 'center' }}>
+        <button className={mergeClasses(styles.item, filter.favorites && styles.itemActive)} onClick={pick({ favorites: true })} title="收藏（Ctrl+单击与其他筛选叠加）" style={{ justifyContent: 'center' }}>
           <StarRegular />
         </button>
-        <button className={mergeClasses(styles.item, filter.archived && styles.itemActive)} onClick={pick({ archived: true })} title="归档" style={{ justifyContent: 'center' }}>
+        <button className={mergeClasses(styles.item, filter.archived && styles.itemActive)} onClick={pick({ archived: true })} title="归档（Ctrl+单击与其他筛选叠加）" style={{ justifyContent: 'center' }}>
           <ArchiveRegular />
         </button>
         {agents.map((a) => (
@@ -376,12 +401,12 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
             不是把各 agent 的数字相加——那会把归档的也算进来。 */}
         {counts ? <span className={styles.count} title="未归档的会话数">{counts.sessions}</span> : null}
       </button>
-      <button className={mergeClasses(styles.item, filter.favorites && styles.itemActive)} onClick={pick({ favorites: true })}>
+      <button className={mergeClasses(styles.item, filter.favorites && styles.itemActive)} onClick={pick({ favorites: true })} title="收藏（Ctrl+单击与其他筛选叠加）">
         <StarRegular fontSize={16} />
         收藏
         {counts ? <span className={styles.count} title="未归档的收藏">{counts.favorites}</span> : null}
       </button>
-      <button className={mergeClasses(styles.item, filter.archived && styles.itemActive)} onClick={pick({ archived: true })}>
+      <button className={mergeClasses(styles.item, filter.archived && styles.itemActive)} onClick={pick({ archived: true })} title="归档（Ctrl+单击与其他筛选叠加）">
         <ArchiveRegular fontSize={16} />
         归档
         {counts ? <span className={styles.count} title="已归档的会话">{counts.archived}</span> : null}
@@ -396,7 +421,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
           key={a.agent}
           className={mergeClasses(styles.item, filter.agent === a.agent && styles.itemActive)}
           onClick={pick({ agent: a.agent })}
-          title={`${agentMeta(a.agent).label} · ${a.count} 个会话 · 右键新建会话或项目`}
+          title={`${agentMeta(a.agent).label} · ${a.count} 个会话 · 右键新建会话或项目 · Ctrl+单击叠加筛选`}
         >
           <AgentMark agent={a.agent} size={18} />
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agentMeta(a.agent).label}</span>
@@ -413,7 +438,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
       <div className={styles.projectScroll} role="group" aria-labelledby="sidebar-projects-heading">
         {projects.map((p) => {
           const active = filter.project === p.path
-          const detail = `${p.name}\n${p.path}\n${p.count} 个会话 · ${p.favorites} 个收藏${p.archived ? ` · ${p.archived} 个归档（在「归档」中查看）` : ''}${p.agent ? `\n默认智能体：${platformLabel(p.agent)}` : ''}\n右键：新建会话 / 修改设置`
+          const detail = `${p.name}\n${p.path}\n${p.count} 个会话 · ${p.favorites} 个收藏${p.archived ? ` · ${p.archived} 个归档（在「归档」中查看）` : ''}${p.agent ? `\n默认智能体：${platformLabel(p.agent)}` : ''}\nCtrl+单击：与当前筛选叠加\n右键：新建会话 / 修改设置`
           return (
             <div key={p.path} className="ad-project-row">
               <button

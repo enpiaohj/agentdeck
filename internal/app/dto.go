@@ -193,7 +193,14 @@ type StorageView struct {
 }
 
 // StorageProgress 是迁移进度，经 storage:progress 推送。
-// Stage: scan | copy | verify | switch。
+//
+// Stage: copy | verify | switch | done | failed。
+//
+// 三个库用 VACUUM INTO 生成一致副本，那是一条 SQL 语句，2 GB 级的会话库要跑
+// 几分钟，期间没有任何回调可挂；整库 integrity_check 同理。所以 Done 不是
+// 「复制完一个文件才加一次」，而是按目标文件现有大小估算出来的真实字节数，
+// 由推送方每秒刷新一次；Elapsed 是已用秒数，让界面在长步骤里能说明「还在
+// 推进」，而不是停在一个不动的百分比上。
 type StorageProgress struct {
 	Stage     string `json:"stage"`
 	Done      int64  `json:"done"`
@@ -201,6 +208,7 @@ type StorageProgress struct {
 	Files     int    `json:"files"`
 	DoneFiles int    `json:"done_files"`
 	Message   string `json:"message"`
+	Elapsed   int64  `json:"elapsed"`
 }
 
 // MigrateReport 是一次数据位置迁移的结果。

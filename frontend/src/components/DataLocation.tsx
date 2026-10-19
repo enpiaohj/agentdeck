@@ -5,14 +5,14 @@
 // 这里只负责如实展示与确认，不自己拼路径——用户选的是「数据放在哪个目录下」，
 // 实际数据根由 Go 侧补全（固定的 AgentDeck 子目录），是否已存在也由 Go 侧判断。
 import { Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Spinner, Text } from '@fluentui/react-components'
-import { ArrowClockwiseRegular, ArrowResetRegular, ArrowUploadRegular, DeleteRegular } from '@fluentui/react-icons'
+import { ArrowClockwiseRegular, ArrowResetRegular, ArrowSyncRegular, ArrowUploadRegular, DeleteRegular } from '@fluentui/react-icons'
 import { Events } from '@wailsio/runtime'
 import { useCallback, useEffect, useState } from 'react'
 import * as settingsService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/settingsservice'
 import type { CleanupPlan, DestinationView, StorageView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import { storageProgressFromEvent, type StorageProgress } from '../eventPayload'
 import { pickOpenPath } from '../nativeDialogs'
-import { fmtBytes, fmtPercent } from '../format'
+import { fmtBytes, fmtElapsed, fmtPercent } from '../format'
 
 export function DataLocation() {
   const [view, setView] = useState<StorageView | null>(null)
@@ -24,6 +24,9 @@ export function DataLocation() {
   const [progress, setProgress] = useState<StorageProgress | null>(null)
   const [cleanup, setCleanup] = useState<CleanupPlan | null>(null)
   const [restartNeeded, setRestartNeeded] = useState(false)
+  // migrated 是刚完成的迁移报告文案，非空即弹窗的「完成」态。迁移成功后不关
+  // 弹窗、就地换成重启提示：否则关闭动画与新的重启弹窗会同时挂在屏幕上。
+  const [migrated, setMigrated] = useState('')
   const load = useCallback(() => {
     settingsService.Storage().then(setView).catch(reason => setError(`读取数据位置失败：${String(reason)}`))
   }, [])
@@ -35,6 +38,8 @@ export function DataLocation() {
   const choose = async () => {
     setError('')
     setMessage('')
+    setMigrated('')
+    setProgress(null)
     try {
       const dir = await pickOpenPath({ CanChooseDirectories: true, CanChooseFiles: false, CanCreateDirectories: true, Title: '选择数据存放的目录', ButtonText: '选择此目录' })
       if (!dir) return
@@ -49,10 +54,12 @@ export function DataLocation() {
     setBusy('migrate')
     setError('')
     setMessage('')
+    setMigrated('')
     setProgress(null)
     try {
       const report = await settingsService.Migrate(pending.picked)
-      setPending(null)
+      // 成功后就地切到「完成」态：弹窗保持打开，等用户选「立即重启」或「稍后」。
+      setMigrated(report.message)
       setRestartNeeded(true)
       setMessage(report.message)
       load()
@@ -64,6 +71,13 @@ export function DataLocation() {
       setBusy('')
       setProgress(null)
     }
+  }
+  // closeMigration 关闭迁移弹窗（含「取消」与完成后的「稍后」）。
+  const closeMigration = () => {
+    if (busy) return
+    setPending(null)
+    setMigrated('')
+    setProgress(null)
   }
   const preview = async () => {
     if (busy) return
@@ -109,12 +123,20 @@ export function DataLocation() {
       setBusy('')
     }
   }
-  const restart = async () => {
+  // restart 走「正常退出再自启」（Go 侧延迟启动），所以失败是可能的：配置根
+  // 不可写、单实例互斥未释放等。fromDialog 为真表示这次点击来自完成弹窗——
+  // 此时必须先关弹窗，否则错误提示落在被模态遮住的设置区里，用户看不见。
+  const restart = async (fromDialog = false) => {
     setError('')
     try {
       await settingsService.Restart()
     } catch (reason) {
-      setError(String(reason))
+      if (fromDialog) {
+        setPending(null)
+        setMigrated('')
+        setProgress(null)
+      }
+      setError(`未能自动重启：${String(reason)}。请手动退出 AgentDeck 后重新打开，新位置才会生效。`)
     }
   }
   const copy = (view?.items ?? []).filter(item => item.present && !item.rebuild)
@@ -152,9 +174,8 @@ export function DataLocation() {
       <p>迁移只复制 AgentDeck 自己的数据，不移动原生 Agent 的目录。数据位置固定是所选目录下的 {view.leaf} 子目录。全文索引{skipped.some(item => item.rebuild && item.present) ? `（当前 ${fmtBytes(skipped.reduce((sum, item) => sum + (item.present ? item.bytes : 0), 0))}）` : ''}可重建，不参与复制，重启后自动重建。</p>
       <p>迁移过程中请勿关闭应用。旧位置的数据一律保留，确认无误后再清理。</p>
     </> : <Spinner size="tiny" />}
-    {progress ? <Text block role="status" className="ad-storage-progress">
-      <Spinner size="extra-tiny" />{stageLabel(progress.stage)}{progress.total > 0 ? ` ${fmtPercent(progress.done, progress.total)}` : ''}{progress.message ? ` · ${progress.message}` : ''}
-    </Text> : null}
+    {/* 迁移进度只画在弹窗里：迁移期间弹窗是模态且不许关闭，设置区被遮在后面，
+        画在这里等于没人看得见——这正是「没有进度」的由来之一。 */}
     {message ? <Text block role="status" className="ad-storage-message">{message}</Text> : null}
     {error ? <Text block role="alert" className="ad-storage-error">{error}</Text> : null}
     {view && (view.prev_dirs?.length ?? 0) > 0 ? <section className="ad-storage-old">
@@ -165,27 +186,43 @@ export function DataLocation() {
       {view.prev_in_use ? <p>旧位置仍是本次运行使用的目录，请先重启 AgentDeck，确认新位置运行正常后再清理。</p> : null}
       <Button size="small" appearance="subtle" icon={<DeleteRegular />} disabled={!!busy || !view.prev_items.length || view.prev_in_use} onClick={() => void preview()}>清理旧位置数据…</Button>
     </section> : null}
-    <Dialog open={!!pending} onOpenChange={(_, data) => { if (!data.open && !busy) setPending(null) }}>
+    <Dialog open={!!pending} onOpenChange={(_, data) => { if (!data.open) closeMigration() }}>
       <DialogSurface><DialogBody>
-        <DialogTitle>迁移数据存储位置</DialogTitle>
+        <DialogTitle>{migrated ? '数据迁移完成' : busy === 'migrate' ? '正在迁移数据' : '迁移数据存储位置'}</DialogTitle>
         <DialogContent>
-          <dl className="ad-storage-summary">
-            <dt>所选目录</dt><dd><span className="ad-storage-path">{pending?.picked}</span></dd>
-            <dt>数据位置</dt><dd><span className="ad-storage-path">{pending?.dest}</span></dd>
-          </dl>
-          <p>{pending?.rule}</p>
-          {pending?.exists && !pending.empty
-            ? <Text block role="alert" className="ad-storage-warn">该目录已存在，其中有 {pending.files} 个文件（{fmtBytes(pending.bytes)}）。迁移不会覆盖已有文件：请先清理该目录，或改选其他位置。</Text>
-            : <p>{pending?.exists ? '该目录已存在且为空，可以直接使用。' : '该目录当前不存在，迁移时创建。'}</p>}
-          <p>将把以下数据复制到新位置：</p>
-          <ul>{copy.map(item => <li key={item.path}>{item.name}（{fmtBytes(item.bytes)}）</li>)}</ul>
-          {copy.length === 0 ? <p>当前还没有可迁移的数据文件。</p> : null}
-          {pending?.reason ? <Text block role="alert" className="ad-storage-error">{pending.reason}</Text> : null}
-          <p>完成后需要重启 AgentDeck 才会使用新位置；旧位置的数据不会被删除。</p>
+          {migrated ? <>
+            <Text block role="status" className="ad-storage-message">{migrated}</Text>
+            <p>新位置已经就绪，重启 AgentDeck 后生效。旧位置的数据一律保留，重启并确认新位置运行正常后再到设置里清理。</p>
+          </> : busy === 'migrate' ? <>
+            <dl className="ad-storage-summary">
+              <dt>数据位置</dt><dd><span className="ad-storage-path">{pending?.dest}</span></dd>
+            </dl>
+            <MigrationProgress progress={progress} />
+            <p>迁移期间请勿关闭应用。旧位置的数据不会被删除。</p>
+          </> : <>
+            <dl className="ad-storage-summary">
+              <dt>所选目录</dt><dd><span className="ad-storage-path">{pending?.picked}</span></dd>
+              <dt>数据位置</dt><dd><span className="ad-storage-path">{pending?.dest}</span></dd>
+            </dl>
+            <p>{pending?.rule}</p>
+            {pending?.exists && !pending.empty
+              ? <Text block role="alert" className="ad-storage-warn">该目录已存在，其中有 {pending.files} 个文件（{fmtBytes(pending.bytes)}）。迁移不会覆盖已有文件：请先清理该目录，或改选其他位置。</Text>
+              : <p>{pending?.exists ? '该目录已存在且为空，可以直接使用。' : '该目录当前不存在，迁移时创建。'}</p>}
+            <p>将把以下数据复制到新位置：</p>
+            <ul>{copy.map(item => <li key={item.path}>{item.name}（{fmtBytes(item.bytes)}）</li>)}</ul>
+            {copy.length === 0 ? <p>当前还没有可迁移的数据文件。</p> : null}
+            {pending?.reason ? <Text block role="alert" className="ad-storage-error">{pending.reason}</Text> : null}
+            <p>完成后需要重启 AgentDeck 才会使用新位置；旧位置的数据不会被删除。</p>
+          </>}
         </DialogContent>
         <DialogActions>
-          <Button disabled={!!busy} onClick={() => setPending(null)}>取消</Button>
-          <Button appearance="primary" disabled={!!busy || !pending?.ready} icon={busy === 'migrate' ? <Spinner size="extra-tiny" /> : undefined} onClick={() => void migrate()}>{busy === 'migrate' ? '正在迁移…' : '开始迁移'}</Button>
+          {migrated ? <>
+            <Button disabled={!!busy} onClick={closeMigration}>稍后</Button>
+            <Button appearance="primary" icon={<ArrowSyncRegular />} onClick={() => void restart(true)}>立即重启</Button>
+          </> : <>
+            <Button disabled={!!busy} onClick={closeMigration}>取消</Button>
+            <Button appearance="primary" disabled={!!busy || !pending?.ready} icon={busy === 'migrate' ? <Spinner size="extra-tiny" /> : undefined} onClick={() => void migrate()}>{busy === 'migrate' ? '正在迁移…' : '开始迁移'}</Button>
+          </>}
         </DialogActions>
       </DialogBody></DialogSurface>
     </Dialog>
@@ -207,13 +244,33 @@ export function DataLocation() {
   </section>
 }
 
-// stageLabel 把迁移阶段译成中文说明。
+// MigrationProgress 是迁移进度的唯一渲染处：阶段 + 文件计数 + 百分比 + 当前
+// 文件 + 已用时间。
+//
+// 百分比是按目标文件现有大小估出来的估算值，不是复制回调的精确值：三个库用
+// VACUUM INTO 生成一致副本，那是一条 SQL 语句，2 GB 级的会话库要跑几分钟，
+// 期间没有任何可挂的回调。所以除了百分比还一定显示已用时间——大小不动的长
+// 步骤里，它是「还在推进」的唯一凭据。progress 为 null 是首次心跳到达之前的
+// 那一秒，此时不能显示 0%，只能说明在准备。
+function MigrationProgress({ progress }: { progress: StorageProgress | null }) {
+  if (!progress) return <Text block role="status" className="ad-storage-progress"><Spinner size="extra-tiny" />正在准备迁移…</Text>
+  const elapsed = fmtElapsed(progress.elapsed)
+  return <Text block role="status" className="ad-storage-progress">
+    <Spinner size="extra-tiny" />{stageLabel(progress.stage)}
+    {progress.files > 0 ? ` · ${progress.done_files}/${progress.files} 个文件` : ''}
+    {progress.total > 0 ? ` ${fmtPercent(progress.done, progress.total)}` : ''}
+    {progress.message ? ` · ${progress.message}` : ''}
+    {elapsed ? ` · 已用 ${elapsed}` : ''}
+  </Text>
+}
+
+// stageLabel 把迁移阶段译成中文说明。这里是「阶段 + 细节」的第一段，所以
+// 只给名词短语，不加「正在…」与省略号——后面紧跟着文件名、百分比与已用时间。
 function stageLabel(stage: string): string {
   switch (stage) {
-    case 'scan': return '正在统计待迁移数据…'
-    case 'copy': return '正在复制数据…'
-    case 'verify': return '正在校验副本…'
-    case 'switch': return '正在切换数据位置…'
+    case 'copy': return '复制数据'
+    case 'verify': return '校验副本'
+    case 'switch': return '切换数据位置'
     case 'done': return '迁移完成'
     case 'failed': return '迁移失败'
     default: return '正在处理…'

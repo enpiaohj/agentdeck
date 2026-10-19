@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/enpiaohj/agentdeck/internal/appconfig"
@@ -463,12 +464,15 @@ func (a *App) migrateStorage(picked string) (MigrateReport, error) {
 	if err != nil {
 		return MigrateReport{}, err
 	}
-	progress := &migrationProgress{a: a, total: plan.total, files: len(plan.files)}
+	progress := newMigrationProgress(a, plan.total, len(plan.files))
+	// 心跳与迁移同生共死：迁移返回前停掉 ticker，之后不再有进度事件。
+	defer progress.close()
+	go progress.run()
 	written := make([]string, 0, len(plan.files))
 	fail := func(err error) (MigrateReport, error) {
 		progress.stage("failed", "迁移未完成，正在清理本次写入的文件")
 		removed := removeFiles(written)
-		progress.done()
+		progress.stage("failed", fmt.Sprintf("迁移未完成，已清理本次写入的 %d 个文件", removed))
 		return MigrateReport{}, fmt.Errorf("%w（已清理本次写入的 %d 个文件，原数据与配置未改动）", err, removed)
 	}
 	report := MigrateReport{Dest: dest, Files: len(plan.files)}
@@ -482,6 +486,9 @@ func (a *App) migrateStorage(picked string) (MigrateReport, error) {
 	}
 	for i := range plan.files {
 		file := plan.files[i]
+		// 先报「正在动哪个文件」再干活：VACUUM INTO 与整库校验都是不可分割的
+		// 长步骤，事后再报等于最耗时的几分钟里界面一言不发。
+		progress.copying(file)
 		if err := os.MkdirAll(filepath.Dir(file.dest), 0o755); err != nil {
 			return fail(err)
 		}
@@ -505,10 +512,10 @@ func (a *App) migrateStorage(picked string) (MigrateReport, error) {
 	}
 	progress.stage("verify", "正在校验副本")
 	for _, file := range plan.files {
+		progress.verifying(file)
 		if err := verifyCopy(file); err != nil {
 			return fail(err)
 		}
-		progress.verified(file)
 	}
 	progress.stage("switch", "正在切换数据位置")
 	if err := a.switchDataRoot(dest); err != nil {
@@ -688,50 +695,174 @@ func containsPath(dirs []string, path string) bool {
 	return false
 }
 
-// migrationProgress 按时间节流地推送迁移进度。
+// migrationProgress 推送迁移进度，并为不可分割的长步骤保活。
+//
+// 三个库用 VACUUM INTO 生成一致副本，那是一条 SQL 语句：2.8 GB 的会话库要跑
+// 几分钟，期间没有任何回调可挂；整库 integrity_check 同理。只靠「复制完一个
+// 文件报一次」的写法，最耗时的这几分钟里界面一直停在 0%——那正是用户看到的
+// 「没有进度」。
+//
+// 所以进度由两个来源合成：每个文件开始前立即报一次（说明正在动哪个文件），
+// 之后每秒由 ticker 刷新一次。Done 取「已完成文件的字节数 + 正在写入的目标
+// 文件现有大小」：VACUUM INTO 直接往目标文件写，普通复制也是，所以这个数
+// 一直是真实的字节进度；文件大小暂时没变时，事件本身也说明还在推进，界面
+// 据此显示已用时间。
 type migrationProgress struct {
-	a          *App
-	total      int64
-	files      int
-	bytes      int64
-	doneFiles  int
-	lastEmit   time.Time
-	emitPeriod time.Duration
+	a      *App
+	total  int64
+	files  int
+	period time.Duration
+	start  time.Time
+
+	mu sync.Mutex
+	// 字段名刻意与 stage()/done() 这些方法错开：Go 不允许同名字段与方法。
+	curStage   string
+	curMessage string
+	doneBytes  int64  // 已完成文件的字节数
+	doneFiles  int    // 已完成的文件数
+	curPath    string // 正在写入的目标文件；空表示当前不在写文件
+	curSize    int64  // 当前文件的源大小，用于把估算上界卡在真实值上
+	stopped    bool
+
+	stop     chan struct{}
+	stopOnce sync.Once
 }
 
-// migrationEmitPeriod 是进度事件的最小间隔：4.58 GB 有上千个文件，逐个
-// 推送会把事件通道灌满。
-const migrationEmitPeriod = 100 * time.Millisecond
+// migrationEmitPeriod 是进度事件的间隔。它同时是长步骤的心跳：1 秒一次既能
+// 让百分比连续走动，也不会把事件通道灌满。
+const migrationEmitPeriod = time.Second
 
-func (p *migrationProgress) stage(stage, message string) {
-	p.a.emit(EventStorageProgress, StorageProgress{Stage: stage, Total: p.total, Files: p.files, Message: message})
-	p.lastEmit = time.Now()
+func newMigrationProgress(a *App, total int64, files int) *migrationProgress {
+	return &migrationProgress{
+		a: a, total: total, files: files, period: migrationEmitPeriod,
+		start: time.Now(), stop: make(chan struct{}),
+	}
 }
 
-func (p *migrationProgress) copied(file migrationFile) {
-	p.bytes += file.size
-	p.doneFiles++
-	p.maybeEmit("copy", filepath.Base(file.dest))
-}
-
-func (p *migrationProgress) verified(file migrationFile) {
-	p.maybeEmit("verify", filepath.Base(file.dest))
-}
-
-func (p *migrationProgress) done() {
-	p.a.emit(EventStorageProgress, StorageProgress{Stage: "done", Done: p.bytes, Total: p.total, Files: p.files, DoneFiles: p.doneFiles})
-}
-
-func (p *migrationProgress) maybeEmit(stage, message string) {
-	period := p.emitPeriod
-	if period == 0 {
+// run 起 ticker 循环，直到 close 被调用。调用方用 `go progress.run()`。
+func (p *migrationProgress) run() {
+	period := p.period
+	if period <= 0 {
 		period = migrationEmitPeriod
 	}
-	if time.Since(p.lastEmit) < period {
+	ticker := time.NewTicker(period)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-p.stop:
+			return
+		case <-ticker.C:
+			p.beat()
+		}
+	}
+}
+
+func (p *migrationProgress) close() {
+	p.stopOnce.Do(func() {
+		p.mu.Lock()
+		p.stopped = true
+		p.mu.Unlock()
+		close(p.stop)
+	})
+}
+
+// beat 是心跳：按当前文件大小重算已复制字节数再推一次。
+func (p *migrationProgress) beat() {
+	p.mu.Lock()
+	if p.stopped {
+		p.mu.Unlock()
 		return
 	}
-	p.lastEmit = time.Now()
-	p.a.emit(EventStorageProgress, StorageProgress{Stage: stage, Done: p.bytes, Total: p.total, Files: p.files, DoneFiles: p.doneFiles, Message: message})
+	stage, message := p.curStage, p.curMessage
+	current, srcSize, done, doneFiles := p.curPath, p.curSize, p.doneBytes, p.doneFiles
+	p.mu.Unlock()
+
+	if current != "" && srcSize > 0 {
+		done += writtenBytes(current, srcSize)
+	}
+	p.push(StorageProgress{
+		Stage: stage, Done: done, Total: p.total, Files: p.files,
+		DoneFiles: doneFiles, Message: message,
+	})
+}
+
+// stage 切换阶段并立即推送。Done 带上当前已完成字节数：阶段切换不该让界面
+// 上的百分比掉回 0（旧写法漏了这一项，校验与切换阶段会各跳回 0% 一次）。
+func (p *migrationProgress) stage(stage, message string) {
+	p.report(stage, message, "", 0)
+}
+
+// copying 在开始处理一个文件**之前**推送：一行字说明正在动哪个文件，长步骤
+// 期间用户看到的就是这一行。current/srcSize 让心跳按目标文件大小估出真实
+// 字节进度——VACUUM INTO 直接往目标文件写，普通复制也是。
+func (p *migrationProgress) copying(file migrationFile) {
+	message := "正在复制 " + filepath.Base(file.dest)
+	if file.kind == "database" {
+		message = "正在生成 " + filepath.Base(file.dest) + " 的一致副本"
+	}
+	p.report("copy", message, file.dest, file.size)
+}
+
+// verifying 逐个文件报校验。整库校验要跑 PRAGMA integrity_check 再逐行重算
+// 哈希，是另一段不可分割的长步骤；只报一句「正在校验副本」等于什么都没说。
+// 校验读的是目标文件，大小早已定型，所以不设 current——这一段只能靠已用时
+// 间说明还在推进。
+func (p *migrationProgress) verifying(file migrationFile) {
+	p.report("verify", "正在校验 "+filepath.Base(file.dest), "", 0)
+}
+
+// report 是 copying / verifying 的公共推送口：设定阶段、说明与「正在写的目标
+// 文件」，随即推一次。Done 原样带上已完成的字节数，阶段切换不会让百分比掉回 0。
+func (p *migrationProgress) report(stage, message, current string, srcSize int64) {
+	p.mu.Lock()
+	p.curStage, p.curMessage = stage, message
+	p.curPath, p.curSize = current, srcSize
+	done, doneFiles := p.doneBytes, p.doneFiles
+	p.mu.Unlock()
+	p.push(StorageProgress{
+		Stage: stage, Done: done, Total: p.total, Files: p.files,
+		DoneFiles: doneFiles, Message: message,
+	})
+}
+
+// copied 记下一个文件已完成，下次心跳按它累加。
+func (p *migrationProgress) copied(file migrationFile) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.doneBytes += file.size
+	p.doneFiles++
+	p.curPath, p.curSize = "", 0
+}
+
+// done 推送最终状态：全部文件已复制并校验通过。
+func (p *migrationProgress) done() {
+	p.mu.Lock()
+	p.curStage, p.curMessage = "done", ""
+	p.curPath, p.curSize = "", 0
+	done, doneFiles := p.doneBytes, p.doneFiles
+	p.mu.Unlock()
+	p.push(StorageProgress{
+		Stage: "done", Done: done, Total: p.total, Files: p.files,
+		DoneFiles: doneFiles,
+	})
+}
+
+func (p *migrationProgress) push(st StorageProgress) {
+	// Elapsed 在推送的最后一步补上：所有推送点共用同一条计时口径。
+	if st.Elapsed == 0 {
+		st.Elapsed = int64(time.Since(p.start) / time.Second)
+	}
+	p.a.emit(EventStorageProgress, st)
+}
+
+// writtenBytes 是目标文件已写入的字节数，上限取源大小：VACUUM INTO 的产物
+// 可能比源库略小或略大，超出源大小时按 100% 算，不让百分比冲过 100。
+func writtenBytes(path string, srcSize int64) int64 {
+	info, err := os.Stat(path)
+	if err != nil || info.Size() <= 0 {
+		return 0
+	}
+	return min(info.Size(), srcSize)
 }
 
 // beginMigration 取得迁移独占权；已有迁移在进行时返回 false。

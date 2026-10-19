@@ -298,7 +298,8 @@ export function App() {
 
   // selectAllSessions 是侧栏「全部会话」的唯一入口：回到真正的全集，
   // 所以把智能体 / 项目 / 收藏 / 归档、顶栏搜索词和列表内的筛选一起清掉。
-  // 其它侧栏项仍是在当前筛选上叠加（例如「某智能体的收藏」），只有这一项是绝对视图。
+  // 其它侧栏项默认单选（单击替换整个筛选），只有按住 Ctrl 单击才叠加维度，
+  // 见 Sidebar 的 pick。
   // listReset 是给 SessionList 的复位信号（关键词、月份、账号、排序都在它内部自持）。
   const selectAllSessions = () => {
     setFilter({})

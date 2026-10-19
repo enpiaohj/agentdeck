@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -302,6 +303,140 @@ func TestMigrateCopiesDataAndSwitchesRoot(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dest, "marks.db")); err != nil {
 		t.Fatalf("重启后应按新位置打开标注库：%v", err)
+	}
+}
+
+// TestMigrateEmitsProgress 覆盖「迁移时看不到进度」这条反馈的两条根因：
+// 每个文件动手之前就要报一次（说明正在动哪个文件），以及阶段切换不能让
+// 百分比掉回 0（Done 只能单调不减）。
+func TestMigrateEmitsProgress(t *testing.T) {
+	a, root := newStorageApp(t)
+	seedStorage(t, a, root)
+	var mu sync.Mutex
+	var seen []StorageProgress
+	a.cfg.Emit = func(event string, data any) {
+		if event != EventStorageProgress {
+			return
+		}
+		st, ok := data.(StorageProgress)
+		if !ok {
+			t.Errorf("进度载荷类型 = %T", data)
+			return
+		}
+		mu.Lock()
+		seen = append(seen, st)
+		mu.Unlock()
+	}
+	picked, _ := pickParent(t)
+	if _, err := a.NewSettingsService().Migrate(picked); err != nil {
+		t.Fatalf("迁移失败：%v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(seen) == 0 {
+		t.Fatal("迁移没有推送任何进度事件")
+	}
+	// 一个文件动手之前就报一次：那一行字是长步骤期间用户唯一能看见的东西。
+	perFile := false
+	max := int64(-1)
+	stages := map[string]bool{}
+	for _, st := range seen {
+		stages[st.Stage] = true
+		if strings.HasPrefix(st.Message, "正在复制 ") || strings.HasPrefix(st.Message, "正在生成 ") || strings.HasPrefix(st.Message, "正在校验 ") {
+			perFile = true
+		}
+		// 百分比只许往前：校验与切换阶段各自把 Done 归零过一次，界面上看
+		// 就是一格一格往回退。
+		if st.Done < max {
+			t.Fatalf("进度倒退：Done %d < 已见过的 %d（%+v）", st.Done, max, st)
+		}
+		max = st.Done
+	}
+	if !perFile {
+		t.Fatalf("没有逐文件的进度说明：%+v", seen)
+	}
+	for _, stage := range []string{"copy", "verify", "switch", "done"} {
+		if !stages[stage] {
+			t.Fatalf("缺少 %s 阶段的事件：%+v", stage, seen)
+		}
+	}
+	last := seen[len(seen)-1]
+	if last.Stage != "done" || last.Done != last.Total || last.DoneFiles != last.Files {
+		t.Fatalf("最终事件 = %+v", last)
+	}
+	if last.Elapsed < 0 {
+		t.Fatalf("已用时间不合法：%+v", last)
+	}
+}
+
+// TestMigrationProgressHeartbeat 直接驱动心跳：VACUUM INTO 与整库校验都是
+// 单条阻塞调用，期间只有心跳能证明还在推进。文件在增长时 Done 要跟着涨，
+// 没有增长时事件也照样要到（界面靠已用时间说明没卡死）。
+func TestMigrationProgressHeartbeat(t *testing.T) {
+	a := &App{}
+	var mu sync.Mutex
+	var seen []StorageProgress
+	a.cfg.Emit = func(event string, data any) {
+		if event != EventStorageProgress {
+			return
+		}
+		st, ok := data.(StorageProgress)
+		if !ok {
+			return
+		}
+		mu.Lock()
+		seen = append(seen, st)
+		mu.Unlock()
+	}
+	p := newMigrationProgress(a, 100, 1)
+	p.period = 5 * time.Millisecond
+	dest := filepath.Join(t.TempDir(), "history.db")
+	writeFixture(t, dest, strings.Repeat("x", 40)) // 目标文件已写到 40/100
+	p.copying(migrationFile{src: "src.db", dest: dest, size: 100, kind: "database"})
+	go p.run()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		mu.Lock()
+		got := len(seen)
+		mu.Unlock()
+		if got >= 3 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	p.close()
+	// 快照要在调用 p.copied / p.done 之前取：它们推送事件时会再进 Emit 回调，
+	// 持着 mu 去调用就是自己把自己锁死。
+	snapshot := func() []StorageProgress {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]StorageProgress(nil), seen...)
+	}
+	events := snapshot()
+	if len(events) < 3 {
+		t.Fatalf("心跳没有按期推送：%+v", events)
+	}
+	// 第一阶段是 copying 立刻推的那次（Done 还没算上正在写的文件），
+	// 之后的心跳必须把目标文件的 40 字节算进去。
+	if events[0].Message == "" || events[0].Done != 0 {
+		t.Fatalf("首帧 = %+v", events[0])
+	}
+	grown := false
+	for _, st := range events[1:] {
+		if st.Done == 40 {
+			grown = true
+		}
+	}
+	if !grown {
+		t.Fatalf("心跳没有按目标文件大小估算进度：%+v", events)
+	}
+	// 完成后 Done 落到总量，且不留「正在写的文件」。
+	p.copied(migrationFile{src: "src.db", dest: dest, size: 100, kind: "database"})
+	p.done()
+	events = snapshot()
+	last := events[len(events)-1]
+	if last.Stage != "done" || last.Done != 100 || last.DoneFiles != 1 {
+		t.Fatalf("完成事件 = %+v", last)
 	}
 }
 
