@@ -1,12 +1,14 @@
 package app
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf16"
 
 	"github.com/enpiaohj/agentdeck/internal/sessions"
 )
@@ -240,25 +242,116 @@ func TestResumeActions(t *testing.T) {
 	if len(*ran) != 1 {
 		t.Fatalf("runner 未被调用: %v", *ran)
 	}
-	// wt 优先且带 -d 落到 cwd
-	if !strings.Contains((*ran)[0], " -d ") || !strings.Contains((*ran)[0], filepath.Base(dir)) {
-		t.Errorf("终端命令形态: %q", (*ran)[0])
+	// 有 wt 时优先 wt 并带 -d 落到 cwd;没有则 powershell 回退
+	got := (*ran)[0]
+	if strings.Contains(got, "wt.exe") {
+		if !strings.Contains(got, " -d ") || !strings.Contains(got, filepath.Base(dir)) {
+			t.Errorf("wt 参数: %q", got)
+		}
+	} else if !strings.Contains(got, "powershell.exe") || !strings.Contains(got, "-EncodedCommand") {
+		t.Errorf("回退形态: %q", got)
 	}
 }
 
-// 根路径 cwd 的终端参数:目录存在且以 \ 结尾交给 exec 转义。
+// 恢复命令必须是不可拆的 -EncodedCommand,且终端必须是能出窗的那条路。
+// `cmd /c start` 虽然 isTTY 为 true,但实测建出的控制台窗口不可见——用户
+// 什么都看不到,所以不能用。
+func TestTerminalCommandKeepsScriptUnsplittable(t *testing.T) {
+	name, args := terminalCommand(t.TempDir(), "codex resume x")
+	if filepath.Base(name) == "cmd.exe" {
+		t.Fatalf("cmd start 建出的窗口不可见,不能用: %v", args)
+	}
+	if !strings.Contains(strings.Join(args, " "), "-EncodedCommand") {
+		t.Fatalf("必须用 -EncodedCommand: %v", args)
+	}
+}
+
+// 根路径 cwd 交给 wt 的 -d;不存在的目录不带 -d,但仍然执行恢复命令。
 func TestTerminalCommandRootPath(t *testing.T) {
 	name, args := terminalCommand(`D:\`, "claude --resume x")
 	if filepath.Base(name) != "wt.exe" && filepath.Base(name) != "powershell.exe" {
 		t.Fatalf("终端 = %s", name)
 	}
-	if filepath.Base(name) == "wt.exe" && args[0] != "-d" {
-		t.Fatalf("wt 参数: %v", args)
+	if filepath.Base(name) == "wt.exe" {
+		if args[0] != "-d" || args[1] != `D:\` {
+			t.Fatalf("根路径要原样交给 -d: %v", args)
+		}
 	}
-	// 不存在的目录回退 powershell
+	// 不存在的目录:不带 -d,但仍然启动终端
 	name2, args2 := terminalCommand(filepath.Join(t.TempDir(), "NoSuchDir"), "cmd")
-	if name2 != "powershell.exe" || args2[0] != "-NoExit" {
-		t.Fatalf("回退: %s %v", name2, args2)
+	if filepath.Base(name2) != "powershell.exe" {
+		t.Fatalf("目录不存在时应回退 powershell: %s", name2)
+	}
+	if !strings.Contains(strings.Join(args2, " "), "-EncodedCommand") {
+		t.Fatalf("仍要执行恢复命令: %v", args2)
+	}
+}
+
+// 直接启动终端时 stdout 不是终端,agent CLI 会因此不上色;resumeEnv 补
+// FORCE_COLOR 告诉它,但不覆盖用户自己设的值。
+func TestResumeEnvForcesColorUnlessSet(t *testing.T) {
+	t.Setenv("FORCE_COLOR", "")
+	os.Unsetenv("FORCE_COLOR")
+	env := resumeEnv()
+	found := false
+	for _, kv := range env {
+		if kv == "FORCE_COLOR=1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("没设 FORCE_COLOR 时应补 FORCE_COLOR=1")
+	}
+	t.Setenv("FORCE_COLOR", "0")
+	if resumeEnv() != nil {
+		t.Fatal("用户自己设了 FORCE_COLOR 时不应覆盖")
+	}
+}
+
+// 中间层(cmd start)会把 -Command 的值按空格拆一遍:恢复命令里分号后的
+// 半句被当成另一条参数丢掉,终端只剩 Set-Location,报「系统找不到指定的
+// 文件」(0x80070002)。交给终端的必须是不可拆的 -EncodedCommand。
+func TestTerminalCommandPassesScriptUnsplittable(t *testing.T) {
+	dir := t.TempDir()
+	script := "Set-Location -LiteralPath '" + dir + "'; codex resume 01a13d4d-0000-7000-8000-000000000000"
+	_, args := terminalCommand(dir, script)
+	if !strings.Contains(strings.Join(args, " "), "-EncodedCommand") {
+		t.Fatalf("必须用 -EncodedCommand: %v", args)
+	}
+	// 脚本原文不能出现在任何参数里——那正是会被拆开的东西。
+	for _, a := range args {
+		if strings.Contains(a, ";") || strings.Contains(a, "resume") {
+			t.Fatalf("脚本原文泄漏到终端参数: %q", a)
+		}
+	}
+	got := args[len(args)-1]
+	if got != encodedCommand(script) {
+		t.Fatalf("编码不一致: %q", got)
+	}
+}
+
+// -EncodedCommand 收 UTF-16LE 的 base64;解码回来必须与原文逐字一致
+// (含中文路径,避免有人改回 UTF-8 编码后只在纯 ASCII 上看起来正确)。
+func TestEncodedCommandRoundTrip(t *testing.T) {
+	for _, script := range []string{
+		"codex resume 01a13d4d",
+		"Set-Location -LiteralPath 'D:\\项目\\A B'; claude --resume x",
+		"Set-Location -LiteralPath 'D:\\it''s'; codex resume y",
+	} {
+		raw, err := base64.StdEncoding.DecodeString(encodedCommand(script))
+		if err != nil {
+			t.Fatalf("base64: %v", err)
+		}
+		if len(raw)%2 != 0 {
+			t.Fatalf("UTF-16 编码长度必须为偶数: %q", script)
+		}
+		units := make([]uint16, len(raw)/2)
+		for i := range units {
+			units[i] = uint16(raw[2*i]) | uint16(raw[2*i+1])<<8
+		}
+		if got := string(utf16.Decode(units)); got != script {
+			t.Fatalf("往返不一致:\n got %q\nwant %q", got, script)
+		}
 	}
 }
 
