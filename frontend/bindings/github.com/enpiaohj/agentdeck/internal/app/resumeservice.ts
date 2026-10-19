@@ -25,8 +25,9 @@ export function CopyToClipboard(key: string): $CancellablePromise<void> {
 }
 
 /**
- * OpenInTerminal 在 Windows Terminal(回退 PowerShell)里打开会话原
- * 工作目录并执行恢复命令。WSL 会话不支持直开——只提供复制。
+ * OpenInTerminal 在终端里打开会话原工作目录并执行恢复命令(Windows 上
+ * 直接启动 wt.exe / powershell.exe,恢复命令经 -EncodedCommand 交付,
+ * 见 terminalCommand)。WSL 会话不支持直开——只提供复制。
  */
 export function OpenInTerminal(key: string): $CancellablePromise<void> {
     return $Call.ByID(1096260450, key);
