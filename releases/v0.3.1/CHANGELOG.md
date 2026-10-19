@@ -46,8 +46,21 @@
 
 ## 产物与追溯
 
-- 产物：`AgentDeck-v0.3.1-win-x64.exe`，17,981,440 字节。
-- SHA256：`b61ac5cd56177ce90fa3bf0d0f762167d98798f8bb41eec2486b295af94d248c`，同时见 `SHA256SUMS`。
-- 源码冻结提交：`5bcc2f855ff1eaa6b24c7948a6e636668e7b3045`；二进制与 `source/` 均来自该提交。
-- 发布提交：`release: AgentDeck v0.3.1`；Tag：`v0.3.1`，指向包含本快照的发布提交。发布提交仅增加快照与说明，不改变构建源码。
-- 本地不可变快照：`releases/v0.3.1/`。
+| 产物 | 大小 | 内容 |
+| --- | --- | --- |
+| `AgentDeck-v0.3.1-win-x64.exe` | 17,981,440 字节 | 程序本体，未签名单文件 |
+| `AgentDeck-v0.3.1-win-x64.zip` | 7,672,003 字节 | 分发用：解压得到 `AgentDeck-v0.3.1-win-x64/`，内含 exe、本 CHANGELOG、`SHA256SUMS` |
+| `AgentDeck-v0.3.1-source.zip` | 5,193,304 字节 | 归档与重新构建用：解压得到 `AgentDeck-v0.3.1-source/`，即 `source/` 的 685 个文件 |
+
+- SHA256（同时见 `SHA256SUMS`，`sha256sum -c` 三项全部 OK）：
+  - `AgentDeck-v0.3.1-win-x64.exe`：`b61ac5cd56177ce90fa3bf0d0f762167d98798f8bb41eec2486b295af94d248c`
+  - `AgentDeck-v0.3.1-win-x64.zip`：`4e02c4bb8d17412e216a644de6ea2714747a63f6f68e7e34bc242cdfc876284d`
+  - `AgentDeck-v0.3.1-source.zip`：`6a64a9e29c78b2c9854a27ca37b21ce4df1dbf03233d5bb0d8d5e742bf823125`
+- 两个 zip 的条目名以 UTF-8 写入（显式指定 `UTF8Encoding`，不用 `Compress-Archive`——它按本地代码页 cp949 写条目名，中文文件名解压后会乱码）。解压复核：源码包 685 个文件、分发包 3 个文件，包内 exe 的 SHA256 与上表一致。
+- 源码冻结提交：`5bcc2f855ff1eaa6b24c7948a6e636668e7b3045`；二进制、`source/` 与 `source.zip` 均来自该提交。
+- 发布提交：`release: AgentDeck v0.3.1`；Tag：`v0.3.1`，指向包含本快照的发布提交。
+- 本地不可变快照：`releases/v0.3.1/`。三个产物均被 `.gitignore` 的 `releases/**/*.{exe,zip}` 排除，不入 Git History。
+
+> **归档补充说明（2026-10-19）**：初版发布提交 `dd0c96d` 漏了分发用的 zip，仅打包了 exe。经用户明确要求，在同一发布快照内补入 `AgentDeck-v0.3.1-win-x64.zip` 与 `AgentDeck-v0.3.1-source.zip`，并同步更新本 CHANGELOG 与 `SHA256SUMS`。
+>
+> 补充的**只有归档产物与元数据**，源码、二进制、`source/` 均未改动：exe 的 SHA256 仍是 `b61ac5cd…`，`source/` 仍是冻结提交 `5bcc2f8` 的 685 个文件。Tag `v0.3.1` 保持指向 `dd0c96d` 不变——移动已发布的 Tag 违反不可变原则，因此本节的元数据补充作为其后一个提交记录，Tag 与快照的对应关系不受影响（zip 本就不入 Git）。

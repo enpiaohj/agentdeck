@@ -23,7 +23,7 @@ AgentDeck 的版本索引。
 - `frontend/package-lock.json` 的版本号此前停在 `0.2.1`，一并同步。
 - 完整变更、升级说明及验证记录见 [本版 CHANGELOG](releases/v0.3.1/CHANGELOG.md)。
 
-快照：`releases/v0.3.1/`　产物：`AgentDeck-v0.3.1-win-x64.exe`
+快照：`releases/v0.3.1/`　产物：`AgentDeck-v0.3.1-win-x64.exe`、`AgentDeck-v0.3.1-win-x64.zip`（分发）、`AgentDeck-v0.3.1-source.zip`（源码归档）
 
 ## v0.3.0 — 2026-10-18
 
