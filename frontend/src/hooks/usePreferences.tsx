@@ -14,12 +14,12 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     try { localStorage.setItem(preferencesKey,JSON.stringify(value));setError('') }
     catch { setError('设置已在本次窗口生效，但无法保存到本机。') }
   },[])
-  const update = (patch: Partial<Preferences>) => {
+  const update = useCallback((patch: Partial<Preferences>) => {
     const next = parsePreferences(JSON.stringify({ ...current.current, ...patch }))
     current.current = next
     setPreferences(next);save(next)
-  }
-  const reset = () => { const next = { ...defaultPreferences };current.current = next;setPreferences(next);save(next) }
+  },[save])
+  const reset = useCallback(() => { const next = { ...defaultPreferences };current.current = next;setPreferences(next);save(next) },[save])
   return <Context.Provider value={{preferences,update,reset,error}}>{children}</Context.Provider>
 }
 

@@ -27,11 +27,12 @@ import {
   ChevronLeftRegular,
 } from '@fluentui/react-icons'
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Browser, Dialogs } from '@wailsio/runtime'
+import { Browser } from '@wailsio/runtime'
 import type { SessionView, TranscriptView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import * as resumeService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/resumeservice'
 import { agentMeta, fmtTime } from '../util'
+import { pickOpenPath } from '../nativeDialogs'
 import { AgentMark } from '../icons/AgentMark'
 import { highlight } from '../highlight'
 import { useTheme } from '../hooks/useTheme'
@@ -379,7 +380,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
   }
 
   const exportMd = () => {
-    Dialogs.OpenFile({
+    pickOpenPath({
         CanChooseDirectories: true, CanChooseFiles: false, CanCreateDirectories: true,
         Title: '选择 Markdown 导出目录', ButtonText: '导出到此目录',
       }).then((dir) => {
@@ -404,8 +405,8 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
                 onClick={() => copy(session.title, 'title')}
               />
             </Tooltip>
-            <Tooltip content="导出为 Markdown" relationship="label">
-              <Button size="small" appearance="subtle" icon={<ArrowDownloadRegular />} onClick={exportMd} />
+            <Tooltip content={session.transcript ? '导出为 Markdown' : '该智能体的会话暂不可读，无法导出'} relationship="label">
+              <Button size="small" appearance="subtle" icon={<ArrowDownloadRegular />} onClick={exportMd} disabled={!session.transcript} />
             </Tooltip>
             <Tooltip content={infoOpen ? '收起会话详情' : '展开会话详情'} relationship="label">
               <Button size="small" appearance="subtle" icon={<PanelRightRegular />} aria-expanded={infoOpen} aria-controls="session-details" onClick={onToggleInfo} />
@@ -451,6 +452,12 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
         {tr?.cut ? <Text size={200} block style={{ marginBottom: 12, color: tokens.colorNeutralForeground3 }}>会话预览达到读取上限，部分内容未载入。</Text> : null}
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><Spinner size="tiny" /></div>
+        ) : !session.transcript ? (
+          // 这个智能体的会话本就不在可读范围内（后端的 transcript 标记与
+          // HasTranscript 同源），不是读取失败：说清限制，也不给按了没用的「重试」。
+          <Text size={300} style={{ color: tokens.colorNeutralForeground3, overflowWrap: 'anywhere' }}>
+            AgentDeck 目前读不了 {m.label} 的会话正文。会话的标题、项目、时间与收藏标记仍然可用。
+          </Text>
         ) : err ? (
           <div className={styles.errRow}>
             <Text size={300} style={{ color: tokens.colorPaletteRedForeground1, overflowWrap: 'anywhere', minWidth: 0 }}>
@@ -520,7 +527,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
         ) : (
           <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>此记录支持阅读、检索与导出</Text>
         )}
-        <Button size="small" appearance="subtle" icon={<ArrowDownloadRegular />} onClick={exportMd}>导出 Markdown</Button>
+        <Button size="small" appearance="subtle" icon={<ArrowDownloadRegular />} onClick={exportMd} disabled={!session.transcript}>导出 Markdown</Button>
       </div>
     </div>
   )

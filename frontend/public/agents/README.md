@@ -20,6 +20,7 @@
 | cline.svg | Cline |
 | qoder-color.svg | Qoder / Qoder CN |
 | codebuddy-color.svg | CodeBuddy |
+| deepseek-color.svg | DeepSeek Harness（dsh） |
 
 当前 Codex 使用 `codex.png`：来源为本机较新包 `OpenAI.Codex_26.1013.3656.0_x64__2p2nqsd0c76g0`
 的 `assets/Square44x44Logo.targetsize-256_altform-unplated.png`，白色 OpenAI 结形标志；

@@ -157,6 +157,42 @@ func TestDefaultPathForNewProject(t *testing.T) {
 	}
 }
 
+// 目录状态探针：新建项目靠它区分「已存在」与「将创建」，新建会话靠它拦下
+// 不存在的目录。只回答现状、不替前端做取舍。
+func TestDirectoryStateGuidesBothFlows(t *testing.T) {
+	a, _, _, ran := newTestApp(t)
+	r := a.NewResumeService()
+	dir := t.TempDir()
+	if state, err := r.DirectoryState(dir); err != nil || state != "dir" {
+		t.Fatalf("已存在目录 = %q, %v", state, err)
+	}
+	missing := filepath.Join(t.TempDir(), "还没建")
+	if state, err := r.DirectoryState(missing); err != nil || state != "missing" {
+		t.Fatalf("不存在的路径 = %q, %v", state, err)
+	}
+	file := filepath.Join(t.TempDir(), "a-file")
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if state, err := r.DirectoryState(file); err != nil || state != "file" {
+		t.Fatalf("指向文件 = %q, %v", state, err)
+	}
+	if _, err := r.DirectoryState(`relative\x`); err == nil {
+		t.Fatal("接受了相对路径")
+	}
+	// 预览与新建会话对「目录存不存在」的判断必须一致：目录不在，两条路都拒绝，
+	// 且都不启动任何东西。
+	if _, err := r.PreviewCommand(missing, "claude"); err == nil {
+		t.Fatal("预览接受了不存在的目录")
+	}
+	if err := r.NewSession(missing, "claude"); err == nil {
+		t.Fatal("新建会话接受了不存在的目录")
+	}
+	if len(*ran) != 0 {
+		t.Fatalf("被拒的路径仍启动了终端: %+v", *ran)
+	}
+}
+
 func TestProjectAgentAndFailedCreatePreserveDeclaration(t *testing.T) {
 	a, _, _, ran := newTestApp(t)
 	ps := a.NewProjectService()
@@ -211,7 +247,7 @@ func TestProjectAgentAndFailedCreatePreserveDeclaration(t *testing.T) {
 }
 
 func TestCLICommandsAndReadOnlyFallback(t *testing.T) {
-	for agent, want := range map[string]string{"qoder": "qodercli", "qoder-cn": "qoderclicn", "cursor": "cursor-agent", "cursor-agent": "cursor-agent", "claude": "claude"} {
+	for agent, want := range map[string]string{"qoder": "qodercli", "qoder-cn": "qoderclicn", "cursor": "cursor-agent", "cursor-agent": "cursor-agent", "claude": "claude", "dsh": "dsh"} {
 		if got := cliCommand(agent); got != want {
 			t.Fatalf("%s: %s != %s", agent, got, want)
 		}
@@ -220,6 +256,91 @@ func TestCLICommandsAndReadOnlyFallback(t *testing.T) {
 	a.setList([]sessions.Session{{Agent: "claude-desktop", ID: "d1", ReadOnly: true}, {Agent: "claude-desktop", ID: "d2", ReadOnly: true}, {Agent: "codex", ID: "c1"}, {Agent: "claude", ID: "r1", Retained: true}})
 	if got := a.NewResumeService().defaultAgent(); got != "codex" {
 		t.Fatalf("fallback = %q", got)
+	}
+}
+
+// 项目改了显示名称后，会话列表必须跟着改——否则「重命名项目」名不副实。
+func TestProjectDisplayNameAppliesToSessions(t *testing.T) {
+	a, _, _, _ := newTestApp(t)
+	root := t.TempDir()
+	dir := filepath.Join(root, "OldName")
+	loose := filepath.Join(root, "Loose")
+	ps := a.NewProjectService()
+	a.setList([]sessions.Session{
+		{Agent: "claude", ID: "k1", Cwd: dir, Last: time.Unix(1, 0)},
+		{Agent: "claude", ID: "k2", Cwd: loose, Last: time.Unix(2, 0)},
+	})
+	if _, err := ps.Create(dir, "新名字"); err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]string{}
+	for _, row := range a.NewSessionService().List(Filter{}) {
+		byID[row.ID] = row.Project
+	}
+	if byID["k1"] != "新名字" {
+		t.Fatalf("声明过的目录应显示设置里的名称: %+v", byID)
+	}
+	if byID["k2"] != "Loose" {
+		t.Fatalf("未声明的目录仍用目录名: %+v", byID)
+	}
+	// 改回目录名后，列表跟着回到目录名。
+	if err := ps.Rename(dir, "OldName"); err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range a.NewSessionService().List(Filter{}) {
+		if row.ID == "k1" && row.Project != "OldName" {
+			t.Fatalf("改名后会话项目名 = %q", row.Project)
+		}
+	}
+}
+
+// 平台可用性：命令取固定映射，只报是否找到，不启动任何进程。
+func TestAvailableReportsCliCommands(t *testing.T) {
+	a, _, _, ran := newTestApp(t)
+	got := map[string]string{}
+	for _, row := range a.NewResumeService().Available() {
+		got[row.Agent] = row.Command
+	}
+	for agent, want := range map[string]string{"qoder": "qodercli", "qoder-cn": "qoderclicn", "cursor": "cursor-agent", "claude": "claude", "dsh": "dsh"} {
+		if got[agent] != want {
+			t.Errorf("%s 命令 = %q, want %q", agent, got[agent], want)
+		}
+	}
+	if len(got) != len(cliAgents) {
+		t.Errorf("平台数 = %d, want %d", len(got), len(cliAgents))
+	}
+	if len(*ran) != 0 {
+		t.Fatal("查询可用性启动了进程")
+	}
+	// 本机一定有 claude 或没有都不该 panic：Found 只反映 PATH 查找结果。
+	for _, row := range a.NewResumeService().Available() {
+		if row.Command == "" {
+			t.Errorf("%s 没有对应命令", row.Agent)
+		}
+	}
+}
+
+// 预览命令不启动进程，且与真正启动时交给终端的一致。
+func TestPreviewCommandMatchesLaunch(t *testing.T) {
+	a, _, _, ran := newTestApp(t)
+	r := a.NewResumeService()
+	dir := t.TempDir()
+	preview, err := r.PreviewCommand(dir, "qoder")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(*ran) != 0 {
+		t.Fatal("预览命令启动了进程")
+	}
+	if err := r.NewSession(dir, "qoder"); err != nil {
+		t.Fatal(err)
+	}
+	if launched := decodeLaunched(t, (*ran)[0]); preview != launched {
+		t.Fatalf("预览与启动不一致:\n预览 %q\n实际 %q", preview, launched)
+	}
+	// 不可启动的平台在预览阶段就被拒绝，不落到终端。
+	if _, err := r.PreviewCommand(dir, "claude-desktop"); err == nil {
+		t.Fatal("预览接受了不可启动的平台")
 	}
 }
 

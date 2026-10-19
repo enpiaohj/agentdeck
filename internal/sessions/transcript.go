@@ -32,7 +32,7 @@ var ErrNoTranscript = errors.New("this agent's conversations can't be shown")
 func HasTranscript(agent string) bool {
 	switch agent {
 	case "claude", "claude-desktop", "qoder", "qoder-cn", "codex", "pi", "omp",
-		"cursor", "opencode", "zcode", "workbuddy", "hermes", "kimi":
+		"cursor", "opencode", "zcode", "workbuddy", "hermes", "kimi", "dsh":
 		return true
 	}
 	return false
@@ -100,9 +100,9 @@ func readTranscript(s Session, add func(bool, Part) bool) error {
 }
 
 // readTranscriptOf is readTranscript decoding only the lines keep says yes
-// to, where a line stands alone (Claude's, Codex's, Kimi's, WorkBuddy's);
-// Pi's lines are a tree, read whole, and OpenCode's, ZCode's and Hermes's
-// rows and a Cursor session's events come from their store.
+// to, where a line stands alone (Claude's, Codex's, Kimi's, WorkBuddy's,
+// dsh's); Pi's lines are a tree, read whole, and OpenCode's, ZCode's and
+// Hermes's rows and a Cursor session's events come from their store.
 func readTranscriptOf(s Session, keep func([]byte) bool, add func(bool, Part) bool) error {
 	whole := Call{Agent: s.Agent, File: s.Path, To: math.MaxInt64}
 	switch s.Agent {
@@ -116,6 +116,8 @@ func readTranscriptOf(s Session, keep func([]byte) bool, add func(bool, Part) bo
 		return workBuddyTranscript(s.Path, add)
 	case "hermes":
 		return hermesTranscript(s, add)
+	case "dsh":
+		return dshTranscript(s.Path, keep, add)
 	case "codex":
 		return codexContentOf(whole, keep, add)
 	case "pi", "omp":

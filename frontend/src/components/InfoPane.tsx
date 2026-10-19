@@ -23,11 +23,11 @@ import {
   ArrowResetRegular,
 } from '@fluentui/react-icons'
 import { useEffect, useRef, useState } from 'react'
-import { Dialogs } from '@wailsio/runtime'
 import type { SessionView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import * as markService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/markservice'
 import { agentMeta, fmtTime, relTime } from '../util'
+import { pickOpenPath } from '../nativeDialogs'
 import { AgentMark } from '../icons/AgentMark'
 import { deletionUnavailableReason } from '../sessionDeletion'
 
@@ -192,7 +192,7 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
     markService.SetArchived(session.key, !session.archived).then(onChanged).catch(e => setMsg(`归档操作失败：${String(e).slice(0, 120)}`))
   }
   const exportMd = () => {
-    Dialogs.OpenFile({
+    pickOpenPath({
       CanChooseDirectories: true, CanChooseFiles: false, CanCreateDirectories: true,
       Title: '选择 Markdown 导出目录', ButtonText: '导出到此目录',
     }).then((dir) => {
@@ -201,7 +201,7 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
         (p) => setMsg(`导出完成：${p}`),
         (e) => setMsg(`导出失败：${String(e).slice(0, 120)}`),
       )
-    }).catch(() => {})
+    }).catch(e => setMsg(`导出失败：${String(e).slice(0, 120)}`))
   }
 
   return (
@@ -311,7 +311,7 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
         <div className={styles.section}>
           <span className={styles.sectionTitle}>更多操作</span>
           <div className={styles.actions}>
-            <Button size="small" icon={<ArrowDownloadRegular />} style={{ width: '100%' }} onClick={exportMd}>
+            <Button size="small" icon={<ArrowDownloadRegular />} style={{ width: '100%' }} onClick={exportMd} disabled={!session.transcript}>
               导出为 Markdown
             </Button>
             <Button size="small" icon={<ArchiveRegular />} style={{ width: '100%' }} onClick={toggleArchive}>

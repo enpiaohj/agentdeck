@@ -70,6 +70,7 @@ func (s *SessionService) List(f Filter) []SessionView {
 	s.a.mu.Unlock()
 
 	searchKey := foldTitle(f.Search)
+	names := s.declaredNames()
 	out := make([]SessionView, 0, 64)
 	for _, sess := range list {
 		key := sess.Agent + ":" + sess.ID
@@ -92,7 +93,7 @@ func (s *SessionService) List(f Filter) []SessionView {
 		if searchKey != "" && !strings.Contains(foldTitle(displayTitle(sess, m)), searchKey) {
 			continue
 		}
-		out = append(out, view(sess, key, m, msgs, msgReady))
+		out = append(out, view(sess, key, m, msgs, msgReady, names))
 	}
 	applySessionFamilies(out, sessionFamilyRoots(list))
 	return out
@@ -108,7 +109,7 @@ func (s *SessionService) Get(key string) (*SessionView, error) {
 	s.a.mu.Lock()
 	msgs, msgReady := s.a.messages, s.a.msgReady
 	s.a.mu.Unlock()
-	v := view(sess, key, ms[sessionMarkKey(sess, key, ms)], msgs, msgReady)
+	v := view(sess, key, ms[sessionMarkKey(sess, key, ms)], msgs, msgReady, s.declaredNames())
 	return &v, nil
 }
 
@@ -177,13 +178,18 @@ func (s *SessionService) SearchInAll(key, needle string) ([]SearchHitView, error
 	return out, nil
 }
 
-// Agents 侧栏 agent 清单（计数含归档，前端按需展示）。
+// Agents 侧栏 agent 清单。每个数字都是「点进去能看到几行」的数：子会话收在
+// 主会话下不重复计，已归档的会话要走到「归档」里才看得到，因此不算在内。
 func (s *SessionService) Agents() []AgentView {
-	list, _, _ := s.a.snapshot()
+	list, _, ms := s.a.snapshot()
 	roots := sessionFamilyRoots(list)
 	count := map[string]int{}
 	for _, sess := range list {
-		if roots[sess.Agent+":"+sess.ID] != "" {
+		key := sess.Agent + ":" + sess.ID
+		if roots[key] != "" {
+			continue
+		}
+		if ms[sessionMarkKey(sess, key, ms)].Archived {
 			continue
 		}
 		count[sess.Agent]++
@@ -198,6 +204,38 @@ func (s *SessionService) Agents() []AgentView {
 		}
 		return out[i].Agent < out[j].Agent
 	})
+	return out
+}
+
+// NavCounts 是侧栏三条入口上的数字：未归档的会话、其中的收藏、以及归档。
+// 归档是一个维度而不是第二个集合，所以「全部会话」不含归档会话——点了
+// 归档行才看到它们；三个数字各自对着点击后的列表。
+type NavCounts struct {
+	Sessions  int `json:"sessions"`
+	Favorites int `json:"favorites"`
+	Archived  int `json:"archived"`
+}
+
+// Counts 统计侧栏入口数量，口径与列表一致（子会话收在主会话下不重复计）。
+func (s *SessionService) Counts() NavCounts {
+	list, _, ms := s.a.snapshot()
+	roots := sessionFamilyRoots(list)
+	out := NavCounts{}
+	for _, sess := range list {
+		key := sess.Agent + ":" + sess.ID
+		if roots[key] != "" {
+			continue
+		}
+		m := ms[sessionMarkKey(sess, key, ms)]
+		if m.Archived {
+			out.Archived++
+			continue
+		}
+		out.Sessions++
+		if m.Favorite {
+			out.Favorites++
+		}
+	}
 	return out
 }
 
@@ -221,7 +259,7 @@ func (s *SessionService) Projects() []ProjectView {
 		if _, dup := aggregated[key]; dup {
 			continue
 		}
-		fav := 0
+		fav, arch := 0, 0
 		members := make([]sessions.Session, 0, len(p.Keys))
 		for _, k := range p.Keys {
 			members = append(members, byKey[k])
@@ -232,14 +270,21 @@ func (s *SessionService) Projects() []ProjectView {
 			if roots[k] != "" {
 				continue
 			}
+			m := ms[sessionMarkKey(byKey[k], k, ms)]
+			// 与列表同口径：归档会话要看「归档」那一栏，不计入项目行的会话数，
+			// 但单独记一个数，好让悬停提示把话说完。
+			if m.Archived {
+				arch++
+				continue
+			}
 			count++
-			if ms[sessionMarkKey(byKey[k], k, ms)].Favorite {
+			if m.Favorite {
 				fav++
 			}
 		}
 		aggregated[key] = ProjectView{
 			Path: p.Path, Name: p.Name, Drive: p.Drive,
-			Count: count, Favorites: fav, Last: lastString(p.Last),
+			Count: count, Favorites: fav, Archived: arch, Last: lastString(p.Last),
 		}
 		order = append(order, key)
 	}
@@ -255,7 +300,7 @@ func (s *SessionService) Projects() []ProjectView {
 			Path: d.Path, Name: d.Name, Agent: d.Agent, Drive: projects.Drive(d.Path), Declared: true,
 		}
 		if agg, ok := aggregated[key]; ok {
-			row.Count, row.Favorites, row.Last = agg.Count, agg.Favorites, agg.Last
+			row.Count, row.Favorites, row.Archived, row.Last = agg.Count, agg.Favorites, agg.Archived, agg.Last
 		}
 		out = append(out, row)
 	}
@@ -318,7 +363,7 @@ func displayTitle(s sessions.Session, m marks.Mark) string {
 }
 
 // view 是 Session → SessionView 的唯一装配点。
-func view(s sessions.Session, key string, m marks.Mark, msgs map[string]int, msgReady bool) SessionView {
+func view(s sessions.Session, key string, m marks.Mark, msgs map[string]int, msgReady bool, names map[string]string) SessionView {
 	source := "local"
 	if s.Retained {
 		source = "retained"
@@ -342,7 +387,7 @@ func view(s sessions.Session, key string, m marks.Mark, msgs map[string]int, msg
 		Account:       s.Account,
 		ID:            s.ID,
 		Cwd:           s.Cwd,
-		Project:       projects.DisplayName(projects.Normalize(s.Cwd)),
+		Project:       projectLabel(s.Cwd, names),
 		Title:         displayTitle(s, m),
 		OriginalTitle: s.Title,
 		Last:          lastString(s.Last),
@@ -371,6 +416,39 @@ func view(s sessions.Session, key string, m marks.Mark, msgs map[string]int, msg
 	}
 }
 
+// declaredNames 读用户声明的项目显示名称（小写归一化路径 → 名称）；读不出来
+// 就当没有声明，会话仍按目录名显示。
+func (s *SessionService) declaredNames() map[string]string {
+	all, err := s.a.declared.All()
+	if err != nil || len(all) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(all))
+	for _, d := range all {
+		p := projects.Normalize(d.Path)
+		if p == "" || strings.TrimSpace(d.Name) == "" {
+			continue
+		}
+		out[strings.ToLower(p)] = d.Name
+	}
+	return out
+}
+
+// projectLabel 是会话所属项目的显示名：声明过就用用户在项目列表里设的名称，
+// 否则用目录名。让列表、详情栏与项目区指向同一个名字，避免「改了项目名，
+// 会话列表却还是旧名」。
+func projectLabel(cwd string, names map[string]string) string {
+	p := projects.Normalize(cwd)
+	if p == "" {
+		return ""
+	}
+	if name := names[strings.ToLower(p)]; name != "" {
+		return name
+	}
+	return projects.DisplayName(p)
+}
+
+// containsTag 判断标签是否已在列表里。
 func containsTag(tags []string, tag string) bool {
 	for _, t := range tags {
 		if t == tag {

@@ -108,6 +108,38 @@ export class ClaudeImportReport {
 }
 
 /**
+ * CliAvailability 是一个可启动平台在本机的情况：命令名与是否能在 PATH 上找到。
+ */
+export class CliAvailability {
+    "agent": string;
+    "command": string;
+    "found": boolean;
+
+    /** Creates a new CliAvailability instance. */
+    constructor($$source: Partial<CliAvailability> = {}) {
+        if (!("agent" in $$source)) {
+            this["agent"] = "";
+        }
+        if (!("command" in $$source)) {
+            this["command"] = "";
+        }
+        if (!("found" in $$source)) {
+            this["found"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CliAvailability instance from a string or object.
+     */
+    static createFrom($$source: any = {}): CliAvailability {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new CliAvailability($$parsedSource as Partial<CliAvailability>);
+    }
+}
+
+/**
  * DeclaredProjectView 是声明项目的视图：只有路径与展示名，别的都还没有。
  */
 export class DeclaredProjectView {
@@ -475,6 +507,40 @@ export class Mark {
 }
 
 /**
+ * NavCounts 是侧栏三条入口上的数字：未归档的会话、其中的收藏、以及归档。
+ * 归档是一个维度而不是第二个集合，所以「全部会话」不含归档会话——点了
+ * 归档行才看到它们；三个数字各自对着点击后的列表。
+ */
+export class NavCounts {
+    "sessions": number;
+    "favorites": number;
+    "archived": number;
+
+    /** Creates a new NavCounts instance. */
+    constructor($$source: Partial<NavCounts> = {}) {
+        if (!("sessions" in $$source)) {
+            this["sessions"] = 0;
+        }
+        if (!("favorites" in $$source)) {
+            this["favorites"] = 0;
+        }
+        if (!("archived" in $$source)) {
+            this["archived"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new NavCounts instance from a string or object.
+     */
+    static createFrom($$source: any = {}): NavCounts {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new NavCounts($$parsedSource as Partial<NavCounts>);
+    }
+}
+
+/**
  * ProjectView 是聚合出的项目一行。
  */
 export class ProjectView {
@@ -491,6 +557,11 @@ export class ProjectView {
     "drive": string;
     "count": number;
     "favorites": number;
+
+    /**
+     * 已归档的会话；不计入 Count，供悬停提示说明
+     */
+    "archived": number;
 
     /**
      * RFC3339
@@ -517,6 +588,9 @@ export class ProjectView {
         }
         if (!("favorites" in $$source)) {
             this["favorites"] = 0;
+        }
+        if (!("archived" in $$source)) {
+            this["archived"] = 0;
         }
         if (!("last" in $$source)) {
             this["last"] = "";

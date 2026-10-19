@@ -12,6 +12,20 @@ AgentDeck 的版本索引。
 - 发布产物（exe）不入 Git History（`.gitignore` 的 `releases/**/*.exe`），按规则
   上传 GitHub Releases；本地快照同时保留 exe 与分发归档。
 
+## v0.6.0 — 2026-10-19
+
+新增 DeepSeek Harness（dsh）会话正文读取与新建入口，统一新建 / 重命名弹窗与反馈提示。
+
+- 支持读取 DeepSeek Harness 会话正文（`~/.dsh/sessions/**/session.v<N>.jsonl[.zstd]`），正文、思考、工具调用与结果分块呈现；dsh 加入「新建会话」可启动清单，续会话仍为「仅可查看历史」。
+- 新建会话、新建项目与重命名改用统一弹窗：忙态、就地错误、Enter 提交、关闭后归还焦点；新建会话可展开「将执行的命令」并复制，列出最近使用目录。
+- 新增 Toast 反馈（最多三条、可关闭），替换原顶栏导入提示条；项目重命名与批量操作提供「撤销」。
+- 侧栏「全部会话 / 收藏 / 归档」显示计数且口径与列表一致（归档不计入全部与会话数）；导航宽度可拖拽、方向键微调、双击恢复默认。
+- 智能体选择器标注未检测到的 CLI（仅提示不阻止），新增 Ctrl+N 新建会话、Ctrl+Shift+N 新建项目。
+- 修复 Windows 上取消原生文件对话框被报成「Invalid dialog call … cancelled by user」的问题（8 处调用点统一封装）；导出 Markdown 失败不再静默。
+- 不可读正文的智能体会话给出说明并禁用导出按钮，避免点击后无反馈。
+- 完整变更、升级说明和验证边界见 [本版 CHANGELOG](releases/v0.6.0/CHANGELOG.md)。
+- 快照：`releases/v0.6.0/`；产物：Windows x64 exe、分发 ZIP、源码 ZIP 与 SHA256SUMS。
+
 ## v0.5.0 — 2026-10-19
 
 新增默认智能体设置、智能体右键新建入口，完善项目管理交互。

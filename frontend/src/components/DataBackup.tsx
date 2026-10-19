@@ -1,6 +1,6 @@
 import { Button, Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, Spinner, Text } from '@fluentui/react-components'
 import { DatabaseRegular, ArrowUploadRegular } from '@fluentui/react-icons'
-import { Dialogs } from '@wailsio/runtime'
+import { pickOpenPath } from '../nativeDialogs'
 import { useState } from 'react'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import * as searchService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/searchservice'
@@ -18,7 +18,7 @@ export function DataBackup({ onRestored }: { onRestored: () => void }) {
     if (busy) return
     setError(''); setMessage(''); setBusy('backup')
     try {
-      const dir = await Dialogs.OpenFile({ CanChooseDirectories: true, CanChooseFiles: false, CanCreateDirectories: true, Title: '选择完整备份保存目录', ButtonText: '备份到此目录' })
+      const dir = await pickOpenPath({ CanChooseDirectories: true, CanChooseFiles: false, CanCreateDirectories: true, Title: '选择完整备份保存目录', ButtonText: '备份到此目录' })
       if (!dir || typeof dir !== 'string') return
       const path = await sessionService.BackupData(dir, JSON.stringify(preferences))
       setMessage(`完整备份已保存：${path}`)
@@ -29,7 +29,7 @@ export function DataBackup({ onRestored }: { onRestored: () => void }) {
     if (busy) return
     setError(''); setMessage(''); setBusy('inspect')
     try {
-      const path = await Dialogs.OpenFile({ CanChooseDirectories: false, CanChooseFiles: true, Title: '选择 AgentDeck 完整备份', Filters: [{ DisplayName: 'AgentDeck 完整备份 ZIP', Pattern: '*.zip' }] })
+      const path = await pickOpenPath({ CanChooseDirectories: false, CanChooseFiles: true, Title: '选择 AgentDeck 完整备份', Filters: [{ DisplayName: 'AgentDeck 完整备份 ZIP', Pattern: '*.zip' }] })
       if (!path || typeof path !== 'string') return
       const info = await sessionService.InspectBackup(path)
       setPending({ path, info })

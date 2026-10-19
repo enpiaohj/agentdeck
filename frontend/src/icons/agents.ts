@@ -29,7 +29,7 @@ export const AGENT_LIST: AgentIdentity[] = [
   { key: 'pi', label: 'Pi', color: '#5661A8', icon: null },
   { key: 'pi-desktop', label: 'Pi Desktop', color: '#5661A8', icon: null },
   { key: 'omp', label: 'oh-my-pi', color: '#5661A8', icon: null },
-  { key: 'dsh', label: 'dsh', color: '#53617A', icon: null },
+  { key: 'dsh', label: 'DeepSeek Harness', color: '#4D6BFE', icon: '/agents/deepseek-color.svg', glyph: true },
   { key: 'alma', label: 'Alma', color: '#7B6AC8', icon: null },
 ]
 

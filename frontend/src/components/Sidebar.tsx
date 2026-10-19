@@ -8,7 +8,7 @@ import {
   MenuPopover,
   MenuList,
   MenuItem,
-  Input, Button, Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, Field, MessageBar,
+  Input, Button, Field,
 } from '@fluentui/react-components'
 import {
   ArchiveRegular,
@@ -25,14 +25,15 @@ import {
   DeleteRegular,
 } from '@fluentui/react-icons'
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
-import type { AgentView, ProjectView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
-import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
+import type { AgentView, NavCounts, ProjectView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as projectService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/projectservice'
+import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import { agentMeta } from '../util'
 import { AgentMark } from '../icons/AgentMark'
-import { NewProjectDialog } from './NewProjectDialog'
-import { NewSessionDialog } from './NewSessionDialog'
 import { isCliAgent, platformLabel } from '../agentOptions'
+import { EmptyState } from './EmptyState'
+import { FormDialog } from './FormDialog'
+import type { Notify } from '../hooks/useToasts'
 
 type Project = ProjectView
 type MenuTarget = { kind: 'agent'; agent: string } | { kind: 'project'; project: Project }
@@ -93,21 +94,20 @@ const useStyles = makeStyles({
   count: {
     marginLeft: 'auto',
     fontSize: '12px',
-    color: tokens.colorNeutralForeground3,
+    color: 'var(--ad-muted)',
     backgroundColor: 'transparent',
     fontVariantNumeric: 'tabular-nums',
     padding: '0 2px',
     lineHeight: '19px',
     flexShrink: 0,
   },
-  spacer: { flex: 1 },
-  status: { padding: '10px 14px', fontSize: '11px', color: tokens.colorNeutralForeground3, borderTop: `1px solid ${tokens.colorNeutralStroke3}` },
+  status: { padding: '10px 14px', fontSize: '11px', color: 'var(--ad-muted)', borderTop: `1px solid ${tokens.colorNeutralStroke3}` },
   sectionTitle: {
     padding: '18px 16px 7px',
     fontSize: '11px',
     fontWeight: 600,
     letterSpacing: '0.025em',
-    color: tokens.colorNeutralForeground3,
+    color: 'var(--ad-muted)',
   },
   foot: {
     display: 'flex',
@@ -117,7 +117,7 @@ const useStyles = makeStyles({
     padding: '10px 14px',
     borderTop: `1px solid ${tokens.colorNeutralStroke3}`,
     fontSize: '11px',
-    color: tokens.colorNeutralForeground3,
+    color: 'var(--ad-muted)',
   },
   projectHeader: {
     display: 'flex', alignItems: 'center', gap: '7px', flexShrink: 0,
@@ -157,21 +157,13 @@ const useStyles = makeStyles({
     flexShrink: 0, minWidth: '16px', fontSize: '12px', lineHeight: '19px',
     fontWeight: 400, fontVariantNumeric: 'tabular-nums', textAlign: 'right', color: 'var(--ad-muted)',
   },
-  projectEmpty: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px',
-    padding: '16px 8px', border: `1px dashed ${tokens.colorNeutralStroke1}`,
-    borderRadius: tokens.borderRadiusMedium, textAlign: 'center', color: tokens.colorNeutralForeground3,
-    fontSize: '11px', lineHeight: '18px',
-  },
-  projectEmptyTitle: { fontWeight: 600, color: tokens.colorNeutralForeground2 },
-
   head: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '8px 12px 6px',
   },
-  appName: { fontSize: '12px', fontWeight: 600, color: tokens.colorNeutralForeground3 },
+  appName: { fontSize: '12px', fontWeight: 600, color: 'var(--ad-muted)' },
 })
 
 type Props = {
@@ -181,13 +173,22 @@ type Props = {
   filter: SidebarFilter
   onFilter: (f: SidebarFilter) => void
   onOpenDiagnostics?: () => void
-  /** 在某个项目目录里开新的 agent 会话（后端起 CLI）。 */
-  onNewSession: (project: string, agent: string) => Promise<void>
+  /** 打开「新建会话」弹窗；弹窗由 App 持有，快捷键与右键菜单走同一条路。 */
+  onNewSession: (project?: string, agent?: string) => void
+  /** 打开「新建项目」弹窗。 */
+  onNewProject: (agent?: string) => void
+  notify: Notify
   /** 项目清单或标注变化后重新拉取。 */
   onRefresh: () => void
 }
 
 function isAll(f: SidebarFilter) { return !f.favorites && !f.archived }
+
+// folderName 取目录名，用于「使用目录名」这一动作。
+function folderName(path: string): string {
+  const parts = path.replace(/[\\/]+$/, '').split(/[\\/]/)
+  return parts[parts.length - 1] ?? ''
+}
 
 // pointTarget 把「右键的那个坐标点」伪装成一个定位目标：Menu 的
 // positioning 只认元素，而这里只有坐标（写法同 SessionContextMenu）。
@@ -195,19 +196,20 @@ function pointTarget(point: { x: number; y: number }) {
   return { getBoundingClientRect: () => DOMRect.fromRect({ x: point.x, y: point.y, width: 0, height: 0 }) }
 }
 
-export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, onOpenDiagnostics, onNewSession, onRefresh }: Props) {
+export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, onOpenDiagnostics, onNewSession, onNewProject, notify, onRefresh }: Props) {
   const styles = useStyles()
   const agents = useAgents(listVersion)
   const projects = useProjects(listVersion)
+  const counts = useCounts(listVersion)
   const [menu, setMenu] = useState<{ target: MenuTarget; x: number; y: number } | null>(null)
   const [action, setAction] = useState<ProjectAction | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
   const [actionError, setActionError] = useState('')
   const [busy, setBusy] = useState(false)
   const pending = useRef(false)
-  const [newProject, setNewProject] = useState<{ agent?: string } | null>(null)
-  const [newSession, setNewSession] = useState<{ project?: string; agent?: string } | null>(null)
-  const [notice, setNotice] = useState('')
+  // held 记住最近一次操作的项目：关闭动画期间 action 已经清空，但字段还要有
+  // 内容可渲染，否则会看到一瞬空白弹窗。
+  const held = useRef<Project | null>(null)
 
   const contextMenu = (event: MouseEvent<HTMLButtonElement>, target: MenuTarget) => {
     event.preventDefault(); event.stopPropagation()
@@ -220,37 +222,65 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
     setMenu({ target, x: rect.left, y: rect.bottom })
   }
   const openAction = (kind: ProjectAction['kind'], project: Project) => {
-    setMenu(null); setActionError(''); setRenameDraft(project.name); setAction({ kind, project })
+    setMenu(null); setActionError(''); setRenameDraft(project.name); held.current = project; setAction({ kind, project })
   }
-  const saveAction = async () => {
-    if (!action || pending.current) return
+  const closeAction = () => { setAction(null); setActionError('') }
+  const saveRename = async (project: Project, name: string) => {
+    if (pending.current) return
     pending.current = true; setBusy(true); setActionError('')
     try {
-      if (action.kind === 'rename') await projectService.Rename(action.project.path, renameDraft)
-      else {
-        await projectService.Remove(action.project.path)
-        if (filter.project === action.project.path) onFilter({ ...filter, project: undefined })
-        setNotice(`已移除「${action.project.name}」的项目设置，目录、文件和会话均已保留。`)
-      }
+      await projectService.Rename(project.path, name)
       onRefresh(); setAction(null)
+      notify(`项目显示名称已改为「${name.trim()}」，会话列表同步生效。`, {
+        tone: 'success',
+        action: { label: '撤销', run: () => void undoRename(project, project.name) },
+      })
     } catch (reason) { setActionError(String(reason)) }
     finally { pending.current = false; setBusy(false) }
   }
+  // undoRename 只是把名字改回去，不做别的动作；失败要说话，不能让用户以为撤销成功。
+  const undoRename = async (project: Project, name: string) => {
+    try {
+      await projectService.Rename(project.path, name)
+      onRefresh()
+      notify(`已恢复为「${name}」。`, { tone: 'success' })
+    } catch (reason) { notify(`撤销失败：${String(reason)}`, { tone: 'error' }) }
+  }
+  const removeProject = async (project: Project) => {
+    if (pending.current) return
+    pending.current = true; setBusy(true); setActionError('')
+    try {
+      await projectService.Remove(project.path)
+      if (filter.project === project.path) onFilter({ ...filter, project: undefined })
+      onRefresh(); setAction(null)
+      notify(`已从项目列表移除「${project.name}」，目录、文件与会话均已保留。`, { tone: 'success' })
+    } catch (reason) { setActionError(String(reason)) }
+    finally { pending.current = false; setBusy(false) }
+  }
+
+  const shown = action?.project ?? held.current
+  const renamed = action?.kind === 'rename' ? shown : null
+  const removed = action?.kind === 'remove' ? shown : null
+
+  const renameError = (() => {
+    const value = renameDraft.trim()
+    if (!value) return '显示名称不能为空；可用「使用目录名」恢复为目录名称。'
+    if (value.length > 200) return '显示名称不能超过 200 个字符。'
+    if (/[\u0000-\u001f\u007f]/.test(renameDraft)) return '显示名称不能包含换行等控制字符。'
+    return ''
+  })()
+
   const overlays = <>
-    <NewProjectDialog open={!!newProject} current={filter.project} initialAgent={newProject?.agent}
-      onCreated={(path, agent) => onFilter({ project: path, agent })} onChanged={onRefresh} onClose={() => setNewProject(null)} />
-    <NewSessionDialog open={!!newSession} project={newSession?.project} initialAgent={newSession?.agent}
-      onLaunch={onNewSession} onClose={() => setNewSession(null)} />
     {menu ? <Menu open closeOnScroll positioning={{ target: pointTarget(menu), position: 'below', align: 'start', offset: 2 }} onOpenChange={(_, data) => { if (!data.open) setMenu(null) }}>
       <MenuPopover onKeyDown={event => event.stopPropagation()}><MenuList aria-label="新建与项目操作">
         {menu.target.kind === 'agent' ? <>
           <div className="ad-context-heading">{agentMeta(menu.target.agent).label}</div>
-          <MenuItem disabled={!isCliAgent(menu.target.agent) && menu.target.agent !== 'cursor-agent'} onClick={() => { if (menu.target.kind === 'agent') setNewSession({ agent: menu.target.agent }); setMenu(null) }}>新建会话…</MenuItem>
-          <MenuItem disabled={!isCliAgent(menu.target.agent) && menu.target.agent !== 'cursor-agent'} onClick={() => { if (menu.target.kind === 'agent') setNewProject({ agent: menu.target.agent }); setMenu(null) }}>新建项目…</MenuItem>
+          <MenuItem disabled={!isCliAgent(menu.target.agent) && menu.target.agent !== 'cursor-agent'} onClick={() => { if (menu.target.kind === 'agent') onNewSession(undefined, menu.target.agent); setMenu(null) }}>新建会话…</MenuItem>
+          <MenuItem disabled={!isCliAgent(menu.target.agent) && menu.target.agent !== 'cursor-agent'} onClick={() => { if (menu.target.kind === 'agent') onNewProject(menu.target.agent); setMenu(null) }}>新建项目…</MenuItem>
           {!isCliAgent(menu.target.agent) && menu.target.agent !== 'cursor-agent' ? <div className="ad-context-heading">此来源暂不支持新建会话</div> : null}
         </> : <>
           <div className="ad-context-heading">{menu.target.project.name}</div>
-          <MenuItem icon={<OpenRegular />} onClick={() => { if (menu.target.kind === 'project') setNewSession({ project: menu.target.project.path, agent: menu.target.project.agent || undefined }); setMenu(null) }}>在此新建会话…</MenuItem>
+          <MenuItem icon={<OpenRegular />} onClick={() => { if (menu.target.kind === 'project') onNewSession(menu.target.project.path, menu.target.project.agent || undefined); setMenu(null) }}>在此新建会话…</MenuItem>
           {menu.target.project.declared ? <>
             <MenuItem icon={<EditRegular />} onClick={() => { if (menu.target.kind === 'project') openAction('rename', menu.target.project) }}>修改显示名称…</MenuItem>
             <MenuItem icon={<DeleteRegular />} onClick={() => { if (menu.target.kind === 'project') openAction('remove', menu.target.project) }}>从项目列表移除…</MenuItem>
@@ -258,19 +288,34 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
         </>}
       </MenuList></MenuPopover>
     </Menu> : null}
-    <Dialog open={!!action} onOpenChange={(_, data) => { if (!data.open && !pending.current) setAction(null) }}>
-      <DialogSurface onKeyDown={event => {
-        event.stopPropagation()
-        if (event.key === 'Enter' && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229 && event.target instanceof HTMLInputElement && action?.kind === 'rename') { event.preventDefault(); void saveAction() }
-      }}><DialogBody><DialogTitle>{action?.kind === 'rename' ? '修改项目显示名称' : '从项目列表移除'}</DialogTitle>
-        <DialogContent>
-          {action?.kind === 'rename' ? <><Field label="项目显示名称" required><Input autoFocus value={renameDraft} disabled={busy} onChange={(_, data) => setRenameDraft(data.value)} /></Field><p>此名称仅用于 AgentDeck 项目列表，不会更改磁盘上的目录名称。</p></> : <p>移除「{action?.project.name}」在 AgentDeck 中的项目设置，包括显示名称和默认智能体。目录、文件和会话均会保留。若该目录已有会话，项目仍会按目录名称显示在列表中。</p>}
-          <Field label="项目目录"><Input readOnly value={action?.project.path ?? ''} /></Field>
-          {actionError ? <MessageBar intent="error">{actionError}</MessageBar> : null}
-        </DialogContent>
-        <DialogActions><Button disabled={busy} onClick={() => setAction(null)}>取消</Button><Button appearance="primary" disabled={busy || (action?.kind === 'rename' && !renameDraft.trim())} onClick={() => void saveAction()}>{busy ? (action?.kind === 'rename' ? '保存中…' : '移除中…') : action?.kind === 'rename' ? '保存' : '移除'}</Button></DialogActions>
-      </DialogBody></DialogSurface>
-    </Dialog>
+    <FormDialog
+      open={!!renamed}
+      title="修改项目显示名称"
+      intro={<p className="ad-form-note">会话列表与项目列表都会用这个名称；磁盘上的目录名不会改动。</p>}
+      submitLabel="保存" busyLabel="保存中…" busy={busy} error={actionError}
+      submitDisabled={!!renameError || renameDraft.trim() === (renamed?.name ?? '')}
+      onSubmit={() => { if (renamed && !renameError) void saveRename(renamed, renameDraft) }}
+      onClose={closeAction}
+    >
+      <Field label="项目显示名称" required validationMessage={renameError || `当前为「${renamed?.name ?? ''}」。`} validationState={renameError ? 'error' : 'none'}>
+        <div className="ad-form-row">
+          <Input autoFocus aria-label="项目显示名称" value={renameDraft} disabled={busy} onChange={(_, data) => setRenameDraft(data.value)} style={{ flex: 1, minWidth: 0 }} />
+          <Button disabled={busy} onClick={() => setRenameDraft(folderName(renamed?.path ?? ''))}>使用目录名</Button>
+        </div>
+      </Field>
+      <Field label="项目目录"><Input readOnly aria-label="项目目录" value={renamed?.path ?? ''} /></Field>
+    </FormDialog>
+    <FormDialog
+      open={!!removed}
+      title="从项目列表移除"
+      intro={<p className="ad-form-note">移除「{removed?.name}」在 AgentDeck 中的项目设置，包括显示名称和默认智能体。目录、文件和会话均会保留{removed?.declared ? '' : '；该目录已有会话，移除后仍会显示在列表中'}。此操作不会删除任何数据。</p>}
+      submitLabel="从项目列表移除" busyLabel="移除中…" busy={busy} error={actionError}
+      submitAppearance="destructive"
+      onSubmit={() => { if (removed) void removeProject(removed) }}
+      onClose={closeAction}
+    >
+      <Field label="项目目录"><Input readOnly aria-label="项目目录" value={removed?.path ?? ''} /></Field>
+    </FormDialog>
   </>
 
   const pick = (f: SidebarFilter) => () => {
@@ -325,15 +370,19 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
       <button className={mergeClasses(styles.item, isAll(filter) && styles.itemActive)} onClick={pick({})}>
         <AppsRegular fontSize={16} />
         全部会话
-        <span className={styles.count}>{agents.reduce((n, a) => n + a.count, 0)}</span>
+        {/* 计数来自后端 Counts()：与点进去看到的行数同口径（归档另算），
+            不是把各 agent 的数字相加——那会把归档的也算进来。 */}
+        {counts ? <span className={styles.count} title="未归档的会话数">{counts.sessions}</span> : null}
       </button>
       <button className={mergeClasses(styles.item, filter.favorites && styles.itemActive)} onClick={pick({ favorites: true })}>
         <StarRegular fontSize={16} />
         收藏
+        {counts ? <span className={styles.count} title="未归档的收藏">{counts.favorites}</span> : null}
       </button>
       <button className={mergeClasses(styles.item, filter.archived && styles.itemActive)} onClick={pick({ archived: true })}>
         <ArchiveRegular fontSize={16} />
         归档
+        {counts ? <span className={styles.count} title="已归档的会话">{counts.archived}</span> : null}
       </button>
 
       <div className={styles.sectionTitle}>智能体</div>
@@ -345,7 +394,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
           key={a.agent}
           className={mergeClasses(styles.item, filter.agent === a.agent && styles.itemActive)}
           onClick={pick({ agent: a.agent })}
-          title={`${agentMeta(a.agent).label} · ${a.count} 个会话`}
+          title={`${agentMeta(a.agent).label} · ${a.count} 个会话 · 右键新建会话或项目`}
         >
           <AgentMark agent={a.agent} size={18} />
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agentMeta(a.agent).label}</span>
@@ -357,36 +406,43 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
       <div className={styles.projectHeader}>
         <h2 id="sidebar-projects-heading" className={styles.projectHeading}>项目</h2>
         <span className={styles.projectTotal} title={`${projects.length} 个项目`}>{projects.length}</span>
-        <Button className={styles.projectAdd} size="small" appearance="subtle" icon={<AddRegular />} title="新建项目" aria-label="新建项目" onClick={() => setNewProject({})} />
+        <Button className={styles.projectAdd} data-return-focus="new-project" size="small" appearance="subtle" icon={<AddRegular />} title="新建项目 (Ctrl+Shift+N)" aria-label="新建项目" onClick={() => onNewProject()} />
       </div>
       <div className={styles.projectScroll} role="group" aria-labelledby="sidebar-projects-heading">
         {projects.map((p) => {
           const active = filter.project === p.path
+          const detail = `${p.name}\n${p.path}\n${p.count} 个会话 · ${p.favorites} 个收藏${p.archived ? ` · ${p.archived} 个归档（在「归档」中查看）` : ''}${p.agent ? `\n默认智能体：${platformLabel(p.agent)}` : ''}\n右键：新建会话 / 修改设置`
           return (
-            <button
-              key={p.path}
-              className={mergeClasses(styles.projectItem, active && styles.projectItemActive)}
-              aria-pressed={active}
-              aria-label={`${p.name}，${p.count} 个会话，${p.path}`}
-              onClick={pick({ project: p.path })}
-              onContextMenu={event => contextMenu(event, { kind: 'project', project: p })}
-              onKeyDown={event => keyboardMenu(event, { kind: 'project', project: p })}
-              title={`${p.name}\n${p.path}\n${p.count} 个会话 · ${p.favorites} 个收藏${p.agent ? `\n默认智能体：${platformLabel(p.agent)}` : ''}`}
-            >
-              <span aria-hidden="true" className={mergeClasses(styles.projectIcon, active && styles.projectIconActive)}>{active ? <FolderOpenRegular /> : <FolderRegular />}</span>
-              <span className={styles.projectName}>{p.name}</span>
-              <span aria-hidden="true" className={styles.projectCount}>{p.count}</span>
-            </button>
+            <div key={p.path} className="ad-project-row">
+              <button
+                className={mergeClasses(styles.projectItem, active && styles.projectItemActive)}
+                aria-pressed={active}
+                aria-label={`${p.name}，${p.count} 个会话，${p.path}`}
+                onClick={pick({ project: p.path })}
+                onContextMenu={event => contextMenu(event, { kind: 'project', project: p })}
+                onKeyDown={event => keyboardMenu(event, { kind: 'project', project: p })}
+                title={detail}
+              >
+                <span aria-hidden="true" className={mergeClasses(styles.projectIcon, active && styles.projectIconActive)}>{active ? <FolderOpenRegular /> : <FolderRegular />}</span>
+                <span className={styles.projectName}>{p.name}</span>
+                <span aria-hidden="true" className={mergeClasses(styles.projectCount, 'ad-project-count')}>{p.count}</span>
+              </button>
+              <button
+                className="ad-project-add"
+                title={`在「${p.name}」新建会话`}
+                aria-label={`在「${p.name}」新建会话`}
+                onClick={() => onNewSession(p.path, p.agent || undefined)}
+              >
+                <AddRegular fontSize={14} />
+              </button>
+            </div>
           )
         })}
-        {projects.length === 0 ? <div className={styles.projectEmpty}>
-          <FolderRegular fontSize={22} aria-hidden="true" />
-          <span className={styles.projectEmptyTitle}>暂无项目</span>
-          <span>点击右上角 ＋ 新建项目<br />已有会话的项目会自动显示</span>
-        </div> : null}
+        {projects.length === 0 ? <EmptyState icon={<FolderRegular fontSize={22} />} title="暂无项目" compact>
+          点「＋」新建项目并指定默认智能体；已有会话的目录会自动出现在这里。
+        </EmptyState> : null}
       </div>
       {overlays}
-      {notice ? <div role="status" style={{ margin: '0 8px 8px', fontSize: 12, color: tokens.colorNeutralForeground2 }}>{notice}</div> : null}
       <div className={styles.foot}>
         {onOpenDiagnostics ? (
           <button
@@ -424,4 +480,16 @@ function useProjects(listVersion: number): ProjectView[] {
     return () => { active = false }
   }, [listVersion])
   return ps
+}
+
+// 侧栏三条入口的计数。null 表示还没读到，此时不显示数字——先显示 0 再跳到
+// 真实值，比暂时空着更像出错。
+function useCounts(listVersion: number): NavCounts | null {
+  const [counts, setCounts] = useState<NavCounts | null>(null)
+  useEffect(() => {
+    let active = true
+    sessionService.Counts().then(value => { if (active) setCounts(value) }).catch(reason => { if (active) console.error('加载会话计数失败', reason) })
+    return () => { active = false }
+  }, [listVersion])
+  return counts
 }

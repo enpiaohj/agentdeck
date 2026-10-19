@@ -10,6 +10,7 @@ export const CLI_AGENTS = [
   { value: 'droid', label: 'Droid CLI' },
   { value: 'cursor', label: 'Cursor Agent CLI' },
   { value: 'hermes', label: 'Hermes CLI' },
+  { value: 'dsh', label: 'DeepSeek Harness CLI' },
 ] as const
 export type CliAgent = typeof CLI_AGENTS[number]['value']
 export function isCliAgent(value: unknown): value is CliAgent {

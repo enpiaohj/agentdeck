@@ -30,12 +30,19 @@ import { MessagePane } from './components/MessagePane'
 import { InfoPane } from './components/InfoPane'
 import { SearchResults } from './components/SearchPalette'
 import { SettingsView } from './components/SettingsView'
+import { NewProjectDialog } from './components/NewProjectDialog'
+import { NewSessionDialog } from './components/NewSessionDialog'
+import { ToastHost } from './components/Toasts'
 import { usePreferences } from './hooks/usePreferences'
+import { useToasts } from './hooks/useToasts'
+import { useAgentAvailability } from './hooks/useAgentAvailability'
 import { WorkspaceStatus } from './components/WorkspaceStatus'
 import { ClaudeHistoryImport } from './components/ClaudeHistoryImport'
 import { DeleteSessionsDialog, DeletedSessionsNotice } from './components/DeleteSessionsDialog'
 import { useSessionDeletion } from './hooks/useSessionDeletion'
 import { deletedSessionKeys } from './sessionDeletion'
+import { navWidthRange, rememberProject } from './preferences'
+import { platformLabel } from './agentOptions'
 import type { SessionView, ClaudeImportReport } from '../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as searchService from '../bindings/github.com/enpiaohj/agentdeck/internal/app/searchservice'
 import * as sessionService from '../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
@@ -177,9 +184,11 @@ const useStyles = makeStyles({
 
 // 四栏布局:顶栏(品牌/搜索/动作)+ 左导航 + 会话列表 + 消息流 + 会话信息。
 export function App() {
-  const { preferences } = usePreferences()
+  const { preferences, update } = usePreferences()
   const themeName = useTheme()
   const styles = useStyles()
+  const { toasts, notify, dismiss } = useToasts()
+  const availability = useAgentAvailability(0)
   const [collapsed, setCollapsed] = useState(() => window.innerWidth < 900)
   const [infoOpen, setInfoOpen] = useState(true)
   const [filter, setFilter] = useState<SidebarFilter>({})
@@ -191,12 +200,15 @@ export function App() {
   const searchRef = useRef<HTMLInputElement>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState('')
-  const [notice, setNotice] = useState('')
   const [view, setView] = useState<'sessions' | 'diagnostics' | 'imports'>('sessions')
   const [crashed, setCrashed] = useState(false)
   const [jumpPart, setJumpPart] = useState(-1)
   const [jumpToken, setJumpToken] = useState(0)
   const [maximised, setMaximised] = useState(false)
+  // 新建弹窗由 App 持有：右键菜单、快捷键、侧栏按钮都走同一个入口，
+  // 打开状态也只有一处。
+  const [sessionDialog, setSessionDialog] = useState<{ project?: string; agent?: string } | null>(null)
+  const [projectDialog, setProjectDialog] = useState<{ agent?: string } | null>(null)
 
   useEffect(() => {
     const compact = window.matchMedia('(max-width: 899px)')
@@ -288,6 +300,12 @@ export function App() {
     sessionService.Get(key).then((v) => { if (v && request === selectionRequest.current) { setSelected(v); setJumpPart(partIndex); setJumpToken(value => value + 1) } }).catch(reason => setRefreshError(`打开搜索结果失败：${String(reason)}`))
   }, [])
 
+  const openNewSession = useCallback((project?: string, agent?: string) => {
+    setView('sessions')
+    setSessionDialog({ project, agent })
+  }, [])
+  const openNewProject = useCallback((agent?: string) => { setProjectDialog({ agent }) }, [])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
@@ -296,11 +314,15 @@ export function App() {
         e.preventDefault()
         setView('sessions')
         requestAnimationFrame(() => { searchRef.current?.focus(); searchRef.current?.select() })
+        return
       }
+      // Ctrl+Shift+N 先判：Shift 没判的话会先被 Ctrl+N 吃掉。
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); openNewProject(); return }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); openNewSession(); return }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [openNewProject, openNewSession])
 
   const refresh = async () => {
     if (refreshing) return
@@ -314,21 +336,74 @@ export function App() {
     finally { setRefreshing(false) }
   }
 
+  // 启动会话后的自动刷新：CLI 写会话记录要时间，扫早了看不到；两次之后若
+  // 仍没有，就把「点刷新」这条下一步摆出来，不让用户对着空列表等。
+  const launchTimers = useRef<number[]>([])
+  useEffect(() => () => { launchTimers.current.forEach(clearTimeout) }, [])
+  const schedulePostLaunchRefresh = () => {
+    launchTimers.current.forEach(clearTimeout)
+    launchTimers.current = [
+      window.setTimeout(() => setListVersion(value => value + 1), 12_000),
+      window.setTimeout(() => {
+        setListVersion(value => value + 1)
+        notify('若仍未看到新会话，请点右上角「刷新」重新扫描本机会话。')
+      }, 45_000),
+    ]
+  }
+  const onLaunched = async (project: string, agent: string) => {
+    await resumeService.NewSession(project, agent)
+    update({ recentProjects: rememberProject(preferences.recentProjects, project) })
+    notify(`已在终端中打开 ${platformLabel(agent)}：${project}。生成会话记录后列表会自动刷新。`, { tone: 'success' })
+    schedulePostLaunchRefresh()
+  }
+
   const onImported = async (report: ClaudeImportReport) => {
     setListVersion(value => value + 1)
     setSourceVersion(value => value + 1)
     await searchService.Rebuild()
     const rows = await sessionService.List({ agent: 'claude-desktop', favorites: false, archived: false, project: '', tag: '', search: '' })
     const first = rows.find(row => row.source === 'import' && row.account === report.account)
-    setNotice(`${report.already_imported ? '文件已导入，未重复导入' : '聊天记录已导入'} · ${report.account} · ${report.conversations} 个会话${report.skipped_blocks ? `；${report.skipped_blocks} 个非文本内容块未纳入` : ''}`)
+    notify(`${report.already_imported ? '文件已导入，未重复导入' : '聊天记录已导入'} · ${report.account} · ${report.conversations} 个会话${report.skipped_blocks ? `；${report.skipped_blocks} 个非文本内容块未纳入` : ''}`, { tone: 'success' })
     setFilter({ agent: 'claude-desktop' }); setSearchQuery('')
     if (first) onSelect(first)
     else setView('sessions')
   }
 
+  // 导航宽度：用户没调过（navWidth=0）时跟随布局默认，调过就固定住。
+  const [resizing, setResizing] = useState(false)
+  const [previewWidth, setPreviewWidth] = useState(0)
+  const previewRef = useRef(0)
+  const drag = useRef({ startX: 0, startWidth: 0 })
+  const navSlot = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!resizing) return
+    const clamp = (value: number) => Math.min(navWidthRange.max, Math.max(navWidthRange.min, Math.round(value)))
+    const move = (event: PointerEvent) => {
+      const next = clamp(drag.current.startWidth + event.clientX - drag.current.startX)
+      previewRef.current = next; setPreviewWidth(next)
+    }
+    const end = () => {
+      setResizing(false)
+      if (previewRef.current) update({ navWidth: previewRef.current })
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+    }
+  }, [resizing, update])
+  const navWidth = resizing && previewWidth ? previewWidth : preferences.navWidth
+  const nudgeWidth = (delta: number) => {
+    const current = preferences.navWidth || navSlot.current?.getBoundingClientRect().width || 192
+    update({ navWidth: Math.min(navWidthRange.max, Math.max(navWidthRange.min, Math.round(current + delta))) })
+  }
+
   return (
     <FluentProvider theme={themeName === 'dark' ? darkTheme : lightTheme}>
-      <div className={`ad-app ${styles.outer}`} data-theme={themeName} style={{ '--ad-reader-font-size':`${preferences.fontSize}px`, '--ad-reader-line-height':preferences.spacing==='comfortable'?'1.85':'1.65', '--ad-reader-width':preferences.readingWidth==='wide'?'1120px':'820px' } as React.CSSProperties}>
+      <div className={`ad-app ${styles.outer}${resizing ? ' is-resizing' : ''}`} data-theme={themeName} style={{ '--ad-reader-font-size':`${preferences.fontSize}px`, '--ad-reader-line-height':preferences.spacing==='comfortable'?'1.85':'1.65', '--ad-reader-width':preferences.readingWidth==='wide'?'1120px':'820px', ...(navWidth ? { '--ad-nav-width': `${navWidth}px` } : {}) } as React.CSSProperties}>
         {/* 无边框窗口:顶栏整体为拖拽区,交互控件标 no-drag */}
         <div className={`ad-titlebar ${styles.topbar}`} style={{ '--wails-draggable': 'drag' } as React.CSSProperties}
           onDoubleClick={event => {
@@ -360,6 +435,9 @@ export function App() {
             <span className={styles.kbd}>Ctrl K</span>
           </div>}
           {view !== 'diagnostics' ? <div className={styles.right} style={{ '--wails-draggable': 'no-drag' } as React.CSSProperties}>
+            <Tooltip content="新建会话 (Ctrl+N)" relationship="description">
+              <Button size="small" appearance="secondary" onClick={() => openNewSession()}>新建会话</Button>
+            </Tooltip>
             <Tooltip content="导入 Claude 普通聊天 / 新版任务历史" relationship="description">
               <Button size="small" appearance="secondary" icon={<ArrowUploadRegular />} onClick={() => setView('imports')}>导入</Button>
             </Tooltip>
@@ -402,26 +480,46 @@ export function App() {
           </div>
         ) : null}
         {refreshError ? <div className={styles.crashed} role="alert">重新扫描失败：{refreshError}</div> : null}
-        {notice ? <div className={styles.crashed} role="status" style={{ backgroundColor: tokens.colorBrandBackground2, color: tokens.colorBrandForeground1 }}>
-          <span>{notice}</span><button className={styles.crashedClose} aria-label="关闭导入提示" onClick={() => setNotice('')}><DismissRegular /></button>
-        </div> : null}
         <main className={styles.main} onKeyDown={event => {
           if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
           if (event.key === 'Escape' && !event.nativeEvent.isComposing && event.keyCode !== 229 && searchQuery) { setSearchQuery(''); searchRef.current?.focus() }
         }}>
-          {view !== 'diagnostics' ? <Sidebar
-            collapsed={collapsed}
-            onToggle={() => setCollapsed((v) => !v)}
-            filter={filter}
-            onFilter={(f) => { setFilter(f); setSearchQuery(''); setView('sessions') }}
-            listVersion={listVersion}
-            onOpenDiagnostics={() => setView('diagnostics')}
-            onRefresh={() => setListVersion(value => value + 1)}
-            onNewSession={async (project: string, agent: string) => {
-              await resumeService.NewSession(project, agent)
-              setNotice('已打开终端并请求启动智能体。生成会话记录后，可刷新列表查看。')
-            }}
-          /> : null}
+          {view !== 'diagnostics' ? <div className="ad-nav-slot" ref={navSlot}>
+            <Sidebar
+              collapsed={collapsed}
+              onToggle={() => setCollapsed((v) => !v)}
+              filter={filter}
+              onFilter={(f) => { setFilter(f); setSearchQuery(''); setView('sessions') }}
+              listVersion={listVersion}
+              onOpenDiagnostics={() => setView('diagnostics')}
+              onRefresh={() => setListVersion(value => value + 1)}
+              onNewSession={openNewSession}
+              onNewProject={openNewProject}
+              notify={notify}
+            />
+            {!collapsed ? <div
+              className="ad-resizer"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="调整导航宽度"
+              tabIndex={0}
+              title="拖拽调整导航宽度，双击恢复默认"
+              onPointerDown={event => {
+                const width = navSlot.current?.getBoundingClientRect().width ?? (preferences.navWidth || 192)
+                drag.current = { startX: event.clientX, startWidth: width }
+                previewRef.current = width
+                setPreviewWidth(width)
+                setResizing(true)
+                event.preventDefault()
+              }}
+              onDoubleClick={() => update({ navWidth: 0 })}
+              onKeyDown={event => {
+                if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+                event.preventDefault()
+                nudgeWidth((event.key === 'ArrowRight' ? 1 : -1) * (event.shiftKey ? 32 : 8))
+              }}
+            /> : null}
+          </div> : null}
           {view === 'diagnostics' || view === 'imports' ? (
             <div style={{ gridColumn: view === 'diagnostics' ? '1 / -1' : 'span 3', minWidth: 0, overflow: 'hidden' }}>
               {view === 'imports' ? <ClaudeHistoryImport onImported={onImported} /> : <SettingsView revision={listVersion} onBack={() => setView('sessions')} />}
@@ -458,7 +556,31 @@ export function App() {
             </>
           )}
         </main>
+        <NewSessionDialog
+          open={!!sessionDialog}
+          project={sessionDialog?.project}
+          initialAgent={sessionDialog?.agent}
+          availability={availability}
+          recent={preferences.recentProjects}
+          onLaunched={onLaunched}
+          onClose={() => setSessionDialog(null)}
+        />
+        <NewProjectDialog
+          open={!!projectDialog}
+          current={filter.project}
+          initialAgent={projectDialog?.agent}
+          availability={availability}
+          onCreated={(path, agent) => {
+            setFilter({ project: path })
+            // 建完项目紧接着多半要开一个会话：给一条可以直接点的下一步，
+            // 而不是让用户自己去找刚建出来的那一行。
+            notify(`项目「${path}」已就绪。`, { tone: 'success', action: { label: '新建会话', run: () => openNewSession(path, agent) } })
+          }}
+          onChanged={() => setListVersion(value => value + 1)}
+          onClose={() => setProjectDialog(null)}
+        />
         <DeletedSessionsNotice deletion={deletion} />
+        <ToastHost toasts={toasts} onDismiss={dismiss} />
         <WorkspaceStatus session={view === 'sessions' ? selected : null} />
         <DeleteSessionsDialog deletion={deletion} />
       </div>

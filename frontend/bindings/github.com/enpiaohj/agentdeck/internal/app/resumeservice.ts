@@ -10,6 +10,20 @@
 // @ts-ignore: Unused imports
 import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Create } from "@wailsio/runtime";
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as $models from "./models.js";
+
+/**
+ * Available 报告各平台的启动命令是否已安装。前端用它标注「未检测到命令」，
+ * 免得用户点了新建会话才发现终端里没有这个 CLI。
+ */
+export function Available(): $CancellablePromise<$models.CliAvailability[]> {
+    return $Call.ByID(1848959032).then(($result: any) => {
+        return $$createType1($result);
+    });
+}
+
 /**
  * Command 返回恢复命令原文(空串 = 该会话不可恢复,前端标「仅可查看历史」)。
  */
@@ -25,12 +39,24 @@ export function CopyToClipboard(key: string): $CancellablePromise<void> {
 }
 
 /**
+ * DirectoryState 报告一个路径当前的状态，供前端在输入时即时反馈：
+ * "dir"（已是目录）、"missing"（不存在；新建项目时会创建）、"file"（同名
+ * 文件挡着，两种用法都不行）。路径本身不合法（空、相对、含控制字符）报错。
+ * 
+ * 只回答「现在是什么」，不替前端判断该不该拦：目录不存在对新建项目是正常的，
+ * 对新建会话才是错误，取舍留给调用方。
+ */
+export function DirectoryState(project: string): $CancellablePromise<string> {
+    return $Call.ByID(2759818381, project);
+}
+
+/**
  * NewSession 在指定项目目录里开一个**新的** agent 会话：不挑历史会话，
  * 直接起该 agent 的 CLI，由它自己建会话。这正是「新建会话」——AgentDeck
  * 不写任何上游存储，只是把用户「在这个项目里开一个」的决定交给 CLI
  * （与自己敲 `claude` 等价）。
  * 
- * agent 为空时用当前列表里最多的那个 agent（前端一般已带上下文）。
+ * agent 为空时先取项目平台，再按可启动的本机会话统计回退；无记录时用 claude。
  * 返回的错误自解释，与 OpenInTerminal 同一套措辞（前端不套前缀）。
  */
 export function NewSession(project: string, agent: string): $CancellablePromise<void> {
@@ -49,3 +75,18 @@ export function NewSession(project: string, agent: string): $CancellablePromise<
 export function OpenInTerminal(key: string): $CancellablePromise<void> {
     return $Call.ByID(1096260450, key);
 }
+
+/**
+ * PreviewCommand 返回新会话会交给终端的命令原文，不启动任何进程。
+ * 终端启动失败时前端可以用它做「复制命令」兜底。
+ * 
+ * 校验与 NewSession 完全一致（含目录必须已存在）：预览说能开、真开却失败，
+ * 是比没有预览更坏的结果，所以这条路径不做任何放宽。
+ */
+export function PreviewCommand(project: string, agent: string): $CancellablePromise<string> {
+    return $Call.ByID(3382995844, project, agent);
+}
+
+// Private type creation functions
+const $$createType0 = $models.CliAvailability.createFrom;
+const $$createType1 = $Create.Array($$createType0);

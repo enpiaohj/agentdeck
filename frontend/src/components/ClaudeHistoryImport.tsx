@@ -1,9 +1,10 @@
 import { Button, Input, Spinner, Text, makeStyles, tokens } from '@fluentui/react-components'
 import { ArrowUploadRegular, DocumentTextRegular, PersonRegular, OpenRegular } from '@fluentui/react-icons'
-import { Browser, Dialogs } from '@wailsio/runtime'
+import { Browser } from '@wailsio/runtime'
 import { useState } from 'react'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import type { ClaudeImportReport } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
+import { pickOpenPath } from '../nativeDialogs'
 
 const exportHelp = 'https://support.claude.com/en/articles/9450526-export-your-claude-data'
 const useStyles = makeStyles({
@@ -31,7 +32,7 @@ export function ClaudeHistoryImport({ onImported }: { onImported: (report: Claud
 
   const choose = async () => {
     try {
-      const selected = await Dialogs.OpenFile({
+      const selected = await pickOpenPath({
         CanChooseFiles: true, CanChooseDirectories: false, Title: '选择 Claude 数据导出',
         Filters: [{ DisplayName: 'Claude 导出 ZIP', Pattern: '*.zip' }, { DisplayName: 'Claude 会话 JSON', Pattern: '*.json' }],
       })

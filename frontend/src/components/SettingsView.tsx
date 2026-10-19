@@ -70,7 +70,7 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
           </section>)}
           {data ? <DiagnosticsView revision={revision} embedded /> : null}
           {shortcuts ? <section className="ad-settings-section"><h2>快捷键</h2><p className="ad-settings-description">列表选择遵循常见桌面应用的操作习惯。</p><dl className="ad-shortcuts">{[
-            ['搜索所有会话','Ctrl + K'],['打开设置','Ctrl + ,'],['打开会话操作菜单','Shift + F10'],['查找当前会话','Ctrl + F'],['下一 / 上一命中段','Enter / Shift + Enter'],['全选筛选后当前展开项','Ctrl + A'],['追加 / 取消选择','Ctrl + 单击'],['连续选择','Shift + 单击'],['追加连续范围','Ctrl + Shift + 单击'],['清空选择','Esc'],['移动焦点 / 扩展选择','方向键 / Shift + 方向键'],['保存备注','Ctrl + Enter'],
+            ['搜索所有会话','Ctrl + K'],['新建会话','Ctrl + N'],['新建项目','Ctrl + Shift + N'],['打开设置','Ctrl + ,'],['调整导航宽度','拖拽分隔条 / 方向键'],['打开会话操作菜单','Shift + F10'],['查找当前会话','Ctrl + F'],['下一 / 上一命中段','Enter / Shift + Enter'],['全选筛选后当前展开项','Ctrl + A'],['追加 / 取消选择','Ctrl + 单击'],['连续选择','Shift + 单击'],['追加连续范围','Ctrl + Shift + 单击'],['清空选择','Esc'],['移动焦点 / 扩展选择','方向键 / Shift + 方向键'],['保存备注','Ctrl + Enter'],
           ].map(([label,key])=><div key={label}><dt>{label}</dt><dd><kbd>{key}</kbd></dd></div>)}</dl></section> : null}
           {!shown.length&&!data&&!shortcuts ? <p className="ad-settings-description">未找到匹配的设置，请调整搜索关键词。</p> : null}
         </div>

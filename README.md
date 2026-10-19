@@ -15,8 +15,8 @@ AgentDeck 解决「当时做了什么、怎么接着做」。
 
 ## 当前状态
 
-**已发布 v0.2.2 — Windows 桌面工作台**（Wails v3 + React 18 + Fluent UI v9）。
-版本变化见 [CHANGELOG.md](CHANGELOG.md)，本地发布快照位于 `releases/v0.2.2/`。
+**已发布 v0.6.0 — Windows 桌面工作台**（Wails v3 + React 18 + Fluent UI v9）。
+版本变化见 [CHANGELOG.md](CHANGELOG.md)，本地发布快照位于 `releases/v0.6.0/`。
 
 已实现：
 
@@ -144,6 +144,7 @@ AgentDeck 默认只读访问各 Agent 的本地存储。唯一例外是**用户�
 | Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` + `state_5.sqlite` |
 | OpenCode | `~/.local/share/opencode/opencode.db` |
 | ZCode | `~/.zcode/cli/db/db.sqlite` |
+| DeepSeek Harness (dsh) | `~/.dsh/sessions/<编码目录>/<会话>/session.v<N>.jsonl[.zstd]` |
 
 ## 删除会话
 

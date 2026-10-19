@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
 
@@ -90,17 +91,24 @@ func (s *ResumeService) CopyToClipboard(key string) error {
 // agent 为空时先取项目平台，再按可启动的本机会话统计回退；无记录时用 claude。
 // 返回的错误自解释，与 OpenInTerminal 同一套措辞（前端不套前缀）。
 func (s *ResumeService) NewSession(project, agent string) error {
-	dir, err := projects.ValidatePath(project)
+	dir, err := existingDir(project)
 	if err != nil {
 		return err
 	}
-	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
-		return fmt.Errorf("项目目录不存在: %s", dir)
+	agent, err = s.resolveAgent(dir, agent)
+	if err != nil {
+		return err
 	}
+	return s.launchInTerminal(dir, newSessionScript(dir, cliCommand(agent)))
+}
+
+// resolveAgent 定下这次要启动谁：显式指定 > 项目保存的默认智能体 > 本机会话
+// 统计回退。两种入口（新建会话 / 预览命令）共用，避免两条路各算一遍。
+func (s *ResumeService) resolveAgent(dir, agent string) (string, error) {
 	if agent == "" {
 		declared, err := s.a.declared.All()
 		if err != nil {
-			return err
+			return "", err
 		}
 		for _, p := range declared {
 			if strings.EqualFold(p.Path, dir) {
@@ -112,13 +120,92 @@ func (s *ResumeService) NewSession(project, agent string) error {
 			agent = s.defaultAgent()
 		}
 	}
-	cli := cliCommand(agent)
-	if cli == "" {
-		return fmt.Errorf("暂不支持使用此智能体新建会话：%s", agent)
+	if cliCommand(agent) == "" {
+		return "", fmt.Errorf("暂不支持使用此智能体新建会话：%s", agent)
 	}
-	// LiteralPath 保留方括号等字符；切目录失败时禁止在错误目录启动 CLI。
-	script := fmt.Sprintf("Set-Location -LiteralPath %s -ErrorAction Stop; %s", quotePowerShellPath(dir), cli)
-	return s.launchInTerminal(dir, script)
+	return agent, nil
+}
+
+// newSessionScript 是在 dir 里启动 cli 的脚本。LiteralPath 保留方括号等字符，
+// 切目录失败时禁止在错误目录启动 CLI。
+func newSessionScript(dir, cli string) string {
+	return fmt.Sprintf("Set-Location -LiteralPath %s -ErrorAction Stop; %s", quotePowerShellPath(dir), cli)
+}
+
+// CliAvailability 是一个可启动平台在本机的情况：命令名与是否能在 PATH 上找到。
+type CliAvailability struct {
+	Agent   string `json:"agent"`
+	Command string `json:"command"`
+	Found   bool   `json:"found"`
+}
+
+// Available 报告各平台的启动命令是否已安装。前端用它标注「未检测到命令」，
+// 免得用户点了新建会话才发现终端里没有这个 CLI。
+func (s *ResumeService) Available() []CliAvailability {
+	out := make([]CliAvailability, 0, len(cliAgents))
+	for _, agent := range cliAgents {
+		cmd := cliCommand(agent)
+		if cmd == "" {
+			continue
+		}
+		_, err := exec.LookPath(cmd)
+		out = append(out, CliAvailability{Agent: agent, Command: cmd, Found: err == nil})
+	}
+	return out
+}
+
+// PreviewCommand 返回新会话会交给终端的命令原文，不启动任何进程。
+// 终端启动失败时前端可以用它做「复制命令」兜底。
+//
+// 校验与 NewSession 完全一致（含目录必须已存在）：预览说能开、真开却失败，
+// 是比没有预览更坏的结果，所以这条路径不做任何放宽。
+func (s *ResumeService) PreviewCommand(project, agent string) (string, error) {
+	dir, err := existingDir(project)
+	if err != nil {
+		return "", err
+	}
+	agent, err = s.resolveAgent(dir, agent)
+	if err != nil {
+		return "", err
+	}
+	return newSessionScript(dir, cliCommand(agent)), nil
+}
+
+// DirectoryState 报告一个路径当前的状态，供前端在输入时即时反馈：
+// "dir"（已是目录）、"missing"（不存在；新建项目时会创建）、"file"（同名
+// 文件挡着，两种用法都不行）。路径本身不合法（空、相对、含控制字符）报错。
+//
+// 只回答「现在是什么」，不替前端判断该不该拦：目录不存在对新建项目是正常的，
+// 对新建会话才是错误，取舍留给调用方。
+func (s *ResumeService) DirectoryState(project string) (string, error) {
+	dir, err := projects.ValidatePath(project)
+	if err != nil {
+		return "", err
+	}
+	fi, err := os.Stat(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "missing", nil
+		}
+		return "", fmt.Errorf("无法访问该路径：%s", dir)
+	}
+	if !fi.IsDir() {
+		return "file", nil
+	}
+	return "dir", nil
+}
+
+// existingDir 校验并确认路径是一个已存在的目录：新建会话与预览共用，
+// 保证两条路对「这个目录能不能开」的判断不会分叉。
+func existingDir(project string) (string, error) {
+	dir, err := projects.ValidatePath(project)
+	if err != nil {
+		return "", err
+	}
+	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+		return "", fmt.Errorf("项目目录不存在: %s", dir)
+	}
+	return dir, nil
 }
 
 // defaultAgent 是本机会话数最多的 agent，用作「新建会话」的缺省目标。
@@ -143,6 +230,11 @@ func (s *ResumeService) defaultAgent() string {
 	return best
 }
 
+// cliAgents 是可启动平台的有序清单（前端选择列表的同一顺序）。cursor 用
+// 规范名，cursor-agent 作为历史别名继续接受。dsh 只接「新建会话」：它的
+// 续会话命令形态没有可靠依据，恢复仍走「仅可查看历史」（见 sessions.resumeCommand）。
+var cliAgents = []string{"claude", "codex", "zcode", "opencode", "qoder", "qoder-cn", "grok", "droid", "cursor", "hermes", "dsh"}
+
 // cliCommand 将会话的平台标识映射为固定命令，禁止把任意输入当命令执行。
 func cliCommand(agent string) string {
 	switch agent {
@@ -152,7 +244,7 @@ func cliCommand(agent string) string {
 		return "qoderclicn"
 	case "cursor", "cursor-agent":
 		return "cursor-agent"
-	case "claude", "codex", "zcode", "opencode", "grok", "droid", "hermes":
+	case "claude", "codex", "zcode", "opencode", "grok", "droid", "hermes", "dsh":
 		return agent
 	}
 	return ""

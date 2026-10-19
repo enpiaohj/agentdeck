@@ -26,12 +26,13 @@ import {
   DeleteRegular,
 } from '@fluentui/react-icons'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Events, Dialogs } from '@wailsio/runtime'
+import { Events } from '@wailsio/runtime'
 import type { SessionView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import * as markService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/markservice'
 import * as resumeService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/resumeservice'
 import { agentMeta, fmtTime, relTime } from '../util'
+import { pickOpenPath } from '../nativeDialogs'
 import { AgentMark } from '../icons/AgentMark'
 import type { SidebarFilter } from './Sidebar'
 import { presentSessions, sessionDateGroup, sessionMonth, type SessionOrder } from '../sessionPresentation'
@@ -337,7 +338,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
       } else if (action === 'copyResume') {
         await resumeService.CopyToClipboard(item.key); setActionMessage('恢复命令已复制。')
       } else if (action === 'export') {
-        const dir = await Dialogs.OpenFile({ CanChooseDirectories: true, CanChooseFiles: false, CanCreateDirectories: true, Title: '选择 Markdown 导出目录', ButtonText: '导出到此目录' })
+        const dir = await pickOpenPath({ CanChooseDirectories: true, CanChooseFiles: false, CanCreateDirectories: true, Title: '选择 Markdown 导出目录', ButtonText: '导出到此目录' })
         if (!dir || typeof dir !== 'string') return
         let succeeded = 0
         const failures: string[] = []

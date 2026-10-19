@@ -96,7 +96,8 @@ type ProjectView struct {
 	Drive     string `json:"drive"`
 	Count     int    `json:"count"`
 	Favorites int    `json:"favorites"`
-	Last      string `json:"last"` // RFC3339
+	Archived  int    `json:"archived"` // 已归档的会话；不计入 Count，供悬停提示说明
+	Last      string `json:"last"`     // RFC3339
 	Declared  bool   `json:"declared"`
 }
 
