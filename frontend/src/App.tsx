@@ -194,6 +194,8 @@ export function App() {
   const [filter, setFilter] = useState<SidebarFilter>({})
   const [selected, setSelected] = useState<SessionView | null>(null)
   const [listVersion, setListVersion] = useState(0)
+  // listReset 只由侧栏「全部会话」自增，作为会话列表清空自身筛选的信号。
+  const [listReset, setListReset] = useState(0)
   const [sourceVersion, setSourceVersion] = useState(0)
   const selectionRequest = useRef(0)
   const [searchQuery, setSearchQuery] = useState('')
@@ -292,6 +294,17 @@ export function App() {
     setSelected(s)
     setView('sessions')
     setJumpPart(-1)
+  }
+
+  // selectAllSessions 是侧栏「全部会话」的唯一入口：回到真正的全集，
+  // 所以把智能体 / 项目 / 收藏 / 归档、顶栏搜索词和列表内的筛选一起清掉。
+  // 其它侧栏项仍是在当前筛选上叠加（例如「某智能体的收藏」），只有这一项是绝对视图。
+  // listReset 是给 SessionList 的复位信号（关键词、月份、账号、排序都在它内部自持）。
+  const selectAllSessions = () => {
+    setFilter({})
+    setSearchQuery('')
+    setView('sessions')
+    setListReset(value => value + 1)
   }
 
   const onJump = useCallback((key: string, partIndex: number) => {
@@ -490,6 +503,7 @@ export function App() {
               onToggle={() => setCollapsed((v) => !v)}
               filter={filter}
               onFilter={(f) => { setFilter(f); setSearchQuery(''); setView('sessions') }}
+              onSelectAll={selectAllSessions}
               listVersion={listVersion}
               onOpenDiagnostics={() => setView('diagnostics')}
               onRefresh={() => setListVersion(value => value + 1)}
@@ -529,6 +543,7 @@ export function App() {
               <div style={{ display: searchQuery.trim() ? 'none' : 'contents' }}><SessionList
                 filter={filter}
                 onFilter={setFilter}
+                resetToken={listReset}
                 selectedKey={selected?.key ?? null}
                 onSelect={onSelect}
                 onOpenDetails={session => { onSelect(session); setInfoOpen(true) }}

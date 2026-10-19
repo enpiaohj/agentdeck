@@ -3,6 +3,8 @@ package projects
 import (
 	"database/sql"
 	"errors"
+	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -95,6 +97,42 @@ func Open(path string) (*Store, error) {
 
 // Close 关闭底层库。
 func (s *Store) Close() error { return s.db.Close() }
+
+// BackupTo 用 VACUUM INTO 做在线一致性备份:连接内原子完成,不复制正在
+// 写入的库文件。目标已存在时报错,不覆盖已有文件。与 marks / history 的
+// BackupTo 同一写法,迁移数据位置时用它生成一致副本。
+func (s *Store) BackupTo(dest string) error {
+	if fi, err := os.Stat(dest); err == nil && !fi.IsDir() {
+		return fmt.Errorf("备份目标已存在,不覆盖: %s", dest)
+	}
+	_, err := s.db.Exec(`VACUUM INTO ?`, dest)
+	return err
+}
+
+// ValidateBackup 校验 path 是合法的 AgentDeck 声明项目库：只有
+// declared_projects 一张表、必需列齐全、完整性检查通过。
+func ValidateBackup(path string) error {
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	var objects int
+	if err = db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type IN ('view','trigger') OR (type='table' AND name NOT IN ('declared_projects'))`).Scan(&objects); err != nil || objects != 0 {
+		return fmt.Errorf("声明项目库表结构无效：%v", err)
+	}
+	for _, column := range []string{"lkey", "path", "name", "added", "agent"} {
+		var n int
+		if err = db.QueryRow(`SELECT count(*) FROM pragma_table_info('declared_projects') WHERE name = ?`, column).Scan(&n); err != nil || n != 1 {
+			return fmt.Errorf("声明项目库缺少 %s 列：%v", column, err)
+		}
+	}
+	var integrity string
+	if err = db.QueryRow(`PRAGMA integrity_check`).Scan(&integrity); err != nil || integrity != "ok" {
+		return fmt.Errorf("声明项目库完整性校验失败：%s %v", integrity, err)
+	}
+	return nil
+}
 
 // Add 声明一个项目。同一路径（不分大小写）只保留一行，重复声明只更新
 // 展示名。返回归一化后的原样路径（调用方拿它去建目录/开会话）。

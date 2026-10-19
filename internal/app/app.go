@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/enpiaohj/agentdeck/internal/appconfig"
 	"github.com/enpiaohj/agentdeck/internal/claudehistory"
 	"github.com/enpiaohj/agentdeck/internal/history"
 	"github.com/enpiaohj/agentdeck/internal/marks"
@@ -29,9 +30,9 @@ import (
 // 不发事件、Clipboard 为 nil 则复制报错），服务层对 nil 一律显式报错
 // 或静默降级，绝不 panic。
 type Config struct {
-	// MarksPath 标注库路径；空用 marks.DefaultPath()。
+	// MarksPath 标注库路径；空则由应用配置解析（默认位置或已迁移的数据根）。
 	MarksPath string
-	// IndexPath 全文索引库路径；空用默认磁盘库，":memory:" 用独立内存库。
+	// IndexPath 全文索引库路径；空同 MarksPath，":memory:" 用独立内存库。
 	IndexPath string
 	// ImportDir stores AgentDeck-owned chat imports, separate from native agents.
 	ImportDir string
@@ -46,6 +47,11 @@ type Config struct {
 	Clipboard func(text string) error
 	// Runner 启动外部进程（恢复终端）；nil 时用 exec.Command.Start。
 	Runner func(name string, args ...string) error
+	// TerminalShell 是打开终端时使用的 PowerShell 可执行文件：全文取值见
+	// appconfig（powershell / auto / pwsh 或自定义绝对路径）；空用应用配置。
+	TerminalShell string
+	// Restart 重启应用（迁移数据位置后让新落点生效）；nil 时界面只提示手动重启。
+	Restart func() error
 }
 
 // App 是装配根：标注库句柄 + 会话列表缓存 + 索引状态。
@@ -59,12 +65,22 @@ type App struct {
 	libraryError  string
 	captureErrors map[string]string
 	closing       bool // guarded by captureMu
-	readNative    func(sessions.Session) (sessions.Transcript, error)
-	deletePlans   map[string]*deleteJob                  // guarded by dataMu
-	deleteUndos   map[string]*deleteJob                  // guarded by dataMu
-	deleted       map[string]bool                        // guarded by mu
-	nativeDelete  func(*sessions.NativeDeletePlan) error // fault injection for rollback tests
-	codexName     func(threadID, name string) error      // 写 Codex 原生名；测试替换成假的，不去起真进程
+	// storageNote 说明本次运行的数据落点是否与配置一致（配置损坏或配置根
+	// 不可用时的降级原因）；空表示无异常。界面在「设置 → 数据与诊断」展示。
+	storageNote string
+	// 应用配置与终端 shell 设置。settingsErr 非空时界面提示并拒绝回写。
+	paths        appconfig.Paths
+	settingsMu   sync.Mutex
+	settings     appconfig.Config
+	settingsErr  error
+	readNative   func(sessions.Session) (sessions.Transcript, error)
+	deletePlans  map[string]*deleteJob                      // guarded by dataMu
+	deleteUndos  map[string]*deleteJob                      // guarded by dataMu
+	deleted      map[string]bool                            // guarded by mu
+	nativeDelete func(*sessions.NativeDeletePlan) error     // fault injection for rollback tests
+	codexName    func(threadID, name string) error          // 写 Codex 原生名；测试替换成假的，不去起真进程
+	probeShell   func(exe string) (string, error)           // 探测 shell 版本；测试替换成假的，不去起真进程
+	copyFileFn   func(src, dest string) (copyRecord, error) // 迁移复制单个文件；测试替换成会失败的那一个
 
 	mu          sync.Mutex
 	list        []sessions.Session // 装配缓存：sessions.List(All) 的快照
@@ -79,25 +95,34 @@ type App struct {
 	warmMu     sync.Mutex // serialize message scans across refreshed generations
 	generation uint64
 	search     *searchState
+	// shellMu 保护终端 shell 的当前取值与版本探测缓存（见 terminalshell）。
+	shellMu      sync.Mutex
+	shellSetting string
+	shellProbes  map[string]shellVersion
+	// migrateMu 保护数据位置迁移的独占权（同一时间只允许一次迁移）。
+	migrateMu sync.Mutex
+	migrating bool
 	// singleRelease 释放单实例互斥锁；nil 表示本进程没有取得所有权。
 	singleRelease func()
 }
 
 // New 打开标注库并返回装配根。索引不在此建——Rebuild 触发后台重建。
 func New(cfg Config) (*App, error) {
+	// 数据落点：调用方显式给出的路径优先，缺省项由应用配置解析
+	// （默认位置或已迁移的数据根，见 appconfig）。
+	resolved, err := resolveDataPaths()
+	if err != nil {
+		return nil, err
+	}
+	paths := resolved.paths
 	if cfg.MarksPath == "" {
-		p, err := marks.DefaultPath()
-		if err != nil {
-			return nil, err
-		}
-		cfg.MarksPath = p
+		cfg.MarksPath = paths.MarksPath
 	}
 	if cfg.IndexPath == "" {
-		p, err := indexDefaultPath()
-		if err != nil {
-			return nil, err
-		}
-		cfg.IndexPath = p
+		cfg.IndexPath = paths.IndexPath
+	}
+	if cfg.TerminalShell == "" {
+		cfg.TerminalShell = resolved.cfg.TerminalShell
 	}
 	if cfg.ImportDir == "" {
 		base := filepath.Dir(cfg.IndexPath)
@@ -144,7 +169,24 @@ func New(cfg Config) (*App, error) {
 		h.Close()
 		return nil, fmt.Errorf("读取删除恢复状态失败：%w", err)
 	}
-	a := &App{cfg: cfg, marks: m, declared: d, history: h, search: newSearchState(cfg.IndexPath), crashed: checkCrash(cfg.MarksPath), captureErrors: map[string]string{}, readNative: sessions.TranscriptForRetention, deleted: deleted, codexName: setCodexThreadName}
+	a := &App{
+		cfg:           cfg,
+		marks:         m,
+		declared:      d,
+		history:       h,
+		search:        newSearchState(cfg.IndexPath),
+		crashed:       checkCrash(cfg.MarksPath),
+		paths:         pathsFromConfig(cfg),
+		settings:      resolved.cfg,
+		settingsErr:   resolved.cfgErr,
+		storageNote:   resolved.note,
+		shellSetting:  appconfig.NormalizeShell(cfg.TerminalShell),
+		captureErrors: map[string]string{},
+		readNative:    sessions.TranscriptForRetention,
+		deleted:       deleted,
+		codexName:     setCodexThreadName,
+		probeShell:    probeShellVersion,
+	}
 	return a, nil
 }
 
@@ -162,20 +204,6 @@ func (a *App) ClaimSingleInstance() bool {
 	}
 	a.singleRelease = release
 	return false
-}
-
-// indexDefaultPath 是索引库的默认落盘位置:%LOCALAPPDATA%\AgentDeck\
-// index.db(缓存性质的用户数据,Local 而非 Roaming)。
-func indexDefaultPath() (string, error) {
-	base, err := os.UserCacheDir() // Windows 上即 %LOCALAPPDATA%
-	if err != nil {
-		return "", err
-	}
-	dir := filepath.Join(base, "AgentDeck")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "index.db"), nil
 }
 
 // Close 关闭标注库与索引库,并清除崩溃标记(正常退出)。
@@ -206,6 +234,7 @@ func (a *App) NewResumeService() *ResumeService   { return &ResumeService{a: a} 
 func (a *App) NewProjectService() *ProjectService {
 	return &ProjectService{a: a}
 }
+func (a *App) NewSettingsService() *SettingsService { return &SettingsService{a: a} }
 
 // emit nil 安全的事件推送。
 func (a *App) emit(event string, data any) {

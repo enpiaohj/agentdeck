@@ -5,6 +5,7 @@ import { usePreferences } from '../hooks/usePreferences'
 import { DiagnosticsView } from './DiagnosticsView'
 import { ReadingPreview } from './MessagePane'
 import { AgentSelect } from './AgentSelect'
+import { TerminalShellControl } from './TerminalShellControl'
 
 const categories = [
   {id:'appearance',label:'外观',icon:<PaintBrushRegular />},
@@ -22,8 +23,9 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
   const q = query.trim().toLocaleLowerCase()
   const matches = (section: string, text: string) => q ? text.toLocaleLowerCase().includes(q) : section === category
   const groups: {id:string;title:string;description:string;rows:{key:string;title:string;description:string;control:(id:string)=>ReactNode}[]}[] = [
-    {id:'launch',title:'新建与启动',description:'设置新建项目和会话时默认使用的智能体。',rows:[
+    {id:'launch',title:'新建与启动',description:'设置新建项目和会话时默认使用的智能体，以及启动终端所用的 PowerShell。',rows:[
       {key:'defaultAgent',title:'默认智能体',description:'默认使用 Claude Code CLI。项目已设置默认智能体时优先使用项目设置；从智能体右键菜单新建时优先使用所选智能体。新建会话时可临时更改。',control:id=><AgentSelect id={id} value={p.defaultAgent} onChange={agent=>update({defaultAgent:agent})} />},
+      {key:'terminalShell',title:'终端 PowerShell',description:'恢复或新建会话时启动终端所用的 PowerShell。默认使用 Windows PowerShell 5.1；PowerShell 7+ 已安装时可改用它，也可指定其他可执行文件。新开终端立即生效。',control:id=><TerminalShellControl id={id} />},
     ]},
     {id:'appearance',title:'外观',description:'设置工作台主题、正文字号与阅读宽度。',rows:[
       {key:'theme',title:'颜色主题',description:'跟随系统，或固定使用浅色 / 深色。',control:id=><select id={id} value={p.theme} onChange={e=>update({theme:e.target.value as typeof p.theme})}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>},
@@ -37,7 +39,7 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
     ]},
   ]
   const shown = groups.map(group=>({...group,rows:group.rows.filter(row=>matches(group.id,`${group.title} ${row.title} ${row.description}`))})).filter(group=>group.rows.length)
-  const data = matches('data','数据与诊断 永久会话库 持久保存 索引 重建 完整数据备份与恢复 完整备份 ZIP Agent 能力')
+  const data = matches('data','数据与诊断 永久会话库 持久保存 索引 重建 完整数据备份与恢复 完整备份 ZIP Agent 能力 数据存储位置 迁移 磁盘 空间 清理旧位置')
   const shortcuts = matches('shortcuts','快捷键 键盘 搜索 Ctrl 选择 Shift 阅读 设置')
   return <section className="ad-settings" aria-label="应用设置">
     <div className="ad-settings-layout">

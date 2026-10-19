@@ -108,6 +108,95 @@ export class ClaudeImportReport {
 }
 
 /**
+ * CleanupPlan 是「清理旧位置数据」的预览：将被逐个删除的文件清单。
+ * Token 绑定清单内容，执行前重新校验，清单变了就整批拒绝。
+ */
+export class CleanupPlan {
+    "token": string;
+    "dirs": string[];
+    "files": number;
+    "bytes": number;
+
+    /**
+     * Other 是旧位置里不属于 AgentDeck 的条目，不会被删除，也不会阻止清理。
+     */
+    "other": string[];
+
+    /** Creates a new CleanupPlan instance. */
+    constructor($$source: Partial<CleanupPlan> = {}) {
+        if (!("token" in $$source)) {
+            this["token"] = "";
+        }
+        if (!("dirs" in $$source)) {
+            this["dirs"] = [];
+        }
+        if (!("files" in $$source)) {
+            this["files"] = 0;
+        }
+        if (!("bytes" in $$source)) {
+            this["bytes"] = 0;
+        }
+        if (!("other" in $$source)) {
+            this["other"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CleanupPlan instance from a string or object.
+     */
+    static createFrom($$source: any = {}): CleanupPlan {
+        const $$createField1_0 = $$createType0;
+        const $$createField4_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("dirs" in $$parsedSource) {
+            $$parsedSource["dirs"] = $$createField1_0($$parsedSource["dirs"]);
+        }
+        if ("other" in $$parsedSource) {
+            $$parsedSource["other"] = $$createField4_0($$parsedSource["other"]);
+        }
+        return new CleanupPlan($$parsedSource as Partial<CleanupPlan>);
+    }
+}
+
+/**
+ * CleanupReport 是清理结果。
+ */
+export class CleanupReport {
+    "files": number;
+    "bytes": number;
+    "dirs": number;
+    "message": string;
+
+    /** Creates a new CleanupReport instance. */
+    constructor($$source: Partial<CleanupReport> = {}) {
+        if (!("files" in $$source)) {
+            this["files"] = 0;
+        }
+        if (!("bytes" in $$source)) {
+            this["bytes"] = 0;
+        }
+        if (!("dirs" in $$source)) {
+            this["dirs"] = 0;
+        }
+        if (!("message" in $$source)) {
+            this["message"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new CleanupReport instance from a string or object.
+     */
+    static createFrom($$source: any = {}): CleanupReport {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new CleanupReport($$parsedSource as Partial<CleanupReport>);
+    }
+}
+
+/**
  * CliAvailability 是一个可启动平台在本机的情况：命令名与是否能在 PATH 上找到。
  */
 export class CliAvailability {
@@ -503,6 +592,50 @@ export class Mark {
             $$parsedSource["tags"] = $$createField3_0($$parsedSource["tags"]);
         }
         return new Mark($$parsedSource as Partial<Mark>);
+    }
+}
+
+/**
+ * MigrateReport 是一次数据位置迁移的结果。
+ */
+export class MigrateReport {
+    "dest": string;
+    "files": number;
+    "bytes": number;
+    "skipped": string[];
+    "message": string;
+
+    /** Creates a new MigrateReport instance. */
+    constructor($$source: Partial<MigrateReport> = {}) {
+        if (!("dest" in $$source)) {
+            this["dest"] = "";
+        }
+        if (!("files" in $$source)) {
+            this["files"] = 0;
+        }
+        if (!("bytes" in $$source)) {
+            this["bytes"] = 0;
+        }
+        if (!("skipped" in $$source)) {
+            this["skipped"] = [];
+        }
+        if (!("message" in $$source)) {
+            this["message"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new MigrateReport instance from a string or object.
+     */
+    static createFrom($$source: any = {}): MigrateReport {
+        const $$createField3_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("skipped" in $$parsedSource) {
+            $$parsedSource["skipped"] = $$createField3_0($$parsedSource["skipped"]);
+        }
+        return new MigrateReport($$parsedSource as Partial<MigrateReport>);
     }
 }
 
@@ -940,6 +1073,298 @@ export class SessionView {
 }
 
 /**
+ * StorageItem 是数据存储位置的一项占用。
+ */
+export class StorageItem {
+    "name": string;
+    "path": string;
+    "bytes": number;
+    "files": number;
+    "present": boolean;
+
+    /**
+     * Rebuild 为真表示可重建、迁移时不复制（全文索引）。
+     */
+    "rebuild": boolean;
+
+    /**
+     * Note 说明该项的用途或处理方式。
+     */
+    "note": string;
+
+    /** Creates a new StorageItem instance. */
+    constructor($$source: Partial<StorageItem> = {}) {
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("path" in $$source)) {
+            this["path"] = "";
+        }
+        if (!("bytes" in $$source)) {
+            this["bytes"] = 0;
+        }
+        if (!("files" in $$source)) {
+            this["files"] = 0;
+        }
+        if (!("present" in $$source)) {
+            this["present"] = false;
+        }
+        if (!("rebuild" in $$source)) {
+            this["rebuild"] = false;
+        }
+        if (!("note" in $$source)) {
+            this["note"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new StorageItem instance from a string or object.
+     */
+    static createFrom($$source: any = {}): StorageItem {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new StorageItem($$parsedSource as Partial<StorageItem>);
+    }
+}
+
+/**
+ * StorageView 是「数据与诊断 → 数据存储位置」的完整状态。
+ */
+export class StorageView {
+    /**
+     * Root 是配置的数据根；空表示使用默认位置。
+     */
+    "root": string;
+    "using_default": boolean;
+    "config_dir": string;
+    "local_dir": string;
+
+    /**
+     * DefaultConfigDir 与 DefaultLocalDir 是默认位置，仅在已迁移时有别于当前值。
+     */
+    "default_config_dir": string;
+    "default_local_dir": string;
+
+    /**
+     * DefaultHasData 说默认位置当前是否已有 AgentDeck 数据（改回默认位置
+     * 前要据此提示，不能静默造一个空库）。
+     */
+    "default_has_data": boolean;
+    "items": StorageItem[];
+    "total_bytes": number;
+
+    /**
+     * FreeBytes 是当前数据根所在盘的剩余空间；无法获取时为 0。
+     */
+    "free_bytes": number;
+
+    /**
+     * PrevDirs 是上一次迁移前的数据目录；非空表示可以清理旧位置。
+     */
+    "prev_dirs": string[];
+
+    /**
+     * PrevInUse 为真表示旧位置仍是本次运行正在使用的目录（迁移后尚未重启），
+     * 此时不能清理。
+     */
+    "prev_in_use": boolean;
+    "prev_items": StorageItem[];
+    "prev_bytes": number;
+
+    /**
+     * Note 是启动时的降级说明（配置损坏或配置根不可用）。
+     */
+    "note": string;
+
+    /**
+     * Busy 表示正在迁移。
+     */
+    "busy": boolean;
+
+    /**
+     * Restartable 表示可以「立即重启」（装配处注入了重启回调）。
+     */
+    "restartable": boolean;
+
+    /** Creates a new StorageView instance. */
+    constructor($$source: Partial<StorageView> = {}) {
+        if (!("root" in $$source)) {
+            this["root"] = "";
+        }
+        if (!("using_default" in $$source)) {
+            this["using_default"] = false;
+        }
+        if (!("config_dir" in $$source)) {
+            this["config_dir"] = "";
+        }
+        if (!("local_dir" in $$source)) {
+            this["local_dir"] = "";
+        }
+        if (!("default_config_dir" in $$source)) {
+            this["default_config_dir"] = "";
+        }
+        if (!("default_local_dir" in $$source)) {
+            this["default_local_dir"] = "";
+        }
+        if (!("default_has_data" in $$source)) {
+            this["default_has_data"] = false;
+        }
+        if (!("items" in $$source)) {
+            this["items"] = [];
+        }
+        if (!("total_bytes" in $$source)) {
+            this["total_bytes"] = 0;
+        }
+        if (!("free_bytes" in $$source)) {
+            this["free_bytes"] = 0;
+        }
+        if (!("prev_dirs" in $$source)) {
+            this["prev_dirs"] = [];
+        }
+        if (!("prev_in_use" in $$source)) {
+            this["prev_in_use"] = false;
+        }
+        if (!("prev_items" in $$source)) {
+            this["prev_items"] = [];
+        }
+        if (!("prev_bytes" in $$source)) {
+            this["prev_bytes"] = 0;
+        }
+        if (!("note" in $$source)) {
+            this["note"] = "";
+        }
+        if (!("busy" in $$source)) {
+            this["busy"] = false;
+        }
+        if (!("restartable" in $$source)) {
+            this["restartable"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new StorageView instance from a string or object.
+     */
+    static createFrom($$source: any = {}): StorageView {
+        const $$createField7_0 = $$createType4;
+        const $$createField10_0 = $$createType0;
+        const $$createField12_0 = $$createType4;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("items" in $$parsedSource) {
+            $$parsedSource["items"] = $$createField7_0($$parsedSource["items"]);
+        }
+        if ("prev_dirs" in $$parsedSource) {
+            $$parsedSource["prev_dirs"] = $$createField10_0($$parsedSource["prev_dirs"]);
+        }
+        if ("prev_items" in $$parsedSource) {
+            $$parsedSource["prev_items"] = $$createField12_0($$parsedSource["prev_items"]);
+        }
+        return new StorageView($$parsedSource as Partial<StorageView>);
+    }
+}
+
+/**
+ * TerminalShellOption 是「终端 PowerShell」设置页的一个预置选项。
+ */
+export class TerminalShellOption {
+    /**
+     * powershell | auto | pwsh
+     */
+    "value": string;
+
+    /**
+     * 解析出的可执行文件；空 = 未找到
+     */
+    "exe": string;
+
+    /**
+     * 自报版本；空 = 未探测到
+     */
+    "version": string;
+
+    /**
+     * 不可用原因；空 = 可用
+     */
+    "error": string;
+
+    /** Creates a new TerminalShellOption instance. */
+    constructor($$source: Partial<TerminalShellOption> = {}) {
+        if (!("value" in $$source)) {
+            this["value"] = "";
+        }
+        if (!("exe" in $$source)) {
+            this["exe"] = "";
+        }
+        if (!("version" in $$source)) {
+            this["version"] = "";
+        }
+        if (!("error" in $$source)) {
+            this["error"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new TerminalShellOption instance from a string or object.
+     */
+    static createFrom($$source: any = {}): TerminalShellOption {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new TerminalShellOption($$parsedSource as Partial<TerminalShellOption>);
+    }
+}
+
+/**
+ * TerminalShellView 是终端 shell 设置的当前状态：当前取值、它解析出的
+ * 可执行文件与版本，以及三个预置选项的可用性。
+ */
+export class TerminalShellView {
+    /**
+     * 当前取值；自定义时为绝对路径
+     */
+    "setting": string;
+    "exe": string;
+    "version": string;
+    "error": string;
+    "options": TerminalShellOption[];
+
+    /** Creates a new TerminalShellView instance. */
+    constructor($$source: Partial<TerminalShellView> = {}) {
+        if (!("setting" in $$source)) {
+            this["setting"] = "";
+        }
+        if (!("exe" in $$source)) {
+            this["exe"] = "";
+        }
+        if (!("version" in $$source)) {
+            this["version"] = "";
+        }
+        if (!("error" in $$source)) {
+            this["error"] = "";
+        }
+        if (!("options" in $$source)) {
+            this["options"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new TerminalShellView instance from a string or object.
+     */
+    static createFrom($$source: any = {}): TerminalShellView {
+        const $$createField4_0 = $$createType6;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("options" in $$parsedSource) {
+            $$parsedSource["options"] = $$createField4_0($$parsedSource["options"]);
+        }
+        return new TerminalShellView($$parsedSource as Partial<TerminalShellView>);
+    }
+}
+
+/**
  * TranscriptPart 是一句：Role user/assistant/tool，Kind text/thinking/
  * tool_use/tool_result/context/image。
  */
@@ -1030,7 +1455,7 @@ export class TranscriptView {
      * Creates a new TranscriptView instance from a string or object.
      */
     static createFrom($$source: any = {}): TranscriptView {
-        const $$createField7_0 = $$createType4;
+        const $$createField7_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("parts" in $$parsedSource) {
             $$parsedSource["parts"] = $$createField7_0($$parsedSource["parts"]);
@@ -1043,5 +1468,9 @@ export class TranscriptView {
 const $$createType0 = $Create.Array($Create.Any);
 const $$createType1 = SearchHitView.createFrom;
 const $$createType2 = $Create.Array($$createType1);
-const $$createType3 = TranscriptPart.createFrom;
+const $$createType3 = StorageItem.createFrom;
 const $$createType4 = $Create.Array($$createType3);
+const $$createType5 = TerminalShellOption.createFrom;
+const $$createType6 = $Create.Array($$createType5);
+const $$createType7 = TranscriptPart.createFrom;
+const $$createType8 = $Create.Array($$createType7);

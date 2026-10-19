@@ -83,6 +83,26 @@ button:focus-visible, select:focus-visible, [role='button']:focus-visible, [role
 .ad-backup-summary { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 8px 12px; padding: 16px; border: 1px solid var(--colorNeutralStroke2); border-radius: 8px; font-size: 12px; }
 .ad-backup-summary dt { color: var(--colorNeutralForeground3); }
 .ad-backup-summary dd { margin: 0; overflow-wrap: anywhere; }
+/* 数据存储位置：位置摘要、占用表、迁移与清理入口。 */
+.ad-storage-section { padding: 22px; margin-bottom: 20px; background: var(--ad-surface); border: 1px solid var(--ad-line); border-radius: 10px; }
+.ad-storage-section h3 { font-size: 14px; font-weight: 600; margin: 0 0 12px; }
+.ad-storage-section h4 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
+.ad-storage-section p { color: var(--ad-muted); font-size: 12px; line-height: 1.8; margin: 10px 0; }
+.ad-storage-section ul { margin: 8px 0; padding-left: 20px; color: var(--ad-muted); font-size: 12px; line-height: 1.9; }
+.ad-storage-section li { overflow-wrap: anywhere; }
+.ad-storage-summary { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 8px 12px; padding: 16px; margin: 12px 0; border: 1px solid var(--ad-line); border-radius: 8px; font-size: 12px; }
+.ad-storage-summary dt { color: var(--ad-muted); }
+.ad-storage-summary dd { margin: 0; overflow-wrap: anywhere; user-select: text; }
+.ad-storage-table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 12px 0; }
+.ad-storage-table th { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--ad-line); color: var(--ad-muted); font-weight: 600; }
+.ad-storage-table td { padding: 7px 10px; border-bottom: 1px solid var(--ad-line); vertical-align: top; font-variant-numeric: tabular-nums; }
+.ad-storage-path { font-size: 11px; overflow-wrap: anywhere; user-select: text; }
+.ad-storage-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+.ad-storage-old { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--ad-line); }
+.ad-storage-progress, .ad-storage-message, .ad-storage-restart { display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 1.8; margin-top: 10px; overflow-wrap: anywhere; }
+.ad-storage-warn, .ad-storage-error { font-size: 12px; line-height: 1.8; margin-top: 10px; overflow-wrap: anywhere; }
+.ad-storage-warn { color: var(--colorPaletteYellowForeground1); }
+.ad-storage-error { color: var(--colorPaletteRedForeground1); }
 .ad-sidebar { padding-block: 4px; }
 .ad-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
@@ -273,6 +293,14 @@ button:focus-visible, select:focus-visible, [role='button']:focus-visible, [role
 .ad-setting-row input[role='switch']:checked { background: var(--ad-accent); border-color: var(--ad-accent); }
 .ad-setting-row input[role='switch']:checked::before { transform: translateX(14px); }
 .ad-setting-row input[role='switch']:focus-visible { outline: 2px solid var(--ad-accent); outline-offset: 3px; }
+/* 终端 shell：下拉 + 自定义路径 + 检测结果竖排，右侧列固定宽度不被描述挤扁。 */
+.ad-terminal-shell { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; max-width: 100%; }
+.ad-terminal-shell select { width: 240px; }
+.ad-terminal-shell-path { display: flex; align-items: center; gap: 6px; max-width: 100%; }
+.ad-terminal-shell-path input { width: 240px; min-height: 34px; border: 1px solid var(--ad-line); border-radius: 6px; background: var(--ad-surface); color: inherit; padding: 5px 10px; font-size: 12px; }
+.ad-terminal-shell-path input:hover { border-color: var(--ad-muted); }
+.ad-terminal-shell-note { display: flex; align-items: center; gap: 6px; color: var(--ad-muted); font-size: 12px; overflow-wrap: anywhere; user-select: text; }
+.ad-terminal-shell-note-error { color: var(--colorPaletteRedForeground1); }
 .ad-settings-preview { margin-top: 24px; align-self: start; border: 1px solid var(--ad-line); border-radius: 10px; background: var(--ad-surface); overflow: hidden; }
 .ad-preview-toolbar { display: flex; justify-content: space-between; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--ad-line); background: var(--ad-soft); color: var(--ad-muted); font-size: 11px; }
 .ad-preview-document { padding: 24px; }

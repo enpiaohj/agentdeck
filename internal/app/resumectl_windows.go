@@ -3,10 +3,10 @@ package app
 import (
 	"encoding/base64"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"unicode/utf16"
 
+	"github.com/enpiaohj/agentdeck/internal/proc"
 	"github.com/enpiaohj/agentdeck/internal/projects"
 )
 
@@ -32,9 +32,13 @@ import (
 // 自己探测控制台。仅当调用方环境里没有设 FORCE_COLOR 时才加,用户自己
 // 的决定优先。
 //
-// 四、有 wt.exe 时用它(-d 直接落在会话目录);没有就回退 powershell.exe
+// 四、有 wt.exe 时用它(-d 直接落在会话目录);没有就回退 shell 本身
 // (恢复命令自带 Set-Location)。两条路的脚本都是 -EncodedCommand。
-func terminalCommand(cwd, resumeCmd string) (string, []string) {
+//
+// 五、shell 由设置决定(见 terminalshell):默认 Windows PowerShell 5.1,
+// 可选 PowerShell 7+ 或自定义可执行文件。wt 的内层命令与回退进程都用
+// 解析出的同一个可执行文件。
+func terminalCommand(cwd, resumeCmd, shellExe string) (string, []string) {
 	script := encodedCommand(resumeCmd)
 	dir := projects.Normalize(cwd)
 	if dir != "" && filepath.IsAbs(dir) {
@@ -44,10 +48,10 @@ func terminalCommand(cwd, resumeCmd string) (string, []string) {
 	} else {
 		dir = ""
 	}
-	if wt, err := exec.LookPath("wt.exe"); err == nil && dir != "" {
-		return wt, []string{"-d", dir, "powershell.exe", "-NoExit", "-EncodedCommand", script}
+	if wt, err := proc.LookPath("wt.exe"); err == nil && dir != "" {
+		return wt, []string{"-d", dir, shellExe, "-NoExit", "-EncodedCommand", script}
 	}
-	return "powershell.exe", []string{"-NoExit", "-EncodedCommand", script}
+	return shellExe, []string{"-NoExit", "-EncodedCommand", script}
 }
 
 // encodedCommand 把整条恢复命令编码成 powershell -EncodedCommand 收的

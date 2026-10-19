@@ -282,6 +282,12 @@ func (s *ResumeService) OpenInTerminal(key string) error {
 	if cmd == "" {
 		return fmt.Errorf("该会话不可恢复,仅可查看历史")
 	}
+	// shell 明确定义在设置里，解析失败要在任何附带动作之前报出来：不能先
+	// 改了 Codex 原生名再因为终端起不来而整件事半途而废。
+	shellExe, err := s.a.shellExe()
+	if err != nil {
+		return err
+	}
 	// Codex 没有把名字带进恢复命令的入口(claude 那种 --name),只能在开终端
 	// 之前用它自己的 app-server 写一次原生名。失败不阻断恢复——终端照开,
 	// 但错误必须如实报出去:改了名却仍是旧名,比直接报错更难排查。
@@ -291,7 +297,7 @@ func (s *ResumeService) OpenInTerminal(key string) error {
 		nameErr = s.a.codexName(sess.ID, title)
 		renamed = nameErr == nil
 	}
-	name, args := terminalCommand(sess.Cwd, cmd)
+	name, args := terminalCommand(sess.Cwd, cmd, shellExe)
 	run := s.a.cfg.Runner
 	if run == nil {
 		run = terminalLauncher()
@@ -327,7 +333,11 @@ func terminalLauncher() func(name string, args ...string) error {
 // launchInTerminal 在 dir 里执行 script。NewSession 与 OpenInTerminal 的
 // 后半段共用它——终端选谁、命令怎么交付、失败怎么措辞，只有一处。
 func (s *ResumeService) launchInTerminal(dir, script string) error {
-	name, args := terminalCommand(dir, script)
+	shellExe, err := s.a.shellExe()
+	if err != nil {
+		return err
+	}
+	name, args := terminalCommand(dir, script, shellExe)
 	run := s.a.cfg.Runner
 	if run == nil {
 		run = terminalLauncher()

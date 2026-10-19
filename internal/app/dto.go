@@ -126,3 +126,105 @@ type ScanProgress struct {
 	Files    int64 `json:"files"`
 	Done     int64 `json:"done"`
 }
+
+// TerminalShellOption 是「终端 PowerShell」设置页的一个预置选项。
+type TerminalShellOption struct {
+	Value   string `json:"value"`   // powershell | auto | pwsh
+	Exe     string `json:"exe"`     // 解析出的可执行文件；空 = 未找到
+	Version string `json:"version"` // 自报版本；空 = 未探测到
+	Error   string `json:"error"`   // 不可用原因；空 = 可用
+}
+
+// TerminalShellView 是终端 shell 设置的当前状态：当前取值、它解析出的
+// 可执行文件与版本，以及三个预置选项的可用性。
+type TerminalShellView struct {
+	Setting string                `json:"setting"` // 当前取值；自定义时为绝对路径
+	Exe     string                `json:"exe"`
+	Version string                `json:"version"`
+	Error   string                `json:"error"`
+	Options []TerminalShellOption `json:"options"`
+}
+
+// StorageItem 是数据存储位置的一项占用。
+type StorageItem struct {
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	Bytes   int64  `json:"bytes"`
+	Files   int    `json:"files"`
+	Present bool   `json:"present"`
+	// Rebuild 为真表示可重建、迁移时不复制（全文索引）。
+	Rebuild bool `json:"rebuild"`
+	// Note 说明该项的用途或处理方式。
+	Note string `json:"note"`
+}
+
+// StorageView 是「数据与诊断 → 数据存储位置」的完整状态。
+type StorageView struct {
+	// Root 是配置的数据根；空表示使用默认位置。
+	Root         string `json:"root"`
+	UsingDefault bool   `json:"using_default"`
+	ConfigDir    string `json:"config_dir"`
+	LocalDir     string `json:"local_dir"`
+	// DefaultConfigDir 与 DefaultLocalDir 是默认位置，仅在已迁移时有别于当前值。
+	DefaultConfigDir string `json:"default_config_dir"`
+	DefaultLocalDir  string `json:"default_local_dir"`
+	// DefaultHasData 说默认位置当前是否已有 AgentDeck 数据（改回默认位置
+	// 前要据此提示，不能静默造一个空库）。
+	DefaultHasData bool          `json:"default_has_data"`
+	Items          []StorageItem `json:"items"`
+	TotalBytes     int64         `json:"total_bytes"`
+	// FreeBytes 是当前数据根所在盘的剩余空间；无法获取时为 0。
+	FreeBytes int64 `json:"free_bytes"`
+	// PrevDirs 是上一次迁移前的数据目录；非空表示可以清理旧位置。
+	PrevDirs []string `json:"prev_dirs"`
+	// PrevInUse 为真表示旧位置仍是本次运行正在使用的目录（迁移后尚未重启），
+	// 此时不能清理。
+	PrevInUse bool          `json:"prev_in_use"`
+	PrevItems []StorageItem `json:"prev_items"`
+	PrevBytes int64         `json:"prev_bytes"`
+	// Note 是启动时的降级说明（配置损坏或配置根不可用）。
+	Note string `json:"note"`
+	// Busy 表示正在迁移。
+	Busy bool `json:"busy"`
+	// Restartable 表示可以「立即重启」（装配处注入了重启回调）。
+	Restartable bool `json:"restartable"`
+}
+
+// StorageProgress 是迁移进度，经 storage:progress 推送。
+// Stage: scan | copy | verify | switch。
+type StorageProgress struct {
+	Stage     string `json:"stage"`
+	Done      int64  `json:"done"`
+	Total     int64  `json:"total"`
+	Files     int    `json:"files"`
+	DoneFiles int    `json:"done_files"`
+	Message   string `json:"message"`
+}
+
+// MigrateReport 是一次数据位置迁移的结果。
+type MigrateReport struct {
+	Dest    string   `json:"dest"`
+	Files   int      `json:"files"`
+	Bytes   int64    `json:"bytes"`
+	Skipped []string `json:"skipped"`
+	Message string   `json:"message"`
+}
+
+// CleanupPlan 是「清理旧位置数据」的预览：将被逐个删除的文件清单。
+// Token 绑定清单内容，执行前重新校验，清单变了就整批拒绝。
+type CleanupPlan struct {
+	Token string   `json:"token"`
+	Dirs  []string `json:"dirs"`
+	Files int      `json:"files"`
+	Bytes int64    `json:"bytes"`
+	// Other 是旧位置里不属于 AgentDeck 的条目，不会被删除，也不会阻止清理。
+	Other []string `json:"other"`
+}
+
+// CleanupReport 是清理结果。
+type CleanupReport struct {
+	Files   int    `json:"files"`
+	Bytes   int64  `json:"bytes"`
+	Dirs    int    `json:"dirs"`
+	Message string `json:"message"`
+}

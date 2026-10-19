@@ -17,4 +17,6 @@ const (
 	// EventMessagesReady 后台消息数补齐完成，data 为 nil；前端收到后
 	// 重拉一次列表即可显示真实消息数（补齐前列表一律 0）。
 	EventMessagesReady = "sessions:messages"
+	// EventStorageProgress 数据位置迁移进度，data 是 StorageProgress。
+	EventStorageProgress = "storage:progress"
 )

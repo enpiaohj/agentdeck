@@ -6,18 +6,22 @@ import * as ProjectService from "./projectservice.js";
 import * as ResumeService from "./resumeservice.js";
 import * as SearchService from "./searchservice.js";
 import * as SessionService from "./sessionservice.js";
+import * as SettingsService from "./settingsservice.js";
 export {
     MarkService,
     ProjectService,
     ResumeService,
     SearchService,
-    SessionService
+    SessionService,
+    SettingsService
 };
 
 export {
     AgentView,
     BackupInfo,
     ClaudeImportReport,
+    CleanupPlan,
+    CleanupReport,
     CliAvailability,
     DeclaredProjectView,
     DeletePreview,
@@ -27,6 +31,7 @@ export {
     IndexStatus,
     LibraryStatus,
     Mark,
+    MigrateReport,
     NavCounts,
     ProjectView,
     RestoreReport,
@@ -34,6 +39,10 @@ export {
     SearchHitView,
     SearchReply,
     SessionView,
+    StorageItem,
+    StorageView,
+    TerminalShellOption,
+    TerminalShellView,
     TranscriptPart,
     TranscriptView
 } from "./models.js";

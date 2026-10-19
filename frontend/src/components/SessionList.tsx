@@ -154,9 +154,11 @@ type Props = {
   onDeleteSessions: (items: SessionView[]) => void
   listVersion?: number
   onFilter: (filter: SidebarFilter) => void
+  /** 递增即清空列表自身的筛选（关键词、月份、账号、排序）；侧栏「全部会话」用它回到全集。 */
+  resetToken?: number
 }
 
-export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDeleteSessions, listVersion, onFilter }: Props) {
+export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDeleteSessions, listVersion, onFilter, resetToken }: Props) {
   const styles = useStyles()
   const { rows, loading, error, reload } = useRows(filter, listVersion)
   const [selection, setSelection] = useState<SessionSelection>(() => ({ keys: new Set(selectedKey ? [selectedKey] : []), anchor: selectedKey, focus: selectedKey }))
@@ -210,6 +212,12 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
   // its family's expansion before pruning, or the selection is lost on load.
   useEffect(() => { if (!loading && !pendingReveal) setSelection(previous => pruneSelection(previous, visibleKeys)) }, [visibleKeys, loading, pendingReveal])
   useEffect(() => { setMonth(''); setAccount('') }, [filter])
+  // 「全部会话」的复位信号：把列表自持的筛选也退回默认。用计数而非布尔，
+  // 这样连续两次点「全部会话」都能生效，也不会被其它筛选变更误触发。
+  useEffect(() => {
+    if (resetToken === undefined) return
+    setQuery(''); setMonth(''); setAccount(''); setOrder('latest')
+  }, [resetToken])
   useEffect(() => {
     if (selectedKey) setSelection(previous => previous.focus === selectedKey ? previous : { keys: new Set([selectedKey]), anchor: selectedKey, focus: selectedKey })
   }, [selectedKey])

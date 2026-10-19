@@ -7,9 +7,29 @@
 // 一直停在「全文索引尚未就绪」。
 import type { IndexStatus } from '../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 
+// StorageProgress 与 Go 侧 app.StorageProgress 的 JSON 形状一致。它只作为
+// storage:progress 的载荷出现，没有任何服务方法引用它，因此 bindings 不会
+// 生成这个类型——改动 Go 侧字段时这里要同步。
+export type StorageProgress = {
+  stage: string
+  done: number
+  total: number
+  files: number
+  done_files: number
+  message: string
+}
+
 export function indexStatusFromEvent(payload: unknown): IndexStatus | null {
   const data = (payload as { data?: unknown } | null | undefined)?.data
   if (!data) return null
   if (Array.isArray(data)) return (data[0] as IndexStatus) ?? null
   return data as IndexStatus
+}
+
+// storageProgressFromEvent 解码迁移进度（storage:progress），规则同上。
+export function storageProgressFromEvent(payload: unknown): StorageProgress | null {
+  const data = (payload as { data?: unknown } | null | undefined)?.data
+  if (!data) return null
+  if (Array.isArray(data)) return (data[0] as StorageProgress) ?? null
+  return data as StorageProgress
 }

@@ -11,6 +11,7 @@ import {
 import { ArrowClockwiseRegular } from '@fluentui/react-icons'
 import { useCallback, useEffect, useState } from 'react'
 import { DataBackup } from './DataBackup'
+import { DataLocation } from './DataLocation'
 import type { DiagRow, IndexStatus, LibraryStatus } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import * as searchService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/searchservice'
@@ -70,6 +71,7 @@ export function DiagnosticsView({ revision = 0, embedded = false }: { revision?:
       <Heading style={{ fontSize: embedded ? 17 : 20, margin: '0 0 8px' }}>{embedded ? '数据与诊断' : '设置'}</Heading>
       <p className={styles.msg} style={{ margin: '0 0 24px' }}>查看数据来源、维护全文索引和管理本机标注。</p>
       <DataBackup onRestored={load} />
+      <DataLocation />
       <div className={styles.section}>
         <Text className={styles.h}>永久会话库</Text>
         <div className={styles.row}>

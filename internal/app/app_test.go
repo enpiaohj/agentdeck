@@ -517,7 +517,7 @@ func TestCodexThreadNameTimesOutOnSilentServer(t *testing.T) {
 // `cmd /c start` 虽然 isTTY 为 true,但实测建出的控制台窗口不可见——用户
 // 什么都看不到,所以不能用。
 func TestTerminalCommandKeepsScriptUnsplittable(t *testing.T) {
-	name, args := terminalCommand(t.TempDir(), "codex resume x")
+	name, args := terminalCommand(t.TempDir(), "codex resume x", powershellExe)
 	if filepath.Base(name) == "cmd.exe" {
 		t.Fatalf("cmd start 建出的窗口不可见,不能用: %v", args)
 	}
@@ -528,7 +528,7 @@ func TestTerminalCommandKeepsScriptUnsplittable(t *testing.T) {
 
 // 根路径 cwd 交给 wt 的 -d;不存在的目录不带 -d,但仍然执行恢复命令。
 func TestTerminalCommandRootPath(t *testing.T) {
-	name, args := terminalCommand(`D:\`, "claude --resume x")
+	name, args := terminalCommand(`D:\`, "claude --resume x", powershellExe)
 	if filepath.Base(name) != "wt.exe" && filepath.Base(name) != "powershell.exe" {
 		t.Fatalf("终端 = %s", name)
 	}
@@ -538,7 +538,7 @@ func TestTerminalCommandRootPath(t *testing.T) {
 		}
 	}
 	// 不存在的目录:不带 -d,但仍然启动终端
-	name2, args2 := terminalCommand(filepath.Join(t.TempDir(), "NoSuchDir"), "cmd")
+	name2, args2 := terminalCommand(filepath.Join(t.TempDir(), "NoSuchDir"), "cmd", powershellExe)
 	if filepath.Base(name2) != "powershell.exe" {
 		t.Fatalf("目录不存在时应回退 powershell: %s", name2)
 	}
@@ -574,7 +574,7 @@ func TestResumeEnvForcesColorUnlessSet(t *testing.T) {
 func TestTerminalCommandPassesScriptUnsplittable(t *testing.T) {
 	dir := t.TempDir()
 	script := "Set-Location -LiteralPath '" + dir + "'; codex resume 01a13d4d-0000-7000-8000-000000000000"
-	_, args := terminalCommand(dir, script)
+	_, args := terminalCommand(dir, script, powershellExe)
 	if !strings.Contains(strings.Join(args, " "), "-EncodedCommand") {
 		t.Fatalf("必须用 -EncodedCommand: %v", args)
 	}

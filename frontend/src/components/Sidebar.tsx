@@ -172,6 +172,8 @@ type Props = {
   onToggle: () => void
   filter: SidebarFilter
   onFilter: (f: SidebarFilter) => void
+  /** 点「全部会话」：清除全部筛选（智能体 / 项目 / 收藏 / 归档、顶栏搜索词与列表内筛选）。 */
+  onSelectAll: () => void
   onOpenDiagnostics?: () => void
   /** 打开「新建会话」弹窗；弹窗由 App 持有，快捷键与右键菜单走同一条路。 */
   onNewSession: (project?: string, agent?: string) => void
@@ -196,7 +198,7 @@ function pointTarget(point: { x: number; y: number }) {
   return { getBoundingClientRect: () => DOMRect.fromRect({ x: point.x, y: point.y, width: 0, height: 0 }) }
 }
 
-export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, onOpenDiagnostics, onNewSession, onNewProject, notify, onRefresh }: Props) {
+export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, onSelectAll, onOpenDiagnostics, onNewSession, onNewProject, notify, onRefresh }: Props) {
   const styles = useStyles()
   const agents = useAgents(listVersion)
   const projects = useProjects(listVersion)
@@ -330,7 +332,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
         <button className={styles.item} onClick={onToggle} title="展开导航" style={{ justifyContent: 'center' }}>
           <ChevronDoubleRightRegular />
         </button>
-        <button className={mergeClasses(styles.item, isAll(filter) && styles.itemActive)} onClick={pick({})} title="全部会话" style={{ justifyContent: 'center' }}>
+        <button className={mergeClasses(styles.item, isAll(filter) && styles.itemActive)} onClick={onSelectAll} title="全部会话" style={{ justifyContent: 'center' }}>
           <AppsRegular />
         </button>
         <button className={mergeClasses(styles.item, filter.favorites && styles.itemActive)} onClick={pick({ favorites: true })} title="收藏" style={{ justifyContent: 'center' }}>
@@ -367,7 +369,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
           <ChevronDoubleLeftRegular />
         </button>
       </div>
-      <button className={mergeClasses(styles.item, isAll(filter) && styles.itemActive)} onClick={pick({})}>
+      <button className={mergeClasses(styles.item, isAll(filter) && styles.itemActive)} onClick={onSelectAll}>
         <AppsRegular fontSize={16} />
         全部会话
         {/* 计数来自后端 Counts()：与点进去看到的行数同口径（归档另算），

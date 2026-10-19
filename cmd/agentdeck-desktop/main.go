@@ -8,8 +8,11 @@ import (
 	"embed"
 	"fmt"
 	"os"
+	"slices"
+	"time"
 
 	appkg "github.com/enpiaohj/agentdeck/internal/app"
+	"github.com/enpiaohj/agentdeck/internal/proc"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -28,8 +31,19 @@ func (e *lateEmitter) Emit(event string, data any) {
 	}
 }
 
+// relaunchFlag 标记本次启动是数据位置变更后的自动重启。
+//
+// 新实例不能立刻要求单实例所有权：上一个实例还在走正常退出路径（释放
+// 互斥锁、清除运行标记）。带这个标记时耐心等它退出，而不是判定「已在
+// 运行」直接退出——否则重启永远只是关掉应用。
+const relaunchFlag = "--relaunch"
+
+// relaunchWait 是自动重启时等待上一个实例退出的上限。
+const relaunchWait = 20 * time.Second
+
 func main() {
 	e := &lateEmitter{}
+	relaunch := slices.Contains(os.Args[1:], relaunchFlag)
 	a, err := appkg.New(appkg.Config{
 		Emit: e.Emit,
 		Clipboard: func(text string) error {
@@ -38,6 +52,7 @@ func main() {
 			}
 			return nil
 		},
+		Restart: func() error { return relaunchSelf() },
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "装配失败:", err)
@@ -47,9 +62,16 @@ func main() {
 
 	// 单实例：已有窗口在运行时直接退出。此前只有 session.lock 文件标记，
 	// 多开一次就被误判成「上次未正常退出」，崩溃横幅会无端亮起。
-	if a.ClaimSingleInstance() {
-		fmt.Fprintln(os.Stderr, "AgentDeck 已在运行，本次启动已退出。")
-		os.Exit(0)
+	deadline := time.Now().Add(relaunchWait)
+	for {
+		if !a.ClaimSingleInstance() {
+			break
+		}
+		if !relaunch || time.Now().After(deadline) {
+			fmt.Fprintln(os.Stderr, "AgentDeck 已在运行，本次启动已退出。")
+			os.Exit(0)
+		}
+		time.Sleep(200 * time.Millisecond)
 	}
 
 	wails := application.New(application.Options{
@@ -64,6 +86,7 @@ func main() {
 			application.NewService(a.NewMarkService()),
 			application.NewService(a.NewResumeService()),
 			application.NewService(a.NewProjectService()),
+			application.NewService(a.NewSettingsService()),
 		},
 	})
 
@@ -107,4 +130,26 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// relaunchSelf 启动一个新的自己并退出当前进程。
+//
+// 新实例带 relaunchFlag，会等本进程走完正常退出（defer a.Close() 释放
+// 单实例互斥锁、清除运行标记），因此不会出现「重启后什么都没发生」。
+// 不用 os.Exit 硬退：那会留下假的「上次异常退出」标记。
+func relaunchSelf() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("无法定位 AgentDeck 程序路径：%w", err)
+	}
+	cmd := proc.Command(exe, relaunchFlag)
+	if err = cmd.Start(); err != nil {
+		return fmt.Errorf("启动新实例失败：%w", err)
+	}
+	// 先让本次调用返回前端（界面要显示正在重启），再退出。
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		application.Get().Quit()
+	}()
+	return nil
 }
