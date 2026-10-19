@@ -10,8 +10,17 @@ AgentDeck 的版本索引。
   PATCH（v0.1.2 正是这样修 v0.1.1 的元数据）。已发布快照里写错的话，不回头改它，
   在新版本的 CHANGELOG 里更正并说明。
 - 发布产物（exe）不入 Git History（`.gitignore` 的 `releases/**/*.exe`），按规则
-  应上传 GitHub Releases；本机尚未配置远端仓库，所以目前没有 GitHub Release，
-  分发包就是快照内的 exe。
+  上传 GitHub Releases；本地快照同时保留 exe 与分发归档。
+
+## v0.4.0 — 2026-10-19
+
+新增会话重命名、项目声明与项目内新建会话；恢复时支持通过 agent CLI 同步会话名称。
+
+- 新建项目支持系统目录选择、显示名修改和取消声明。
+- marks.db 事务迁移至 schema v2，标题覆盖用于列表、搜索、导出与删除预览。
+- 新建项目时选择平台及设置默认平台尚未实现。
+- 完整变更、升级说明、验证边界见 [本版 CHANGELOG](releases/v0.4.0/CHANGELOG.md)。
+- 快照：`releases/v0.4.0/`；产物：Windows x64 exe、分发 ZIP、源码 ZIP 与 SHA256SUMS。
 
 ## v0.3.1 — 2026-10-19
 
