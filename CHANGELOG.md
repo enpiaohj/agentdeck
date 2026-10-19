@@ -13,6 +13,18 @@ AgentDeck 的版本索引。
   应上传 GitHub Releases；本机尚未配置远端仓库，所以目前没有 GitHub Release，
   分发包就是快照内的 exe。
 
+## v0.3.1 — 2026-10-19
+
+补丁版本：修「继续会话」在终端里打不开，并恢复恢复出来的会话的颜色。
+
+- 修复「继续会话」报「系统找不到指定的文件」（0x80070002）。恢复命令是一条复合语句，此前作为 `-Command` 的值交给 `wt.exe`，wt 会重新解析自己的命令行、按空格拆参数，分号后的半句被当成另一条参数丢掉。改为编码成 UTF-16LE base64 交给 `powershell -EncodedCommand`，谁也拆不开。Claude Code 与 Codex 同因，一起修好。
+- 修复恢复出来的会话没有颜色。GUI 父进程以 `CREATE_NEW_CONSOLE` 起 powershell 时子进程 stdout 不是终端（`isTTY = false`），agent CLI 因此不上色；改为显式补 `FORCE_COLOR=1`，用户自己设了则不覆盖。
+- 目录不存在时不再放弃恢复，只是不切换工作目录。
+- `frontend/package-lock.json` 的版本号此前停在 `0.2.1`，一并同步。
+- 完整变更、升级说明及验证记录见 [本版 CHANGELOG](releases/v0.3.1/CHANGELOG.md)。
+
+快照：`releases/v0.3.1/`　产物：`AgentDeck-v0.3.1-win-x64.exe`
+
 ## v0.3.0 — 2026-10-18
 
 重做会话阅读区（连续过程分组、会话内查找、阅读位置记忆），全文索引改为增量更新，并修正状态条、详情栏与列表筛选上若干处信息说不清的地方。
