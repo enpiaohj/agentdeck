@@ -355,6 +355,101 @@ export class DeleteReport {
 }
 
 /**
+ * DestinationView 是补全后的迁移目标与它当前的状态：界面在用户确认之前就能
+ * 显示数据究竟会落在哪个目录、那里是不是已经有目录，而不是点下「开始迁移」
+ * 之后才被拒绝。
+ */
+export class DestinationView {
+    /**
+     * Picked 是用户选定的目录。
+     */
+    "picked": string;
+
+    /**
+     * Dest 是补全后的数据根：固定取所选目录下的 AgentDeck\Data；所选目录
+     * 本身就叫 AgentDeck 时只追加 Data。
+     */
+    "dest": string;
+
+    /**
+     * Leaf 是固定的相对路径，Rule 是补全规则的一句话说明（含不重复追加的
+     * 例外）。两者都由 Go 侧给出，界面不自己拼。
+     */
+    "leaf": string;
+    "rule": string;
+
+    /**
+     * Exists 表示 Dest 目录已存在。
+     */
+    "exists": boolean;
+
+    /**
+     * Empty 表示 Dest 不存在或存在但为空（没有会被覆盖的内容）。
+     */
+    "empty": boolean;
+
+    /**
+     * Files 与 Bytes 是 Dest 已存在时里面的文件数与占用字节数。
+     */
+    "files": number;
+    "bytes": number;
+
+    /**
+     * Ready 表示可以直接迁移：校验通过，且目录不存在或为空。
+     */
+    "ready": boolean;
+
+    /**
+     * Reason 说明不可用的原因（Ready 为假时非空）。
+     */
+    "reason": string;
+
+    /** Creates a new DestinationView instance. */
+    constructor($$source: Partial<DestinationView> = {}) {
+        if (!("picked" in $$source)) {
+            this["picked"] = "";
+        }
+        if (!("dest" in $$source)) {
+            this["dest"] = "";
+        }
+        if (!("leaf" in $$source)) {
+            this["leaf"] = "";
+        }
+        if (!("rule" in $$source)) {
+            this["rule"] = "";
+        }
+        if (!("exists" in $$source)) {
+            this["exists"] = false;
+        }
+        if (!("empty" in $$source)) {
+            this["empty"] = false;
+        }
+        if (!("files" in $$source)) {
+            this["files"] = 0;
+        }
+        if (!("bytes" in $$source)) {
+            this["bytes"] = 0;
+        }
+        if (!("ready" in $$source)) {
+            this["ready"] = false;
+        }
+        if (!("reason" in $$source)) {
+            this["reason"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DestinationView instance from a string or object.
+     */
+    static createFrom($$source: any = {}): DestinationView {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new DestinationView($$parsedSource as Partial<DestinationView>);
+    }
+}
+
+/**
  * DiagRow 是一个 Agent 的能力诊断行。设计文档 §3/§11.3:能力由运行时
  * 上报,UI 呈现证据、状态及验证时间——Found/Sessions/LastAt 即证据,
  * 每次打开本页都是即时验证。
@@ -1141,6 +1236,11 @@ export class StorageView {
     "local_dir": string;
 
     /**
+     * Leaf 是数据根的固定相对路径：迁移时取所选目录下的这个子目录。
+     */
+    "leaf": string;
+
+    /**
      * DefaultConfigDir 与 DefaultLocalDir 是默认位置，仅在已迁移时有别于当前值。
      */
     "default_config_dir": string;
@@ -1201,6 +1301,9 @@ export class StorageView {
         if (!("local_dir" in $$source)) {
             this["local_dir"] = "";
         }
+        if (!("leaf" in $$source)) {
+            this["leaf"] = "";
+        }
         if (!("default_config_dir" in $$source)) {
             this["default_config_dir"] = "";
         }
@@ -1248,18 +1351,18 @@ export class StorageView {
      * Creates a new StorageView instance from a string or object.
      */
     static createFrom($$source: any = {}): StorageView {
-        const $$createField7_0 = $$createType4;
-        const $$createField10_0 = $$createType0;
-        const $$createField12_0 = $$createType4;
+        const $$createField8_0 = $$createType4;
+        const $$createField11_0 = $$createType0;
+        const $$createField13_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("items" in $$parsedSource) {
-            $$parsedSource["items"] = $$createField7_0($$parsedSource["items"]);
+            $$parsedSource["items"] = $$createField8_0($$parsedSource["items"]);
         }
         if ("prev_dirs" in $$parsedSource) {
-            $$parsedSource["prev_dirs"] = $$createField10_0($$parsedSource["prev_dirs"]);
+            $$parsedSource["prev_dirs"] = $$createField11_0($$parsedSource["prev_dirs"]);
         }
         if ("prev_items" in $$parsedSource) {
-            $$parsedSource["prev_items"] = $$createField12_0($$parsedSource["prev_items"]);
+            $$parsedSource["prev_items"] = $$createField13_0($$parsedSource["prev_items"]);
         }
         return new StorageView($$parsedSource as Partial<StorageView>);
     }

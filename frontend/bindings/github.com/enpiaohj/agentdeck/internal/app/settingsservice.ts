@@ -36,14 +36,16 @@ export function CleanupPreview(): $CancellablePromise<$models.CleanupPlan> {
 }
 
 /**
- * Migrate 把 AgentDeck 自有数据迁移到 dest，成功后写入数据位置指针。
- * 详细步骤与不变量见 migrate.go；进度经 storage:progress 推送。
+ * Migrate 把 AgentDeck 自有数据迁移到 picked 目录下固定的 AgentDeck\Data，
+ * 成功后写入数据位置指针。picked 是用户在目录选择器里选的目录，不是最终数据
+ * 根：补全规则见 storageDestination。详细步骤与不变量见 migrate.go；进度经
+ * storage:progress 推送。
  * 
  * 运行中的进程仍写旧位置的库，因此迁移完成后必须重启才生效——界面据此
  * 给出「立即重启」。旧位置一律保留，清理是另行确认的动作。
  */
-export function Migrate(dest: string): $CancellablePromise<$models.MigrateReport> {
-    return $Call.ByID(434712964, dest).then(($result: any) => {
+export function Migrate(picked: string): $CancellablePromise<$models.MigrateReport> {
+    return $Call.ByID(434712964, picked).then(($result: any) => {
         return $$createType2($result);
     });
 }
@@ -54,6 +56,20 @@ export function Migrate(dest: string): $CancellablePromise<$models.MigrateReport
  */
 export function ResetRoot(): $CancellablePromise<void> {
     return $Call.ByID(2319376546);
+}
+
+/**
+ * ResolveDestination 把用户选定的目录补全成实际数据根，并如实报告那里当前的
+ * 状态：不存在（迁移时创建）、已存在且为空（可用）、已存在且有内容（不可用，
+ * 迁移绝不覆盖）。
+ * 
+ * 目录是否已存在必须由 Go 侧判断并交给界面：用户可能正好选到上一次迁移用过
+ * 的位置，那时里面已经是完整的 AgentDeck 数据，静默追加或覆盖都会出问题。
+ */
+export function ResolveDestination(picked: string): $CancellablePromise<$models.DestinationView> {
+    return $Call.ByID(432786299, picked).then(($result: any) => {
+        return $$createType3($result);
+    });
 }
 
 /**
@@ -73,7 +89,7 @@ export function Restart(): $CancellablePromise<void> {
  */
 export function SetTerminalShell(value: string): $CancellablePromise<$models.TerminalShellView> {
     return $Call.ByID(3306319109, value).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType4($result);
     });
 }
 
@@ -82,7 +98,7 @@ export function SetTerminalShell(value: string): $CancellablePromise<$models.Ter
  */
 export function Storage(): $CancellablePromise<$models.StorageView> {
     return $Call.ByID(1443616652).then(($result: any) => {
-        return $$createType4($result);
+        return $$createType5($result);
     });
 }
 
@@ -91,7 +107,7 @@ export function Storage(): $CancellablePromise<$models.StorageView> {
  */
 export function TerminalShell(): $CancellablePromise<$models.TerminalShellView> {
     return $Call.ByID(3736505951).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType4($result);
     });
 }
 
@@ -99,5 +115,6 @@ export function TerminalShell(): $CancellablePromise<$models.TerminalShellView> 
 const $$createType0 = $models.CleanupReport.createFrom;
 const $$createType1 = $models.CleanupPlan.createFrom;
 const $$createType2 = $models.MigrateReport.createFrom;
-const $$createType3 = $models.TerminalShellView.createFrom;
-const $$createType4 = $models.StorageView.createFrom;
+const $$createType3 = $models.DestinationView.createFrom;
+const $$createType4 = $models.TerminalShellView.createFrom;
+const $$createType5 = $models.StorageView.createFrom;

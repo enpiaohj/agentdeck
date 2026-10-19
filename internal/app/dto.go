@@ -165,6 +165,8 @@ type StorageView struct {
 	UsingDefault bool   `json:"using_default"`
 	ConfigDir    string `json:"config_dir"`
 	LocalDir     string `json:"local_dir"`
+	// Leaf 是数据根的固定相对路径：迁移时取所选目录下的这个子目录。
+	Leaf string `json:"leaf"`
 	// DefaultConfigDir 与 DefaultLocalDir 是默认位置，仅在已迁移时有别于当前值。
 	DefaultConfigDir string `json:"default_config_dir"`
 	DefaultLocalDir  string `json:"default_local_dir"`
@@ -208,6 +210,32 @@ type MigrateReport struct {
 	Bytes   int64    `json:"bytes"`
 	Skipped []string `json:"skipped"`
 	Message string   `json:"message"`
+}
+
+// DestinationView 是补全后的迁移目标与它当前的状态：界面在用户确认之前就能
+// 显示数据究竟会落在哪个目录、那里是不是已经有目录，而不是点下「开始迁移」
+// 之后才被拒绝。
+type DestinationView struct {
+	// Picked 是用户选定的目录。
+	Picked string `json:"picked"`
+	// Dest 是补全后的数据根：固定取所选目录下的 AgentDeck\Data；所选目录
+	// 本身就叫 AgentDeck 时只追加 Data。
+	Dest string `json:"dest"`
+	// Leaf 是固定的相对路径，Rule 是补全规则的一句话说明（含不重复追加的
+	// 例外）。两者都由 Go 侧给出，界面不自己拼。
+	Leaf string `json:"leaf"`
+	Rule string `json:"rule"`
+	// Exists 表示 Dest 目录已存在。
+	Exists bool `json:"exists"`
+	// Empty 表示 Dest 不存在或存在但为空（没有会被覆盖的内容）。
+	Empty bool `json:"empty"`
+	// Files 与 Bytes 是 Dest 已存在时里面的文件数与占用字节数。
+	Files int   `json:"files"`
+	Bytes int64 `json:"bytes"`
+	// Ready 表示可以直接迁移：校验通过，且目录不存在或为空。
+	Ready bool `json:"ready"`
+	// Reason 说明不可用的原因（Ready 为假时非空）。
+	Reason string `json:"reason"`
 }
 
 // CleanupPlan 是「清理旧位置数据」的预览：将被逐个删除的文件清单。

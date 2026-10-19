@@ -23,9 +23,21 @@ import (
 // 目录（索引、会话库、导入副本）不能被测试碰到。
 func newStorageApp(t *testing.T) (*App, string) {
 	t.Helper()
+	return newStorageAppIn(t, "data")
+}
+
+// newStorageAppIn 与 newStorageApp 相同，但数据根的目录名可以指定。固定相对
+// 路径（storageLeafRelative）会影响用例的构造方式：「目标就是当前数据目录」
+// 只有数据根正好落在 `…\AgentDeck\Data` 上时，才可能用「选中它的上级目录」
+// 构造出来。
+func newStorageAppIn(t *testing.T, name string) (*App, string) {
+	t.Helper()
 	t.Setenv("APPDATA", filepath.Join(t.TempDir(), "Roaming"))
 	t.Setenv("LOCALAPPDATA", filepath.Join(t.TempDir(), "Local"))
-	root := t.TempDir()
+	root := filepath.Join(t.TempDir(), name)
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	a, err := New(Config{
 		MarksPath:    filepath.Join(root, "marks.db"),
 		ProjectsPath: filepath.Join(root, "projects.db"),
@@ -38,6 +50,30 @@ func newStorageApp(t *testing.T) (*App, string) {
 	}
 	t.Cleanup(a.Close)
 	return a, root
+}
+
+// pickParent 返回一个可迁移的选定目录与补全后的数据根。用户在界面上选的是
+// 放在哪个目录下，实际数据根固定是它下面的 AgentDeck\Data。
+func pickParent(t *testing.T) (picked, dest string) {
+	t.Helper()
+	picked = t.TempDir()
+	return picked, filepath.Join(picked, storageDir, storageLeaf)
+}
+
+// assertMigrationRefused 确认一次被拒绝的迁移没留下任何痕迹：指针没写、
+// 源数据没动。
+func assertMigrationRefused(t *testing.T, root string) {
+	t.Helper()
+	cfg, err := appconfig.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DataRoot != "" {
+		t.Fatalf("被拒绝的迁移写入了指针：%q", cfg.DataRoot)
+	}
+	if _, err := os.Stat(filepath.Join(root, "marks.db")); err != nil {
+		t.Fatalf("源目录被动过：%v", err)
+	}
 }
 
 // newRestartedApp 模拟重启：按应用配置重新装配，数据落点因此切到指针所指
@@ -87,21 +123,119 @@ func writeFixture(t *testing.T, path, content string) {
 	}
 }
 
-// TestMigrateCopiesDataAndSwitchesRoot 迁移的成功路径：三个库用一致副本、
-// 其余文件逐个复制并校验、索引与运行标记不复制、源目录一个字节不动、
-// 全部通过后才写数据位置指针。
+// TestStorageDestination 数据根固定取所选定目录下的 AgentDeck\Data；所选目录
+// 本身就叫 AgentDeck 时只追加 Data（用户常常直接选到 `D:\software\AgentDeck`，
+// 再套一层会得到 `…\AgentDeck\AgentDeck\Data`）；已经选到数据根本身时原样使用。
+func TestStorageDestination(t *testing.T) {
+	cases := []struct {
+		name   string
+		picked string
+		want   string
+	}{
+		{"盘符根", `D:\`, `D:\AgentDeck\Data`},
+		{"只有盘符", `D:`, `D:\AgentDeck\Data`},
+		{"普通目录", `D:\software`, `D:\software\AgentDeck\Data`},
+		{"带尾分隔符", `D:\software\`, `D:\software\AgentDeck\Data`},
+		{"末级叫 AgentDeck", `D:\software\AgentDeck`, `D:\software\AgentDeck\Data`},
+		{"末级叫 AgentDeck 带尾分隔符", `D:\software\AgentDeck\`, `D:\software\AgentDeck\Data`},
+		{"末级大小写不敏感", `d:\software\agentdeck`, `d:\software\agentdeck\Data`},
+		{"已经选到数据根本身", `D:\software\AgentDeck\Data`, `D:\software\AgentDeck\Data`},
+		{"已经选到数据根本身带尾分隔符", `D:\software\AgentDeck\Data\`, `D:\software\AgentDeck\Data`},
+		{"只是末级叫 Data", `D:\software\Data`, `D:\software\Data\AgentDeck\Data`},
+		{"只是前缀相同", `D:\AgentDeckData`, `D:\AgentDeckData\AgentDeck\Data`},
+		{"带空白", "  D:\\software  ", `D:\software\AgentDeck\Data`},
+		{"相对路径不补成绝对", `relative\data`, `relative\data\AgentDeck\Data`},
+		{"空路径", "   ", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := storageDestination(c.picked); got != c.want {
+				t.Fatalf("storageDestination(%q) = %q，期望 %q", c.picked, got, c.want)
+			}
+		})
+	}
+}
+
+// TestResolveDestinationReportsExistingDirectory 补全后的目录是否已经存在必须
+// 如实报出来：不存在与空目录可用，已有内容的目录不可用（迁移不覆盖），当前
+// 数据目录不可用。
+func TestResolveDestinationReportsExistingDirectory(t *testing.T) {
+	// 数据根正好落在 `…\AgentDeck\Data` 上，才能用「选中它的上级目录」构造出
+	// 「目标就是当前数据目录」这一种选法。
+	a, root := newStorageAppIn(t, storageLeafRelative)
+	svc := a.NewSettingsService()
+	picked := t.TempDir()
+	dest := filepath.Join(picked, storageDir, storageLeaf)
+
+	view := svc.ResolveDestination(picked)
+	if view.Picked != picked || view.Dest != dest || view.Leaf != storageLeafRelative {
+		t.Fatalf("补全结果 = %+v", view)
+	}
+	if view.Rule == "" || !strings.Contains(view.Rule, storageLeafRelative) {
+		t.Fatalf("补全规则应如实说明：%q", view.Rule)
+	}
+	if view.Exists || !view.Empty || !view.Ready || view.Reason != "" {
+		t.Fatalf("不存在的目录应当可用：%+v", view)
+	}
+	if view.Files != 0 || view.Bytes != 0 {
+		t.Fatalf("不存在的目录不应有占用：%+v", view)
+	}
+
+	// 已存在且为空：仍然可用（上次迁移清理干净后留下的空目录）。
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if view = svc.ResolveDestination(picked); !view.Exists || !view.Empty || !view.Ready {
+		t.Fatalf("空目录应当可用：%+v", view)
+	}
+
+	// 已有内容：不可用，并如实报出内容规模。
+	writeFixture(t, filepath.Join(dest, "library", "history.db"), "旧数据")
+	if view = svc.ResolveDestination(picked); view.Ready || view.Reason == "" {
+		t.Fatalf("已有内容的目录应当拒绝：%+v", view)
+	}
+	if view.Exists && (view.Files != 1 || view.Bytes == 0) {
+		t.Fatalf("应当报出已有内容的规模：%+v", view)
+	}
+
+	// 用户直接选到 AgentDeck 目录本身与选它的上级目录，落在同一个位置。
+	direct := svc.ResolveDestination(filepath.Dir(dest))
+	if direct.Dest != filepath.Clean(dest) {
+		t.Fatalf("直接选中 AgentDeck 目录不应重复追加：%q", direct.Dest)
+	}
+	if again := svc.ResolveDestination(picked); again.Dest != direct.Dest {
+		t.Fatalf("两种选法应落在同一位置：%q 与 %q", again.Dest, direct.Dest)
+	}
+
+	// 当前数据目录不能被当成目标：选到数据根本身、或选到它的上级目录，补全后
+	// 都是当前数据目录本身。
+	if current := svc.ResolveDestination(root); current.Ready || current.Reason == "" {
+		t.Fatalf("当前的 %s 不能被当成迁移目标：%+v", root, current)
+	}
+	if parent := svc.ResolveDestination(filepath.Dir(root)); parent.Dest != root || parent.Ready {
+		t.Fatalf("选到数据根的上级目录应补全成当前数据目录并拒绝：%+v", parent)
+	}
+}
+
+// TestMigrateCopiesDataAndSwitchesRoot 迁移的成功路径：数据落在所选定目录下的
+// AgentDeck 子目录，三个库用一致副本、其余文件逐个复制并校验、索引与运行标记
+// 不复制、源目录一个字节不动、全部通过后才写数据位置指针。
 func TestMigrateCopiesDataAndSwitchesRoot(t *testing.T) {
 	a, root := newStorageApp(t)
 	seedStorage(t, a, root)
-	dest := filepath.Join(t.TempDir(), "DeckData")
+	picked, dest := pickParent(t)
 	svc := a.NewSettingsService()
 
-	report, err := svc.Migrate(dest)
+	report, err := svc.Migrate(picked)
 	if err != nil {
 		t.Fatalf("迁移失败：%v", err)
 	}
 	if report.Dest != dest || report.Files == 0 {
 		t.Fatalf("迁移报告 = %+v", report)
+	}
+	// 数据根固定是所选目录下的 AgentDeck\Data，而不是所选目录本身。
+	if _, err := os.Stat(filepath.Join(picked, "marks.db")); !os.IsNotExist(err) {
+		t.Fatalf("数据不应直接落在所选目录下：%s", picked)
 	}
 	for _, rel := range []string{"marks.db", "projects.db", filepath.Join("library", "history.db"),
 		filepath.Join("library", "deletions", "job1", "operation.json"),
@@ -178,39 +312,58 @@ func TestMigrateRefusesUnsafeDestination(t *testing.T) {
 	seedStorage(t, a, root)
 	svc := a.NewSettingsService()
 
-	busy := filepath.Join(t.TempDir(), "notempty")
-	writeFixture(t, filepath.Join(busy, "existing.txt"), "已有文件")
+	// 选定的目录下已经有补全后的数据目录且里面有东西：目标非空，必须整批拒绝
+	// 而不是往里追加。用户重复选同一个位置时正是这种情形。
+	busy := t.TempDir()
+	writeFixture(t, filepath.Join(busy, storageDir, storageLeaf, "existing.txt"), "已有文件")
 	cases := []struct {
-		name string
-		dest string
+		name   string
+		picked string
 	}{
-		{"目标目录非空", busy},
+		{"目标目录已存在且不为空", busy},
 		{"目标就在源目录之内", filepath.Join(root, "sub")},
-		{"目标就是源目录", root},
-		{"目标包含源目录", filepath.Dir(root)},
 		{"相对路径", "relative/data"},
 		{"空路径", "  "},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if _, err := svc.Migrate(c.dest); err == nil {
-				t.Fatalf("应拒绝：%s", c.dest)
+			if _, err := svc.Migrate(c.picked); err == nil {
+				t.Fatalf("应拒绝：%s", c.picked)
 			}
-			cfg, err := appconfig.Load()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if cfg.DataRoot != "" {
-				t.Fatalf("被拒绝的迁移写入了指针：%q", cfg.DataRoot)
-			}
-			if _, err := os.Stat(filepath.Join(root, "marks.db")); err != nil {
-				t.Fatalf("源目录被动过：%v", err)
-			}
+			assertMigrationRefused(t, root)
 		})
 	}
-	if _, err := os.Stat(filepath.Join(busy, "marks.db")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(busy, storageDir, storageLeaf, "marks.db")); !os.IsNotExist(err) {
 		t.Fatal("拒绝的迁移不应在目标里留下文件")
 	}
+}
+
+// TestMigrateRefusesCurrentLocation 数据根固定在 `…\AgentDeck\Data` 上，于是
+// 「选中它的上级目录」与「选中更上一级目录」就是把当前数据目录、或当前数据
+// 目录的上层当成目标：一次点击就可能拿正在使用的数据当迁移目标，两种都必须拒绝。
+func TestMigrateRefusesCurrentLocation(t *testing.T) {
+	t.Run("目标就是当前数据目录", func(t *testing.T) {
+		a, root := newStorageAppIn(t, storageLeafRelative)
+		seedStorage(t, a, root)
+		svc := a.NewSettingsService()
+		// root 是 `…\AgentDeck\Data`：选中它的上级目录，补全后正是 root。
+		if _, err := svc.Migrate(filepath.Dir(root)); err == nil {
+			t.Fatal("目标就是当前数据目录时应拒绝")
+		}
+		assertMigrationRefused(t, root)
+	})
+
+	t.Run("目标包含当前数据目录", func(t *testing.T) {
+		// 数据根是 <tmp>\AgentDeck\Data\data：选中 <tmp> 会把 <tmp>\AgentDeck\Data
+		// 当目标，而它正是当前数据目录的上层。
+		a, root := newStorageAppIn(t, filepath.Join(storageLeafRelative, "data"))
+		seedStorage(t, a, root)
+		svc := a.NewSettingsService()
+		if _, err := svc.Migrate(filepath.Dir(filepath.Dir(filepath.Dir(root)))); err == nil {
+			t.Fatal("目标包含当前数据目录时应拒绝")
+		}
+		assertMigrationRefused(t, root)
+	})
 }
 
 // TestMigrateRollsBackOwnFiles 复制中途失败时只删本次写出的文件：源目录
@@ -218,7 +371,7 @@ func TestMigrateRefusesUnsafeDestination(t *testing.T) {
 func TestMigrateRollsBackOwnFiles(t *testing.T) {
 	a, root := newStorageApp(t)
 	seedStorage(t, a, root)
-	dest := filepath.Join(t.TempDir(), "DeckData")
+	picked, dest := pickParent(t)
 	// 复制到最后一个文件时失败：此前写出的副本必须全部清掉。
 	a.copyFileFn = func(src, dest string) (copyRecord, error) {
 		if filepath.Base(src) == "operation.json" {
@@ -227,7 +380,7 @@ func TestMigrateRollsBackOwnFiles(t *testing.T) {
 		return copyFile(src, dest)
 	}
 	svc := a.NewSettingsService()
-	_, err := svc.Migrate(dest)
+	_, err := svc.Migrate(picked)
 	if err == nil {
 		t.Fatal("复制失败时迁移应当报错")
 	}
@@ -257,9 +410,9 @@ func TestMigrateRollsBackOwnFiles(t *testing.T) {
 func TestCleanupOldRemovesOnlyOwnFiles(t *testing.T) {
 	a, root := newStorageApp(t)
 	seedStorage(t, a, root)
-	dest := filepath.Join(t.TempDir(), "DeckData")
+	picked, dest := pickParent(t)
 	svc := a.NewSettingsService()
-	if _, err := svc.Migrate(dest); err != nil {
+	if _, err := svc.Migrate(picked); err != nil {
 		t.Fatal(err)
 	}
 	// 旧位置里再放一个用户自己的目录，清理不得碰它。
@@ -342,8 +495,8 @@ func TestCleanupRefusesCurrentLocation(t *testing.T) {
 func TestResetRootKeepsPointerAndData(t *testing.T) {
 	a, root := newStorageApp(t)
 	seedStorage(t, a, root)
-	dest := filepath.Join(t.TempDir(), "DeckData")
-	if _, err := a.NewSettingsService().Migrate(dest); err != nil {
+	picked, dest := pickParent(t)
+	if _, err := a.NewSettingsService().Migrate(picked); err != nil {
 		t.Fatal(err)
 	}
 	// 重启后当前数据目录是 dest，改回默认位置就是离开它。
@@ -375,8 +528,8 @@ func TestResetRootKeepsPointerAndData(t *testing.T) {
 func TestResetRootDropsCurrentLocationFromPrevious(t *testing.T) {
 	a, root := newStorageApp(t)
 	seedStorage(t, a, root)
-	dest := filepath.Join(t.TempDir(), "DeckData")
-	if _, err := a.NewSettingsService().Migrate(dest); err != nil {
+	picked, dest := pickParent(t)
+	if _, err := a.NewSettingsService().Migrate(picked); err != nil {
 		t.Fatal(err)
 	}
 	defaults, err := appconfig.DefaultPaths()
@@ -444,8 +597,8 @@ func TestResetRootDropsCurrentLocationFromPrevious(t *testing.T) {
 func TestCleanupPrunesEmptyLocation(t *testing.T) {
 	a, root := newStorageApp(t)
 	seedStorage(t, a, root)
-	dest := filepath.Join(t.TempDir(), "DeckData")
-	if _, err := a.NewSettingsService().Migrate(dest); err != nil {
+	picked, _ := pickParent(t)
+	if _, err := a.NewSettingsService().Migrate(picked); err != nil {
 		t.Fatal(err)
 	}
 	// 去掉用户自己的文件：旧位置这时只剩 AgentDeck 的数据。

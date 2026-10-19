@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -44,17 +45,49 @@ func (s *SettingsService) shellState(value string) (exe, version, reason string)
 	return exe, version, ""
 }
 
-// Migrate 把 AgentDeck 自有数据迁移到 dest，成功后写入数据位置指针。
-// 详细步骤与不变量见 migrate.go；进度经 storage:progress 推送。
+// Migrate 把 AgentDeck 自有数据迁移到 picked 目录下固定的 AgentDeck\Data，
+// 成功后写入数据位置指针。picked 是用户在目录选择器里选的目录，不是最终数据
+// 根：补全规则见 storageDestination。详细步骤与不变量见 migrate.go；进度经
+// storage:progress 推送。
 //
 // 运行中的进程仍写旧位置的库，因此迁移完成后必须重启才生效——界面据此
 // 给出「立即重启」。旧位置一律保留，清理是另行确认的动作。
-func (s *SettingsService) Migrate(dest string) (MigrateReport, error) {
-	report, err := s.a.migrateStorage(dest)
+func (s *SettingsService) Migrate(picked string) (MigrateReport, error) {
+	report, err := s.a.migrateStorage(picked)
 	if err != nil {
 		return MigrateReport{}, err
 	}
 	return report, nil
+}
+
+// ResolveDestination 把用户选定的目录补全成实际数据根，并如实报告那里当前的
+// 状态：不存在（迁移时创建）、已存在且为空（可用）、已存在且有内容（不可用，
+// 迁移绝不覆盖）。
+//
+// 目录是否已存在必须由 Go 侧判断并交给界面：用户可能正好选到上一次迁移用过
+// 的位置，那时里面已经是完整的 AgentDeck 数据，静默追加或覆盖都会出问题。
+func (s *SettingsService) ResolveDestination(picked string) DestinationView {
+	dest := storageDestination(picked)
+	view := DestinationView{
+		Picked: strings.TrimSpace(picked),
+		Dest:   dest,
+		Leaf:   storageLeafRelative,
+		Rule:   storageRule,
+	}
+	if info, err := os.Stat(dest); err == nil && info.IsDir() {
+		view.Exists = true
+		view.Empty = true
+		if entries, err := os.ReadDir(dest); err == nil && len(entries) > 0 {
+			view.Empty = false
+		}
+		view.Bytes, view.Files, _ = usage(dest)
+	} else {
+		// 不存在（或同名文件）时没有会被覆盖的内容：是否为空只看已存在的目录。
+		view.Empty = true
+	}
+	view.Reason = s.a.destinationProblem(dest)
+	view.Ready = view.Reason == ""
+	return view
 }
 
 // ResetRoot 把数据位置改回默认位置。只改指针，不搬数据：默认位置没有

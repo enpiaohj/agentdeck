@@ -2,13 +2,14 @@
 //
 // 迁移的实际动作全在 Go 侧（internal/app/migrate.go）：目标目录为空、空间
 // 足够、逐个文件校验通过才会写指针；旧位置一律保留，清理是另行确认的动作。
-// 这里只负责如实展示与确认，不自己拼路径。
+// 这里只负责如实展示与确认，不自己拼路径——用户选的是「数据放在哪个目录下」，
+// 实际数据根由 Go 侧补全（固定的 AgentDeck 子目录），是否已存在也由 Go 侧判断。
 import { Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Spinner, Text } from '@fluentui/react-components'
 import { ArrowClockwiseRegular, ArrowResetRegular, ArrowUploadRegular, DeleteRegular } from '@fluentui/react-icons'
 import { Events } from '@wailsio/runtime'
 import { useCallback, useEffect, useState } from 'react'
 import * as settingsService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/settingsservice'
-import type { CleanupPlan, StorageView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
+import type { CleanupPlan, DestinationView, StorageView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import { storageProgressFromEvent, type StorageProgress } from '../eventPayload'
 import { pickOpenPath } from '../nativeDialogs'
 import { fmtBytes, fmtPercent } from '../format'
@@ -18,8 +19,8 @@ export function DataLocation() {
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  // pending 是已选好、等待确认的迁移目标目录。
-  const [pending, setPending] = useState('')
+  // pending 是已选好目录、等待确认的迁移目标：含补全后的数据位置与它当前的状态。
+  const [pending, setPending] = useState<DestinationView | null>(null)
   const [progress, setProgress] = useState<StorageProgress | null>(null)
   const [cleanup, setCleanup] = useState<CleanupPlan | null>(null)
   const [restartNeeded, setRestartNeeded] = useState(false)
@@ -35,27 +36,28 @@ export function DataLocation() {
     setError('')
     setMessage('')
     try {
-      const dir = await pickOpenPath({ CanChooseDirectories: true, CanChooseFiles: false, CanCreateDirectories: true, Title: '选择新的数据存储位置', ButtonText: '迁到此目录' })
+      const dir = await pickOpenPath({ CanChooseDirectories: true, CanChooseFiles: false, CanCreateDirectories: true, Title: '选择数据存放的目录', ButtonText: '选择此目录' })
       if (!dir) return
-      setPending(dir)
+      // 由 Go 侧补全数据根并判断那里是否已有目录：界面不自己拼路径。
+      setPending(await settingsService.ResolveDestination(dir))
     } catch (reason) {
       setError(`选择目录失败：${String(reason)}`)
     }
   }
   const migrate = async () => {
-    if (!pending || busy) return
+    if (!pending || busy || !pending.ready) return
     setBusy('migrate')
     setError('')
     setMessage('')
     setProgress(null)
     try {
-      const report = await settingsService.Migrate(pending)
-      setPending('')
+      const report = await settingsService.Migrate(pending.picked)
+      setPending(null)
       setRestartNeeded(true)
       setMessage(report.message)
       load()
     } catch (reason) {
-      setPending('')
+      setPending(null)
       setError(`迁移未完成：${String(reason)}`)
       load()
     } finally {
@@ -147,7 +149,7 @@ export function DataLocation() {
         {!view.using_default ? <Button size="small" appearance="subtle" icon={busy === 'reset' ? <Spinner size="extra-tiny" /> : <ArrowResetRegular />} disabled={!!busy} onClick={() => void reset()}>改回默认位置</Button> : null}
         <Button size="small" appearance="subtle" icon={<ArrowClockwiseRegular />} disabled={!!busy} onClick={load}>更新统计</Button>
       </div>
-      <p>迁移只复制 AgentDeck 自己的数据，不移动原生 Agent 的目录。全文索引{skipped.some(item => item.rebuild && item.present) ? `（当前 ${fmtBytes(skipped.reduce((sum, item) => sum + (item.present ? item.bytes : 0), 0))}）` : ''}可重建，不参与复制，重启后自动重建。</p>
+      <p>迁移只复制 AgentDeck 自己的数据，不移动原生 Agent 的目录。数据位置固定是所选目录下的 {view.leaf} 子目录。全文索引{skipped.some(item => item.rebuild && item.present) ? `（当前 ${fmtBytes(skipped.reduce((sum, item) => sum + (item.present ? item.bytes : 0), 0))}）` : ''}可重建，不参与复制，重启后自动重建。</p>
       <p>迁移过程中请勿关闭应用。旧位置的数据一律保留，确认无误后再清理。</p>
     </> : <Spinner size="tiny" />}
     {progress ? <Text block role="status" className="ad-storage-progress">
@@ -163,19 +165,27 @@ export function DataLocation() {
       {view.prev_in_use ? <p>旧位置仍是本次运行使用的目录，请先重启 AgentDeck，确认新位置运行正常后再清理。</p> : null}
       <Button size="small" appearance="subtle" icon={<DeleteRegular />} disabled={!!busy || !view.prev_items.length || view.prev_in_use} onClick={() => void preview()}>清理旧位置数据…</Button>
     </section> : null}
-    <Dialog open={!!pending} onOpenChange={(_, data) => { if (!data.open && !busy) setPending('') }}>
+    <Dialog open={!!pending} onOpenChange={(_, data) => { if (!data.open && !busy) setPending(null) }}>
       <DialogSurface><DialogBody>
         <DialogTitle>迁移数据存储位置</DialogTitle>
         <DialogContent>
+          <dl className="ad-storage-summary">
+            <dt>所选目录</dt><dd><span className="ad-storage-path">{pending?.picked}</span></dd>
+            <dt>数据位置</dt><dd><span className="ad-storage-path">{pending?.dest}</span></dd>
+          </dl>
+          <p>{pending?.rule}</p>
+          {pending?.exists && !pending.empty
+            ? <Text block role="alert" className="ad-storage-warn">该目录已存在，其中有 {pending.files} 个文件（{fmtBytes(pending.bytes)}）。迁移不会覆盖已有文件：请先清理该目录，或改选其他位置。</Text>
+            : <p>{pending?.exists ? '该目录已存在且为空，可以直接使用。' : '该目录当前不存在，迁移时创建。'}</p>}
           <p>将把以下数据复制到新位置：</p>
           <ul>{copy.map(item => <li key={item.path}>{item.name}（{fmtBytes(item.bytes)}）</li>)}</ul>
-          <p>目标目录：<span className="ad-storage-path">{pending}</span></p>
           {copy.length === 0 ? <p>当前还没有可迁移的数据文件。</p> : null}
-          <p>目标目录必须是空目录。完成后需要重启 AgentDeck 才会使用新位置；旧位置的数据不会被删除。</p>
+          {pending?.reason ? <Text block role="alert" className="ad-storage-error">{pending.reason}</Text> : null}
+          <p>完成后需要重启 AgentDeck 才会使用新位置；旧位置的数据不会被删除。</p>
         </DialogContent>
         <DialogActions>
-          <Button disabled={!!busy} onClick={() => setPending('')}>取消</Button>
-          <Button appearance="primary" disabled={!!busy} icon={busy === 'migrate' ? <Spinner size="extra-tiny" /> : undefined} onClick={() => void migrate()}>{busy === 'migrate' ? '正在迁移…' : '开始迁移'}</Button>
+          <Button disabled={!!busy} onClick={() => setPending(null)}>取消</Button>
+          <Button appearance="primary" disabled={!!busy || !pending?.ready} icon={busy === 'migrate' ? <Spinner size="extra-tiny" /> : undefined} onClick={() => void migrate()}>{busy === 'migrate' ? '正在迁移…' : '开始迁移'}</Button>
         </DialogActions>
       </DialogBody></DialogSurface>
     </Dialog>

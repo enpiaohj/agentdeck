@@ -21,6 +21,8 @@ import (
 // 数据存储位置：查看占用、迁移到其他目录、清理旧位置。
 //
 // 迁移的不变量（改动本文件必须保持）：
+//   - 目标数据根固定取所选定目录下的 AgentDeck\Data（见 storageDestination）；
+//     所选目录本身叫 AgentDeck 时只追加 Data，已经选到数据根时原样使用。
 //   - 目标目录必须是绝对路径、不能是当前数据目录或其子目录、不能包含当前
 //     数据目录、不存在或为空目录、可写、剩余空间足够。任一条不满足即拒绝，
 //     不动任何文件。
@@ -39,6 +41,51 @@ const storageCopyDiv = 10   // 分母
 
 // indexRebuildNote 是全文索引项的固定说明。
 const indexRebuildNote = "可重建：迁移后由 AgentDeck 重新构建，不参与复制"
+
+// storageDir 与 storageLeaf 组成数据根的固定相对路径 AgentDeck\Data：用户选择
+// 的是「数据放在哪个目录下」，不是「这个目录叫什么」。固定下来路径可预期，
+// 同一台机器上也不会出现多个语义不明的数据目录；父目录 AgentDeck 留出产品
+// 自己的位置，要迁移的库与副本都在它下面的 Data 里。
+const (
+	storageDir  = "AgentDeck"
+	storageLeaf = "Data"
+)
+
+// storageLeafRelative 是固定的相对路径，界面据此说明数据位置会被放在哪里。
+var storageLeafRelative = filepath.Join(storageDir, storageLeaf)
+
+// storageRule 是补全规则的一句话说明，与补全逻辑同放在这里：界面直接展示，
+// 不自己拼路径，也不自己拼文案。
+var storageRule = fmt.Sprintf("数据位置固定取所选目录下的 %s 子目录；所选目录本身就叫 %s 时只追加 %s。",
+	storageLeafRelative, storageDir, storageLeaf)
+
+// storageDestination 把用户选定的目录补全成实际数据根：在其下追加固定的
+// AgentDeck\Data；所选目录本身就叫 AgentDeck 时只追加 Data（用户常常直接选到
+// `D:\software\AgentDeck`）；已经选到数据根本身时原样返回，既避免再套一层
+// `…\Data\AgentDeck\Data`，也让「选到当前数据目录」报成无需迁移，而不是嵌进
+// 自己里面。
+//
+// 只比末级目录名，不做前缀匹配：`D:\AgentDeckData` 得到的是
+// `D:\AgentDeckData\AgentDeck\Data`。
+func storageDestination(picked string) string {
+	picked = strings.TrimSpace(picked)
+	if picked == "" {
+		return ""
+	}
+	clean := filepath.Clean(picked)
+	// 只剩盘符（`D:`）时要补上根分隔符，否则 Join 得到的是盘符相对路径
+	// `D:AgentDeck\Data`，指的是 D 盘当前目录而不是根目录。
+	if volume := filepath.VolumeName(clean); volume != "" && !strings.ContainsRune(clean[len(volume):], filepath.Separator) {
+		clean = volume + string(filepath.Separator)
+	}
+	switch base := filepath.Base(clean); {
+	case strings.EqualFold(base, storageLeaf) && strings.EqualFold(filepath.Base(filepath.Dir(clean)), storageDir):
+		return clean
+	case strings.EqualFold(base, storageDir):
+		return filepath.Join(clean, storageLeaf)
+	}
+	return filepath.Join(clean, storageDir, storageLeaf)
+}
 
 // storageData 是本次运行实际使用的数据目录（去重后的基准目录）。
 func (a *App) storageData() []string {
@@ -126,6 +173,7 @@ func (s *SettingsService) Storage() StorageView {
 	view := StorageView{
 		ConfigDir: a.paths.ConfigDir,
 		LocalDir:  a.paths.LocalDir,
+		Leaf:      storageLeafRelative,
 		Note:      a.storageNote,
 	}
 	a.settingsMu.Lock()
@@ -312,40 +360,52 @@ func (a *App) databaseKind(base, rel string) (string, func(string) error, bool) 
 	return "", nil, false
 }
 
-// checkDestination 校验迁移目标：不满足任一条即拒绝，且不动任何文件。
-func (a *App) checkDestination(dest string, required int64) (string, error) {
-	dest = strings.TrimSpace(dest)
+// destinationProblem 对补全后的数据根做无副作用的校验（不建目录、不写探针、
+// 不看剩余空间），返回不能使用的一句话原因；可用时返回空串。
+//
+// 「确认前预览」与「执行迁移」共用这一份判断：界面在用户确认之前就能看到
+// 目标位置为什么不能用，而不是点下「开始迁移」之后才被拒绝。
+func (a *App) destinationProblem(dest string) string {
 	if dest == "" {
-		return "", errors.New("请选择数据存储位置")
+		return "请选择数据存储位置"
 	}
-	if !filepath.IsAbs(filepath.Clean(dest)) {
-		return "", fmt.Errorf("数据存储位置必须是绝对路径：%s", dest)
+	if !filepath.IsAbs(dest) {
+		return fmt.Sprintf("数据存储位置必须是绝对路径：%s", dest)
 	}
-	dest = filepath.Clean(dest)
 	for _, base := range a.storageData() {
 		if samePath(dest, base) {
-			return "", errors.New("目标目录就是当前数据目录，无需迁移")
+			return "目标目录就是当前数据目录，无需迁移"
 		}
 		if within(dest, base) {
-			return "", fmt.Errorf("目标目录不能位于当前数据目录之内：%s", base)
+			return fmt.Sprintf("目标目录不能位于当前数据目录之内：%s", base)
 		}
 		if within(base, dest) {
-			return "", fmt.Errorf("目标目录不能包含当前数据目录：%s", base)
+			return fmt.Sprintf("目标目录不能包含当前数据目录：%s", base)
 		}
 	}
 	if info, err := os.Stat(dest); err == nil {
 		if !info.IsDir() {
-			return "", fmt.Errorf("目标位置已存在同名文件：%s", dest)
+			return fmt.Sprintf("目标位置已存在同名文件：%s", dest)
 		}
 		entries, err := os.ReadDir(dest)
 		if err != nil {
-			return "", fmt.Errorf("目标目录无法读取：%w", err)
+			return fmt.Sprintf("目标目录无法读取：%v", err)
 		}
 		if len(entries) > 0 {
-			return "", fmt.Errorf("目标目录必须是空目录，以免覆盖已有文件：%s", dest)
+			return fmt.Sprintf("目标目录必须是空目录，以免覆盖已有文件：%s", dest)
 		}
 	} else if !os.IsNotExist(err) {
-		return "", fmt.Errorf("目标目录无法访问：%w", err)
+		return fmt.Sprintf("目标目录无法访问：%v", err)
+	}
+	return ""
+}
+
+// checkDestination 在 destinationProblem 之上补上必须有副作用的两步——建目录
+// 与写入探针——以及剩余空间预检。返回规范化后的目标路径。
+func (a *App) checkDestination(dest string, required int64) (string, error) {
+	dest = filepath.Clean(strings.TrimSpace(dest))
+	if reason := a.destinationProblem(dest); reason != "" {
+		return "", errors.New(reason)
 	}
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return "", fmt.Errorf("目标目录无法创建：%w", err)
@@ -386,11 +446,15 @@ func humanBytes(bytes int64) string {
 
 // migrateStorage 执行迁移：快照复制 → 逐文件校验 → 写指针。
 // 失败时只删本次写出的文件；源目录与配置都不动。
-func (a *App) migrateStorage(dest string) (MigrateReport, error) {
+//
+// picked 是用户在目录选择器里选定的目录，不是最终数据根：先按 storageLeaf
+// 补全（见 storageDestination），之后的一切都以补全后的路径为准。
+func (a *App) migrateStorage(picked string) (MigrateReport, error) {
 	if !a.beginMigration() {
 		return MigrateReport{}, errors.New("已有迁移正在进行")
 	}
 	defer a.endMigration()
+	dest := storageDestination(picked)
 	plan, err := a.buildMigrationPlan(dest)
 	if err != nil {
 		return MigrateReport{}, err
