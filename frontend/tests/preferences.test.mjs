@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { parsePreferences, defaultPreferences, rememberProject } from '../src/preferences.ts'
+import { parsePreferences, defaultPreferences, rememberProject, readerWidthCss } from '../src/preferences.ts'
 import { CLI_AGENTS, cliAgent, platformLabel } from '../src/agentOptions.ts'
 
 test('默认平台持久化与旧别名兼容，Desktop 和命令注入值回退', () => {
@@ -34,4 +34,24 @@ test('导航宽度越界回落到布局默认，最近项目去重且限量', ()
   assert.deepEqual(parsePreferences(JSON.stringify({recentProjects:['1','2','3','4','5','6']})).recentProjects,['1','2','3','4','5'])
   assert.deepEqual(rememberProject(['D:\\A','D:\\B'],'d:\\b'),['d:\\b','D:\\A'])
   assert.deepEqual(rememberProject([],'D:\\A'),['D:\\A'])
+})
+
+test('阅读宽度三档：自适应保留下限与上限，缺省与未知值回退自适应', () => {
+  for (const w of ['balanced','wide','adaptive']) assert.equal(parsePreferences(JSON.stringify({readingWidth:w})).readingWidth,w)
+  assert.equal(parsePreferences('{"readingWidth":"huge"}').readingWidth,'adaptive')
+  assert.equal(parsePreferences('{}').readingWidth,'adaptive')
+  assert.equal(defaultPreferences.readingWidth,'adaptive')
+  assert.equal(readerWidthCss('balanced'),'820px')
+  assert.equal(readerWidthCss('wide'),'1120px')
+  const css = readerWidthCss('adaptive')
+  assert.match(css,/80%/); assert.match(css,/1400px/); assert.match(css,/820px/); assert.match(css,/100%/)
+})
+
+test('工作台偏好：缺省值、合法值保留、非法值回退', () => {
+  const d = defaultPreferences
+  assert.deepEqual([d.navCollapsed,d.infoPanel,d.listOrder,d.hideEmptyProjects],[false,'open','latest',false])
+  const p = parsePreferences(JSON.stringify({navCollapsed:true,infoPanel:'closed',listOrder:'oldest',hideEmptyProjects:true}))
+  assert.deepEqual([p.navCollapsed,p.infoPanel,p.listOrder,p.hideEmptyProjects],[true,'closed','oldest',true])
+  const bad = parsePreferences(JSON.stringify({navCollapsed:'yes',infoPanel:'x',listOrder:1,hideEmptyProjects:'1'}))
+  assert.deepEqual([bad.navCollapsed,bad.infoPanel,bad.listOrder,bad.hideEmptyProjects],[false,'open','latest',false])
 })

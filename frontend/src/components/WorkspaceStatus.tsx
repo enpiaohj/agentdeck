@@ -17,7 +17,7 @@ export function WorkspaceStatus({ session }: { session: SessionView | null }) {
   return <footer className="ad-workspace-status" aria-label="工作台状态">
     <span className="ad-status-item" role="status" title={status?.error || label}>{icon}{label}</span>
     <span className="ad-status-trailing">
-      {session ? <span>{session.account ? `${session.account} · ` : ''}{source}</span> : <span>历史会话工作台</span>}
+      {session ? <span>{session.account ? `${session.account} · ` : ''}来源：{source}</span> : <span>历史会话工作台</span>}
       <span className="ad-status-shortcut"><kbd>Ctrl K</kbd> 搜索</span>
     </span>
   </footer>

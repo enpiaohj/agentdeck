@@ -12,7 +12,6 @@ import {
   DismissRegular,
   CopyRegular,
   CheckmarkRegular,
-  ArrowDownloadRegular,
   AddRegular,
   DocumentTextRegular,
   StarFilled,
@@ -24,10 +23,8 @@ import {
 } from '@fluentui/react-icons'
 import { useEffect, useRef, useState } from 'react'
 import type { SessionView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
-import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import * as markService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/markservice'
 import { agentMeta, fmtTime, relTime } from '../util'
-import { pickOpenPath } from '../nativeDialogs'
 import { AgentMark } from '../icons/AgentMark'
 import { deletionUnavailableReason } from '../sessionDeletion'
 
@@ -191,18 +188,6 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
   const toggleArchive = () => {
     markService.SetArchived(session.key, !session.archived).then(onChanged).catch(e => setMsg(`归档操作失败：${String(e).slice(0, 120)}`))
   }
-  const exportMd = () => {
-    pickOpenPath({
-      CanChooseDirectories: true, CanChooseFiles: false, CanCreateDirectories: true,
-      Title: '选择 Markdown 导出目录', ButtonText: '导出到此目录',
-    }).then((dir) => {
-      if (!dir || typeof dir !== 'string') return
-      sessionService.ExportMarkdown(session.key, dir).then(
-        (p) => setMsg(`导出完成：${p}`),
-        (e) => setMsg(`导出失败：${String(e).slice(0, 120)}`),
-      )
-    }).catch(e => setMsg(`导出失败：${String(e).slice(0, 120)}`))
-  }
 
   return (
     <aside id="session-details" className={`ad-info-pane ${styles.wrap}`} aria-label="会话信息">
@@ -311,9 +296,6 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
         <div className={styles.section}>
           <span className={styles.sectionTitle}>更多操作</span>
           <div className={styles.actions}>
-            <Button size="small" icon={<ArrowDownloadRegular />} style={{ width: '100%' }} onClick={exportMd} disabled={!session.transcript}>
-              导出为 Markdown
-            </Button>
             <Button size="small" icon={<ArchiveRegular />} style={{ width: '100%' }} onClick={toggleArchive}>
               {session.archived ? '取消归档' : '归档'}
             </Button>

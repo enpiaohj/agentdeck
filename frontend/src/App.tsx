@@ -41,7 +41,7 @@ import { ClaudeHistoryImport } from './components/ClaudeHistoryImport'
 import { DeleteSessionsDialog, DeletedSessionsNotice } from './components/DeleteSessionsDialog'
 import { useSessionDeletion } from './hooks/useSessionDeletion'
 import { deletedSessionKeys } from './sessionDeletion'
-import { navWidthRange, rememberProject } from './preferences'
+import { navWidthRange, readerWidthCss, rememberProject } from './preferences'
 import { platformLabel } from './agentOptions'
 import type { SessionView, ClaudeImportReport } from '../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as searchService from '../bindings/github.com/enpiaohj/agentdeck/internal/app/searchservice'
@@ -189,8 +189,8 @@ export function App() {
   const styles = useStyles()
   const { toasts, notify, dismiss } = useToasts()
   const availability = useAgentAvailability(0)
-  const [collapsed, setCollapsed] = useState(() => window.innerWidth < 900)
-  const [infoOpen, setInfoOpen] = useState(true)
+  const [collapsed, setCollapsed] = useState(() => preferences.navCollapsed || window.innerWidth < 900)
+  const [infoOpen, setInfoOpen] = useState(preferences.infoPanel === 'open')
   const [filter, setFilter] = useState<SidebarFilter>({})
   const [selected, setSelected] = useState<SessionView | null>(null)
   const [listVersion, setListVersion] = useState(0)
@@ -211,6 +211,10 @@ export function App() {
   // 打开状态也只有一处。
   const [sessionDialog, setSessionDialog] = useState<{ project?: string; agent?: string } | null>(null)
   const [projectDialog, setProjectDialog] = useState<{ agent?: string } | null>(null)
+
+  // 设置里改了「侧栏 / 信息栏默认状态」立即生效；之后用户手动开合不受影响。
+  useEffect(() => { setCollapsed(preferences.navCollapsed || window.innerWidth < 900) }, [preferences.navCollapsed])
+  useEffect(() => { setInfoOpen(preferences.infoPanel === 'open') }, [preferences.infoPanel])
 
   useEffect(() => {
     const compact = window.matchMedia('(max-width: 899px)')
@@ -417,7 +421,7 @@ export function App() {
 
   return (
     <FluentProvider theme={themeName === 'dark' ? darkTheme : lightTheme}>
-      <div className={`ad-app ${styles.outer}${resizing ? ' is-resizing' : ''}`} data-theme={themeName} style={{ '--ad-reader-font-size':`${preferences.fontSize}px`, '--ad-reader-line-height':preferences.spacing==='comfortable'?'1.85':'1.65', '--ad-reader-width':preferences.readingWidth==='wide'?'1120px':'820px', ...(navWidth ? { '--ad-nav-width': `${navWidth}px` } : {}) } as React.CSSProperties}>
+      <div className={`ad-app ${styles.outer}${resizing ? ' is-resizing' : ''}`} data-theme={themeName} style={{ '--ad-reader-font-size':`${preferences.fontSize}px`, '--ad-reader-line-height':preferences.spacing==='comfortable'?'1.85':'1.65', '--ad-reader-width':readerWidthCss(preferences.readingWidth), ...(navWidth ? { '--ad-nav-width': `${navWidth}px` } : {}) } as React.CSSProperties}>
         {/* 无边框窗口:顶栏整体为拖拽区,交互控件标 no-drag */}
         <div className={`ad-titlebar ${styles.topbar}`} style={{ '--wails-draggable': 'drag' } as React.CSSProperties}
           onDoubleClick={event => {
@@ -433,7 +437,7 @@ export function App() {
               <span className="ad-brand-version" title={`AgentDeck 版本 ${applicationInfo.fixed.product_version}`}>v{applicationInfo.fixed.product_version}</span>
             </span>
           </div>
-          {view === 'diagnostics' ? <div className="ad-titlebar-context">偏好设置</div> : <div
+          {view === 'diagnostics' ? <div className="ad-titlebar-context">设置</div> : <div
             className={styles.searchSlot}
             style={{ '--wails-draggable': 'no-drag' } as React.CSSProperties}
           >
@@ -450,7 +454,7 @@ export function App() {
           </div>}
           {view !== 'diagnostics' ? <div className={styles.right} style={{ '--wails-draggable': 'no-drag' } as React.CSSProperties}>
             <Tooltip content="新建会话 (Ctrl+N)" relationship="description">
-              <Button size="small" appearance="secondary" onClick={() => openNewSession()}>新建会话</Button>
+              <Button size="small" appearance="primary" onClick={() => openNewSession()}>新建会话</Button>
             </Tooltip>
             <Tooltip content="导入 Claude 普通聊天 / 新版任务历史" relationship="description">
               <Button size="small" appearance="secondary" icon={<ArrowUploadRegular />} onClick={() => setView('imports')}>导入</Button>
@@ -516,9 +520,9 @@ export function App() {
               className="ad-resizer"
               role="separator"
               aria-orientation="vertical"
-              aria-label="调整导航宽度"
+              aria-label="调整侧栏宽度"
               tabIndex={0}
-              title="拖拽调整导航宽度，双击恢复默认"
+              title="拖拽调整侧栏宽度，双击恢复默认"
               onPointerDown={event => {
                 const width = navSlot.current?.getBoundingClientRect().width ?? (preferences.navWidth || 192)
                 drag.current = { startX: event.clientX, startWidth: width }

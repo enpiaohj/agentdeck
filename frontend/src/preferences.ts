@@ -2,8 +2,17 @@ import { cliAgent, type CliAgent } from './agentOptions.ts'
 
 // navWidth 为 0 表示跟随布局默认（窄窗口下会自己收窄）；用户拖过分隔条后
 // 记具体像素值，此时不再被媒体查询改写。
-export type Preferences = { defaultAgent: CliAgent; theme: 'system' | 'light' | 'dark'; fontSize: number; spacing: 'comfortable' | 'compact'; readingStart: 'latest' | 'start'; foldProcesses: boolean; readingWidth: 'balanced' | 'wide'; navWidth: number; recentProjects: string[] }
-export const defaultPreferences: Preferences = { defaultAgent:'claude', theme:'system', fontSize:15, spacing:'comfortable', readingStart:'latest', foldProcesses:true, readingWidth:'balanced', navWidth:0, recentProjects:[] }
+export type Preferences = { defaultAgent: CliAgent; theme: 'system' | 'light' | 'dark'; fontSize: number; spacing: 'comfortable' | 'compact'; readingStart: 'latest' | 'start'; foldProcesses: boolean; readingWidth: 'balanced' | 'wide' | 'adaptive'; navWidth: number; recentProjects: string[]; navCollapsed: boolean; infoPanel: 'open' | 'closed'; listOrder: 'latest' | 'oldest'; hideEmptyProjects: boolean }
+// readerWidthCss 是消息列的宽度上限（max-width 的值）。自适应档取阅读区的约 80%、
+// 封顶 1400px，但不窄于适中档的 820px，也不超过阅读区本身：小窗口退回适中，
+// 大屏随阅读区放宽，代码块与表格在列内因此一同放宽。
+export function readerWidthCss(width: Preferences['readingWidth']): string {
+  if (width === 'wide') return '1120px'
+  if (width === 'adaptive') return 'min(100%, max(820px, min(80%, 1400px)))'
+  return '820px'
+}
+
+export const defaultPreferences: Preferences = { defaultAgent:'claude', theme:'system', fontSize:15, spacing:'comfortable', readingStart:'latest', foldProcesses:true, readingWidth:'adaptive', navWidth:0, recentProjects:[], navCollapsed:false, infoPanel:'open', listOrder:'latest', hideEmptyProjects:false }
 export const preferencesKey = 'agentdeck.preferences.v1'
 export const navWidthRange = { min: 148, max: 420 } as const
 export const recentProjectsLimit = 5
@@ -18,9 +27,13 @@ export function parsePreferences(raw: string | null): Preferences {
     spacing: value.spacing === 'compact' ? 'compact' : 'comfortable',
     readingStart: value.readingStart === 'start' ? 'start' : 'latest',
     foldProcesses: typeof value.foldProcesses === 'boolean' ? value.foldProcesses : true,
-    readingWidth: value.readingWidth === 'wide' ? 'wide' : 'balanced',
+    readingWidth: value.readingWidth === 'balanced' || value.readingWidth === 'wide' || value.readingWidth === 'adaptive' ? value.readingWidth : 'adaptive',
     navWidth: width >= navWidthRange.min && width <= navWidthRange.max ? width : 0,
     recentProjects: parseRecentProjects(value.recentProjects),
+    navCollapsed: typeof value.navCollapsed === 'boolean' ? value.navCollapsed : false,
+    infoPanel: value.infoPanel === 'closed' ? 'closed' : 'open',
+    listOrder: value.listOrder === 'oldest' ? 'oldest' : 'latest',
+    hideEmptyProjects: typeof value.hideEmptyProjects === 'boolean' ? value.hideEmptyProjects : false,
   }
 }
 

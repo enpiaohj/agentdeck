@@ -58,7 +58,7 @@ export function DataBackup({ onRestored }: { onRestored: () => void }) {
       <Button size="small" icon={busy === 'inspect' ? <Spinner size="extra-tiny" /> : <ArrowUploadRegular />} disabled={!!busy} onClick={() => void chooseRestore()}>{busy === 'inspect' ? '正在校验…' : '从完整备份恢复…'}</Button>
     </div>
     <p>恢复采用合并方式，保留当前新增会话与内容版本；同一会话的收藏、归档、标签和备注以备份为准。恢复前自动创建当前数据的完整备份。</p>
-    <p>备份范围为 AgentDeck 已保存的数据，不包含原生 Agent 的账号凭据、原始目录和附件文件。全文索引在恢复后重新构建。</p>
+    <p>备份范围为 AgentDeck 已保存的数据，不包含原生智能体的账号凭据、原始目录和附件文件。全文索引在恢复后重新构建。</p>
     <p>单个备份最多包含 20,000 个数据文件，解压后总大小不超过 4 GiB。</p>
     {message ? <Text block role="status" className="ad-backup-message">{message}</Text> : null}
     {error ? <Text block role="alert" className="ad-backup-error">{error}</Text> : null}

@@ -425,7 +425,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
       <nav className="ad-reader-nav" aria-label="会话阅读导航">
         <Button size="small" appearance="subtle" icon={<ArrowUpRegular />} onClick={()=>navigate(0)} disabled={loading}>会话开头</Button>
         <Tooltip content="更早的内容" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronLeftRegular />} aria-label="阅读更早内容" disabled={loading||!tr?.has_before} onClick={()=>navigate(tr?.start??0,true)} /></Tooltip>
-        <span role="status" className="ad-reader-range">{loading?`正在载入…${tr?.total?`（${tr.total} 段）`:''}`:tr?.total?`${tr.start+1}–${tr.start+tr.parts.length} / ${tr.total} 段`:'暂无正文'}</span>
+        <span role="status" className="ad-reader-range" title="「段」是会话正文的一个片段：消息、思考、工具调用与结果各算一段">{loading?`正在载入…${tr?.total?`（${tr.total} 段）`:''}`:tr?.total?`第 ${tr.start+1}–${tr.start+tr.parts.length} 段，共 ${tr.total} 段`:'暂无正文'}</span>
         <Tooltip content="较新的内容" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronRightRegular />} aria-label="阅读较新内容" disabled={loading||!tr?.has_after} onClick={()=>navigate((tr?.start??0)+(tr?.parts.length??0))} /></Tooltip>
         <Button size="small" appearance="subtle" onClick={openFind} title="查找当前会话 (Ctrl+F)">查找</Button>
         <Button size="small" appearance={destination.at<0?'secondary':'subtle'} icon={<ArrowDownRegular />} onClick={()=>navigate(-1)} disabled={loading}>最新消息</Button>
@@ -451,7 +451,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
         {tr && !loading && hitPart >= 0 && (hitPart < tr.start || hitPart >= tr.start+tr.parts.length || tr.parts[hitPart-tr.start]?.cut) ? <Text size={200} block style={{ marginBottom: 12, color: tokens.colorNeutralForeground3 }}>本段包含预览范围之外的内容，可导出完整 Markdown 查看。</Text> : null}
         {tr?.cut ? <Text size={200} block style={{ marginBottom: 12, color: tokens.colorNeutralForeground3 }}>会话预览达到读取上限，部分内容未载入。</Text> : null}
         {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><Spinner size="tiny" /></div>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: 24, color: tokens.colorNeutralForeground3 }}><Spinner size="tiny" /><Text size={200}>正在载入会话{session.messages ? `（约 ${session.messages} 条消息）` : ''}…</Text></div>
         ) : !session.transcript ? (
           // 这个智能体的会话本就不在可读范围内（后端的 transcript 标记与
           // HasTranscript 同源），不是读取失败：说清限制，也不给按了没用的「重试」。

@@ -19,6 +19,8 @@ import {
   FolderRegular,
   FolderOpenRegular,
   AddRegular,
+  EyeRegular,
+  EyeOffRegular,
   SettingsRegular,
   OpenRegular,
   EditRegular,
@@ -26,6 +28,7 @@ import {
 } from '@fluentui/react-icons'
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import type { AgentView, NavCounts, ProjectView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
+import { usePreferences } from '../hooks/usePreferences'
 import * as projectService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/projectservice'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import { agentMeta } from '../util'
@@ -52,12 +55,15 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     height: '100%',
-    overflow: 'hidden',
+    overflowX: 'hidden',
+    overflowY: 'auto',
     backgroundColor: tokens.colorNeutralBackground2,
     borderRight: `1px solid ${tokens.colorNeutralStroke2}`,
   },
   navCollapsed: { width: '56px', overflowY: 'auto' },
-  agentScroll: { overflowY: 'auto', maxHeight: '35%', minHeight: '80px', flexShrink: 1 },
+  // 智能体区按内容撑开，封顶 45%：12 个智能体在 800px 高的窗口里不出滚动条（此前 35% 封顶
+  // 会多出一条），智能体更多时只在这一区内部滚动，项目区始终留得出位置。
+  agentScroll: { overflowY: 'auto', maxHeight: '45%', minHeight: '80px', flexShrink: 0 },
   item: {
     position: 'relative',
     display: 'flex',
@@ -133,7 +139,7 @@ const useStyles = makeStyles({
     backgroundColor: 'transparent',
   },
   projectAdd: { marginInlineStart: 'auto', flexShrink: 0, color: 'var(--ad-muted)' },
-  projectScroll: { flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0, padding: '0 8px 6px', scrollPaddingBlock: '4px' },
+  projectScroll: { flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: '140px', padding: '0 8px 6px', scrollPaddingBlock: '4px' },
   projectItem: {
     position: 'relative', display: 'flex', alignItems: 'center', gap: '9px',
     width: '100%', minWidth: 0, minHeight: '32px', margin: '1px 0', padding: '5px 8px',
@@ -207,7 +213,14 @@ function pointTarget(point: { x: number; y: number }) {
 export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, onSelectAll, onOpenDiagnostics, onNewSession, onNewProject, notify, onRefresh }: Props) {
   const styles = useStyles()
   const agents = useAgents(listVersion)
-  const projects = useProjects(listVersion)
+  const allProjects = useProjects(listVersion)
+  // 声明过却还没有会话的项目（计数 0）可收起：偏好在「设置 → 工作台」里也可改，默认不收，免得刚建好的项目消失。
+  // 正被用作筛选的项目始终显示。
+  const { preferences, update } = usePreferences()
+  const hideEmpty = preferences.hideEmptyProjects
+  const toggleHideEmpty = () => update({ hideEmptyProjects: !hideEmpty })
+  const emptyProjects = allProjects.filter(p => p.count === 0).length
+  const projects = hideEmpty ? allProjects.filter(p => p.count > 0 || filter.project === p.path) : allProjects
   const counts = useCounts(listVersion)
   const [menu, setMenu] = useState<{ target: MenuTarget; x: number; y: number } | null>(null)
   const [action, setAction] = useState<ProjectAction | null>(null)
@@ -432,7 +445,8 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
 
       <div className={styles.projectHeader}>
         <h2 id="sidebar-projects-heading" className={styles.projectHeading}>项目</h2>
-        <span className={styles.projectTotal} title={`${projects.length} 个项目`}>{projects.length}</span>
+        <span className={styles.projectTotal} title={hideEmpty ? `显示 ${projects.length} 个，另有 ${allProjects.length - projects.length} 个空项目已隐藏` : `${allProjects.length} 个项目`}>{hideEmpty ? `${projects.length}/${allProjects.length}` : allProjects.length}</span>
+        {emptyProjects > 0 ? <Button size="small" appearance="subtle" icon={hideEmpty ? <EyeRegular /> : <EyeOffRegular />} title={hideEmpty ? `显示 ${emptyProjects} 个没有会话的项目` : `隐藏 ${emptyProjects} 个没有会话的项目`} aria-label={hideEmpty ? '显示空项目' : '隐藏空项目'} aria-pressed={hideEmpty} onClick={toggleHideEmpty} /> : null}
         <Button className={styles.projectAdd} data-return-focus="new-project" size="small" appearance="subtle" icon={<AddRegular />} title="新建项目 (Ctrl+Shift+N)" aria-label="新建项目" onClick={() => onNewProject()} />
       </div>
       <div className={styles.projectScroll} role="group" aria-labelledby="sidebar-projects-heading">

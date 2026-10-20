@@ -15,10 +15,10 @@ AgentDeck 解决「当时做了什么、怎么接着做」。
 
 ## 当前状态
 
-**已发布 v0.7.0 — Windows 桌面工作台**（Wails v3 + React 18 + Fluent UI v9）。
-版本变化见 [CHANGELOG.md](CHANGELOG.md)，本地发布快照位于 `releases/v0.7.0/`。
-v0.7.0 把 AgentDeck 自有数据做成可整体迁移到其他磁盘，终端 PowerShell 可在设置中选择，
-并优化了永久会话库与全文索引的存储占用和检索路径。
+**已发布 v0.7.1 — Windows 桌面工作台**（Wails v3 + React 18 + Fluent UI v9）。
+版本变化见 [CHANGELOG.md](CHANGELOG.md)，本地发布快照位于 `releases/v0.7.1/`。
+v0.7.1 新增「自适应」阅读宽度（默认），设置新增「工作台」分类，会话列表补上 F2 / Delete
+快捷键与右键菜单提示，并修复全文索引运行中 WAL 文件只增不缩的问题。
 
 已实现：
 

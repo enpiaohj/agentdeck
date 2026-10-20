@@ -248,7 +248,7 @@ button:focus-visible, select:focus-visible, [role='button']:focus-visible, [role
 .ad-settings-nav button[aria-pressed='true']::before { content: ''; position: absolute; left: 0; width: 3px; height: 16px; border-radius: 2px; background: var(--ad-accent); }
 .ad-settings-local { margin: auto 14px 4px; padding-top: 32px; font-size: 12px; color: var(--ad-muted); line-height: 1.8; }
 .ad-settings-local span { display: block; font-size: 11px; }
-.ad-settings-main { overflow-y: auto; min-width: 0; padding: 36px clamp(24px, 4vw, 64px) 40px; }
+.ad-settings-main { overflow-y: auto; scrollbar-gutter: stable; min-width: 0; padding: 36px clamp(24px, 4vw, 64px) 40px; }
 .ad-settings-content { max-width: 1040px; margin: 0 auto; }
 .ad-settings-header { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 28px; }
 .ad-settings-header > div { flex: 1; }
@@ -275,6 +275,7 @@ button:focus-visible, select:focus-visible, [role='button']:focus-visible, [role
 .ad-deletion-notice > div { flex: 1; min-width: 0; }
 .ad-deletion-notice > button { flex-shrink: 0; }
 .ad-delete-backup { overflow-wrap: anywhere; margin-top: 4px; }
+.ad-context-danger:not([aria-disabled='true']), .ad-context-danger:not([aria-disabled='true']) svg { color: var(--colorPaletteRedForeground1); }
 .ad-context-delete-reason { max-width: 250px; padding: 4px 12px 8px; font-size: 11px; color: var(--colorNeutralForeground3); line-height: 1.6; }
 .ad-delete-disabled-reason { padding: 0 14px 8px; color: var(--ad-muted); line-height: 1.5; }
 .ad-settings-toolbar { display: flex; align-items: center; gap: 16px; padding-bottom: 28px; margin-bottom: 28px; border-bottom: 1px solid var(--ad-line); }

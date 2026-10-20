@@ -103,7 +103,7 @@ export function DiagnosticsView({ revision = 0, embedded = false }: { revision?:
   return (
     <div className={styles.wrap} style={embedded ? { height:'auto',overflow:'visible',padding:0,background:'transparent' } : undefined}><div className={styles.content}>
       <Heading style={{ fontSize: embedded ? 17 : 20, margin: '0 0 8px' }}>{embedded ? '数据与诊断' : '设置'}</Heading>
-      <p className={styles.msg} style={{ margin: '0 0 24px' }}>查看数据来源、维护全文索引和管理本机标注。</p>
+      <p className={styles.msg} style={{ margin: '0 0 24px' }}>备份与恢复、数据存储位置、数据来源、全文索引与本机标注。</p>
       <DataBackup onRestored={load} />
       <DataLocation />
       <div className={styles.section}>
@@ -128,7 +128,7 @@ export function DiagnosticsView({ revision = 0, embedded = false }: { revision?:
         <Text block className={styles.msg} style={{ marginTop: 8 }}>压缩历史库只重新编码正文（原始内容不变，逐行校验过），并回收文件空间；可以随时重复执行。</Text>
       </div>
       <div className={styles.section}>
-        <Text className={styles.h}>Agent 能力诊断</Text>
+        <Text className={styles.h}>智能体能力诊断</Text>
         <Text className={styles.msg} style={{ display: 'block', marginBottom: '8px' }}>
           诊断结果基于当前扫描数据。新增记录需返回工作台后单击“刷新”。
         </Text>

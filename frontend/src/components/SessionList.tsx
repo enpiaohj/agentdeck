@@ -36,6 +36,7 @@ import { agentMeta, fmtTime, relTime } from '../util'
 import { pickOpenPath } from '../nativeDialogs'
 import { AgentMark } from '../icons/AgentMark'
 import type { SidebarFilter } from './Sidebar'
+import { usePreferences } from '../hooks/usePreferences'
 import { presentSessions, sessionDateGroup, sessionMonth, type SessionOrder } from '../sessionPresentation'
 import { selectSession, selectContextSession, pruneSelection, type SessionSelection, type SelectionModifiers } from '../sessionSelection'
 import { SessionContextMenu, type SessionAction } from './SessionContextMenu'
@@ -105,7 +106,7 @@ const useStyles = makeStyles({
   rowActive: {
     backgroundColor: tokens.colorBrandBackground2,
     ...shorthands.borderColor(tokens.colorBrandBackground2),
-    boxShadow: `inset 2px 0 0 ${tokens.colorBrandBackground}`,
+    boxShadow: `inset 3px 0 0 ${tokens.colorBrandBackground}`,
     ':hover': { backgroundColor: tokens.colorBrandBackground2Hover },
   },
   rowSelected: { backgroundColor: tokens.colorBrandBackground2, ...shorthands.borderColor(tokens.colorBrandBackground2), ':hover': { backgroundColor: tokens.colorBrandBackground2Hover } },
@@ -180,7 +181,9 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
   const [account, setAccount] = useState('')
   const accounts = useMemo(() => [...new Set(rows.map(row => row.account).filter(Boolean))].sort(), [rows])
   const months = useMemo(() => [...new Set(rows.map(row => sessionMonth(row.last)).filter(Boolean))].sort().reverse(), [rows])
-  const [order, setOrder] = useState<SessionOrder>('latest')
+  const { preferences } = usePreferences()
+  const [order, setOrder] = useState<SessionOrder>(preferences.listOrder)
+  useEffect(() => { setOrder(preferences.listOrder) }, [preferences.listOrder])
   const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(() => new Set())
   const allFamilies = useMemo(() => groupSessionRows(rows, new Set()), [rows])
   const filteredRows = useMemo(() => presentSessions(rows, query, order, account).filter(row => !month || sessionMonth(row.last) === month), [rows, query, order, month, account])
@@ -217,7 +220,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
   // 这样连续两次点「全部会话」都能生效，也不会被其它筛选变更误触发。
   useEffect(() => {
     if (resetToken === undefined) return
-    setQuery(''); setMonth(''); setAccount(''); setOrder('latest')
+    setQuery(''); setMonth(''); setAccount(''); setOrder(preferences.listOrder)
   }, [resetToken])
   useEffect(() => {
     if (selectedKey) setSelection(previous => previous.focus === selectedKey ? previous : { keys: new Set([selectedKey]), anchor: selectedKey, focus: selectedKey })
@@ -503,6 +506,14 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
                       if (e.target !== e.currentTarget || e.nativeEvent.isComposing || busy) return
                       const modifiers = { toggle: e.ctrlKey || e.metaKey, range: e.shiftKey }
                       if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); e.stopPropagation(); const box=e.currentTarget.getBoundingClientRect(); openContext(s, box.left+20, box.top+20); return }
+                      if (e.key === 'F2' && !modifiers.toggle && !modifiers.range) { e.preventDefault(); onSelect(s); renameCancelled.current = false; setRenamingKey(s.key); setRenameDraft(s.title); return }
+                      if (e.key === 'Delete') {
+                        // 与右键菜单同一入口：先出预览与确认，不会直接删。选中行属于多选时作用于整组。
+                        e.preventDefault()
+                        const targets = checked.has(s.key) ? deletionTargets : [s]
+                        if (!deletionUnavailableReason(targets)) onDeleteSessions(targets)
+                        return
+                      }
                       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(s, modifiers); return }
                       if (e.key === 'ArrowRight' && childCount && !expandedFamilies.has(s.key)) { e.preventDefault(); toggleFamily(s); return }
                       if (e.key === 'ArrowLeft') {

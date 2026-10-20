@@ -145,7 +145,7 @@ export function DataLocation() {
   const skipped = (view?.items ?? []).filter(item => item.rebuild)
   return <section className="ad-storage-section" aria-label="数据存储位置">
     <h3>数据存储位置</h3>
-    <p>AgentDeck 自己的数据库与导入副本。原生 Agent 的会话仍保存在它们各自的目录里，不随这里迁移。</p>
+    <p>AgentDeck 自己的数据库与导入副本。原生智能体的会话仍保存在它们各自的目录里，不随这里迁移。</p>
     {view?.note ? <Text block role="alert" className="ad-storage-warn">{view.note}</Text> : null}
     {restartNeeded ? <Text block role="status" className="ad-storage-restart">数据位置已改变，重启后生效。
       <Button size="small" appearance="primary" onClick={() => void restart()}>立即重启</Button></Text> : null}
@@ -173,7 +173,7 @@ export function DataLocation() {
         {!view.using_default ? <Button size="small" appearance="subtle" icon={busy === 'reset' ? <Spinner size="extra-tiny" /> : <ArrowResetRegular />} disabled={!!busy} onClick={() => void reset()}>改回默认位置</Button> : null}
         <Button size="small" appearance="subtle" icon={<ArrowClockwiseRegular />} disabled={!!busy} onClick={load}>更新统计</Button>
       </div>
-      <p>迁移只复制 AgentDeck 自己的数据，不移动原生 Agent 的目录。数据位置固定是所选目录下的 {view.leaf} 子目录。全文索引{skipped.some(item => item.rebuild && item.present) ? `（当前 ${fmtBytes(skipped.reduce((sum, item) => sum + (item.present ? item.bytes : 0), 0))}）` : ''}可重建，不参与复制，重启后自动重建。</p>
+      <p>迁移只复制 AgentDeck 自己的数据，不移动原生智能体的目录。数据位置固定是所选目录下的 {view.leaf} 子目录。全文索引{skipped.some(item => item.rebuild && item.present) ? `（当前 ${fmtBytes(skipped.reduce((sum, item) => sum + (item.present ? item.bytes : 0), 0))}）` : ''}可重建，不参与复制，重启后自动重建。</p>
       <p>迁移过程中请勿关闭应用。旧位置的数据一律保留，确认无误后再清理。</p>
     </> : <Spinner size="tiny" />}
     {/* 迁移进度只画在弹窗里：迁移期间弹窗是模态且不许关闭，设置区被遮在后面，
@@ -234,7 +234,7 @@ export function DataLocation() {
         <DialogContent>
           <p>将删除以下位置中的 AgentDeck 数据文件，共 {cleanup?.files ?? 0} 个文件（{fmtBytes(cleanup?.bytes ?? 0)}）：</p>
           <ul>{(cleanup?.dirs ?? []).map(dir => <li key={dir}><span className="ad-storage-path">{dir}</span></li>)}</ul>
-          <p>应用配置文件、原生 Agent 的目录与旧位置中的其他条目不会被删除，也不会删除非空目录。</p>
+          <p>应用配置文件、原生智能体的目录与旧位置中的其他条目不会被删除，也不会删除非空目录。</p>
           {cleanup?.other?.length ? <p>不会被删除的条目：{cleanup.other.join('、')}</p> : null}
         </DialogContent>
         <DialogActions>

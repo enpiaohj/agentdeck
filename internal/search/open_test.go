@@ -190,3 +190,96 @@ func TestUpgradeTightensTheWALItLeaves(t *testing.T) {
 		t.Fatalf("升级后检索 = %d 条, %v; want 5 条", len(rs), err)
 	}
 }
+
+// 一趟构建里最大的那个会话决定 WAL 的高水位：事务提交后文件不会自己缩，
+// 只会一直占着盘直到进程退出（本机实测扫描结束后停在 156 MB 不回落）。
+// 构建收尾调 Checkpoint，把它截回去，且不影响随后的检索。
+func TestCheckpointTruncatesWALAfterBigWrites(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "search.db")
+	ix, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ix.Close()
+
+	text := strings.Repeat("远程连接超时与数据库索引重建的排查记录，", 40)
+	docs := make([]Doc, 2000)
+	for i := range docs {
+		docs[i] = Doc{Key: fmt.Sprintf("claude:big#%d", i), Text: text}
+	}
+	if err := ix.Add(docs); err != nil {
+		t.Fatal(err)
+	}
+	wal := func() int64 {
+		fi, err := os.Stat(path + "-wal")
+		if os.IsNotExist(err) {
+			return 0
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		return fi.Size()
+	}
+	if before := wal(); before < 1<<20 {
+		t.Skipf("这批写入只留下 %d 字节 WAL，构造不出需要截断的场景", before)
+	}
+	if err := ix.Checkpoint(); err != nil {
+		t.Fatal(err)
+	}
+	if after := wal(); after > 1<<20 {
+		t.Fatalf("Checkpoint 后 WAL 仍有 %d 字节", after)
+	}
+	rs, err := ix.Search(context.Background(), "排查记录", 5)
+	if err != nil || len(rs) != 5 {
+		t.Fatalf("Checkpoint 后检索 = %d 条, %v; want 5 条", len(rs), err)
+	}
+}
+
+// 内存库没有 WAL，Checkpoint 应是无害的空操作。
+func TestCheckpointOnMemoryIndexIsHarmless(t *testing.T) {
+	ix, err := Open("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ix.Close()
+	if err := ix.Checkpoint(); err != nil {
+		t.Fatalf("内存库 Checkpoint = %v", err)
+	}
+}
+
+// 增量重读一个在写的会话时，没变的段落原样跳过，变了的段落仍整段替换：
+// 旧词不再命中、新词命中，没变的段落始终可检索，且不产生重复行。
+func TestAddSkipsUnchangedDocsButReplacesChangedOnes(t *testing.T) {
+	ix, err := Open("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ix.Close()
+	first := []Doc{
+		{Key: "claude:s#0", Text: "远程连接超时排查"},
+		{Key: "claude:s#1", Text: "数据库索引重建"},
+	}
+	if err := ix.Add(first); err != nil {
+		t.Fatal(err)
+	}
+	second := []Doc{first[0], {Key: "claude:s#1", Text: "缓存预热策略"}, {Key: "claude:s#2", Text: "新增的一段"}}
+	if err := ix.Add(second); err != nil {
+		t.Fatal(err)
+	}
+	count := func(q string) int {
+		n, err := ix.Count(context.Background(), q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	for q, want := range map[string]int{"远程连接": 1, "缓存预热": 1, "新增": 1, "数据库索引": 0} {
+		if got := count(q); got != want {
+			t.Errorf("Count(%q) = %d; want %d", q, got, want)
+		}
+	}
+	sessions, docs, err := ix.Totals()
+	if err != nil || sessions != 1 || docs != 3 {
+		t.Fatalf("Totals = %d 会话 %d 段, %v; want 1 会话 3 段", sessions, docs, err)
+	}
+}

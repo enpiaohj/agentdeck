@@ -14,6 +14,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -60,6 +61,19 @@ var schema = []string{
 // Close 关闭底层库。
 func (ix *Index) Close() error {
 	return ix.db.Close()
+}
+
+// Checkpoint 把 WAL 里的帧并回主库并把 WAL 文件截回零长度。
+// 一趟构建里最大的那个会话决定 WAL 的高水位，事务提交后文件不会自己变小，
+// 只会占着盘直到进程干净退出；构建收尾调一次即可。检索正读着时截不掉
+// （busy），那只是这次没截成，不是错误——帧都已写入主库，下一趟再截。
+func (ix *Index) Checkpoint() error {
+	var busy, logFrames, moved int
+	err := ix.db.QueryRow(`PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &logFrames, &moved)
+	if err != nil {
+		return fmt.Errorf("检查点索引 WAL: %w", err)
+	}
+	return nil
 }
 
 // Reset 清空并重建 schema：索引是纯派生物，分词函数或脱敏规则变更
@@ -116,7 +130,8 @@ func (ix *Index) Add(docs []Doc) error {
 		seg := segs[i]
 		indexable := seg != "" // 空串即一个词元都切不出来
 		var rowid int64
-		err := tx.QueryRow(`SELECT rowid FROM docs WHERE key = ?`, d.Key).Scan(&rowid)
+		var prev string
+		err := tx.QueryRow(`SELECT rowid, text FROM docs WHERE key = ?`, d.Key).Scan(&rowid, &prev)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			if !indexable {
@@ -139,6 +154,11 @@ func (ix *Index) Add(docs []Doc) error {
 		case err != nil:
 			tx.Rollback()
 			return err
+		case prev == d.Text && indexable:
+			// 正文没变，分词结果必然相同（分词契约变更走 user_version 整库重建）。
+			// 增量里一个在写的长会话每趟都整段重读，绝大多数段落原样不动，
+			// 跳过它们省掉一次 FTS 删除 + 插入和相应的 WAL。
+			continue
 		default:
 			if _, err := tx.Exec(`DELETE FROM docs_fts WHERE rowid = ?`, rowid); err != nil {
 				tx.Rollback()
