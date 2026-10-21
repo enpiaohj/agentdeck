@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 )
@@ -99,6 +100,82 @@ func TestFindWindowsClassic(t *testing.T) {
 	ran(t, filepath.Join(pkg2, "Roaming", "Claude"), time.Now())
 	if got := Find("windows", home2, env(map[string]string{"LOCALAPPDATA": local2, "APPDATA": roaming2})); got.Package != pkg2 {
 		t.Errorf("only an MCP file in %%APPDATA%%\\Claude: %+v", got)
+	}
+}
+
+// Desktop 3.x moved its userData out of the package into
+// %LOCALAPPDATA%\Claude-Data\claude_<publisher>, leaving only a
+// .user-data-left.<package> file in the package's folder. Its Cowork and
+// Code sessions are in the new folder, so it is read as well (Shared), and
+// the folder Desktop ran in counts when the package is ranked.
+func TestFindSharedData(t *testing.T) {
+	home := t.TempDir()
+	local, roaming := filepath.Join(home, "AppData", "Local"), filepath.Join(home, "AppData", "Roaming")
+	e := env(map[string]string{"LOCALAPPDATA": local, "APPDATA": roaming})
+	pkg := filepath.Join(local, "Packages", "Claude_pzs8sxrjxfjjc", "LocalCache")
+	old := filepath.Join(pkg, "Roaming", "Claude")
+	if err := os.MkdirAll(old, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(old, ".user-data-left.claude_pzs8sxrjxfjjc"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	shared := filepath.Join(local, "Claude-Data", "claude_pzs8sxrjxfjjc")
+	ran(t, shared, time.Now())
+
+	got := Find("windows", home, e)
+	if got.Package != pkg || got.Shared != shared {
+		t.Fatalf("got %+v, want package %q and shared %q", got, pkg, shared)
+	}
+	if all := got.All(); !slices.Contains(all, shared) {
+		t.Errorf("shared folder not read: %v", all)
+	}
+	if !slices.Contains(Sets("windows", home, e)[1].All(), shared) {
+		t.Errorf("the other set misses the shared folder")
+	}
+	// it is a folder of its own, not Data or Mode
+	if got.Data == shared || got.Mode == shared {
+		t.Errorf("shared taken as Data or Mode: %+v", got)
+	}
+	// three mtimes: only the shared one is recent, and the package ran last
+	ran(t, filepath.Join(roaming, "Claude"), time.Now().Add(-time.Hour))
+	if got := Find("windows", home, e); got.Package != pkg {
+		t.Errorf("classic ranked over the running package: %+v", got)
+	}
+}
+
+// The folder is per Windows account, not per package: it is found with no
+// package installed (the package removed after the move), and when several
+// are there the one Desktop ran in last wins. Claude-Data is not taken for
+// the deploymentMode folder (%LOCALAPPDATA%\Claude) either.
+func TestFindSharedWithoutPackage(t *testing.T) {
+	home := t.TempDir()
+	local, roaming := filepath.Join(home, "Local"), filepath.Join(home, "Roaming")
+	root := filepath.Join(local, "Claude-Data")
+	older, newer := filepath.Join(root, "claude_a"), filepath.Join(root, "claude_b")
+	ran(t, older, time.Now().Add(-time.Hour))
+	ran(t, newer, time.Now())
+	e := env(map[string]string{"LOCALAPPDATA": local, "APPDATA": roaming})
+	got := Find("windows", home, e)
+	if got.Shared != newer {
+		t.Errorf("shared %q, want %q", got.Shared, newer)
+	}
+	if got.Package != "" {
+		t.Errorf("package %q, want none", got.Package)
+	}
+	if want := filepath.Join(local, "Claude"); got.Mode != want {
+		t.Errorf("mode %q, want %q", got.Mode, want)
+	}
+
+	// only the folder, no "Local State": still found
+	home2 := t.TempDir()
+	local2 := filepath.Join(home2, "Local")
+	bare := filepath.Join(local2, "Claude-Data", "claude_c")
+	if err := os.MkdirAll(bare, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := Find("windows", home2, env(map[string]string{"LOCALAPPDATA": local2})); got.Shared != bare {
+		t.Errorf("bare folder: %+v", got)
 	}
 }
 

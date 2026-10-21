@@ -789,3 +789,57 @@ func TestCallsCoworkMSIX(t *testing.T) {
 		t.Fatalf("calls: %+v", cs)
 	}
 }
+
+// Desktop 3.x moved its userData out of the package into
+// %LOCALAPPDATA%\Claude-Data\claude_<publisher>, leaving only a
+// .user-data-left file behind: its Cowork and Code sessions are read from
+// the new folder, for the account signed in as well as the ones before it.
+func TestCallsClaudeData(t *testing.T) {
+	setupCalls(t)
+	old := desktopdir.OS
+	desktopdir.OS = "windows"
+	callDesktopDirs = desktopDataDirs
+	t.Cleanup(func() { desktopdir.OS = old })
+	home := filepath.Join(t.TempDir(), "home")
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	local, roaming := filepath.Join(home, "AppData", "Local"), filepath.Join(home, "AppData", "Roaming")
+	t.Setenv("LOCALAPPDATA", local)
+	t.Setenv("APPDATA", roaming)
+	os.MkdirAll(roaming, 0o755)
+
+	shared := filepath.Join(local, "Claude-Data", "claude_pzs8sxrjxfjjc")
+	writeLines(t, filepath.Join(shared, "Local State"), `{}`)
+	pkg := filepath.Join(local, "Packages", "Claude_pzs8sxrjxfjjc", "LocalCache")
+	os.MkdirAll(filepath.Join(pkg, "Roaming", "Claude"), 0o755)
+
+	found := false
+	for _, d := range desktopDataDirs() {
+		found = found || d == shared
+	}
+	if !found {
+		t.Fatalf("Claude-Data folder not read: %v", desktopDataDirs())
+	}
+
+	// Cowork under the account signed in now, and Code under the one before
+	cw := filepath.Join(shared, "local-agent-mode-sessions", "acct", "org", "local_new", ".claude", "projects", "-sessions-x")
+	writeLines(t, filepath.Join(cw, "cw1.jsonl"), swap(claudeMsg("c1", "claude-sonnet-5-5", 5, 6, 7, 8, 3), `"entrypoint":"cli"`, `"entrypoint":"local-agent"`))
+	code := filepath.Join(shared, "claude-code-sessions", "acct2", "org", "local_old", ".claude", "projects", "-work", "code1.jsonl")
+	writeLines(t, code, claudeMsg("c2", "claude-opus-5-5", 1, 2, 3, 4, 2))
+
+	Reset()
+	list := List(All)
+	got := map[string]Session{}
+	for _, s := range list {
+		got[s.Agent+":"+s.ID] = s
+	}
+	for _, want := range []string{"claude-desktop:cw1", "claude-desktop:code1"} {
+		if _, ok := got[want]; !ok {
+			t.Errorf("missing %s (got %v)", want, got)
+		}
+	}
+	cs := Calls(time.Time{})
+	if len(cs) != 2 || cs[0].Agent != "claude-desktop" || cs[1].Agent != "claude-desktop" {
+		t.Fatalf("calls: %+v", cs)
+	}
+}

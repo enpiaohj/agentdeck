@@ -17,6 +17,19 @@
 //
 // (AnthropicPBC.Claude_<publisher> for the Store's package.)
 //
+// Desktop 3.x moved that data out of the package on 2026-10-20 (on this
+// machine): its userData is now
+//
+//	%LOCALAPPDATA%\Claude-Data\claude_<publisher>
+//
+// with a README saying the folder holds "the data Claude keeps for this
+// Windows account", and its log loading sessions from there
+// ("Loaded N persisted sessions from ...Claude-Data\claude_..."). The old
+// package folder keeps a .user-data-left.<package> file and nothing else,
+// so those sessions are read only through the Claude-Data folder (Shared).
+// Its name is the package family's, lowercased
+// (Claude_pzs8sxrjxfjjc → claude_pzs8sxrjxfjjc).
+//
 // The packaged app reads its own copy before the real folder's, so a file
 // another program writes into %APPDATA%\Claude is not seen once the app has
 // one there. Such an install's folders are the package's: those are found,
@@ -58,12 +71,18 @@ type Dirs struct {
 	// Package is the MSIX package's LocalCache folder Data, Mode and ThreeP
 	// are in, "" for Desktop not installed as a package.
 	Package string
+	// Shared is Desktop 3.x's userData for this Windows account, which it
+	// moved out of the package and %APPDATA%:
+	// %LOCALAPPDATA%\Claude-Data\claude_<publisher>. Its sessions (Cowork's
+	// and the Code tab's) are there; the old folder keeps only a
+	// .user-data-left.<package> file. "" before 3.x, or when it never ran.
+	Shared string
 }
 
-// All are Data, Mode and ThreeP, each once.
+// All are Data, Mode, ThreeP and Shared, each once.
 func (d Dirs) All() []string {
 	var out []string
-	for _, p := range []string{d.Data, d.Mode, d.ThreeP} {
+	for _, p := range []string{d.Data, d.Mode, d.ThreeP, d.Shared} {
 		if p != "" && !slices.Contains(out, p) {
 			out = append(out, p)
 		}
@@ -104,7 +123,10 @@ func Sets(goos, home string, getenv func(string) string) []Dirs {
 	case "windows":
 		local := env("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
 		roaming := env("APPDATA", filepath.Join(home, "AppData", "Roaming"))
-		classic := Dirs{Data: filepath.Join(roaming, "Claude"), Mode: windowsDir(local, false), ThreeP: windowsDir(local, true)}
+		// Desktop 3.x's own folder, wherever it is installed from: it keeps
+		// its userData there instead of in the package or %APPDATA% (Shared)
+		shared := sharedDir(local)
+		classic := Dirs{Data: filepath.Join(roaming, "Claude"), Mode: windowsDir(local, false), ThreeP: windowsDir(local, true), Shared: shared}
 		pkg := packageDir(local)
 		if pkg == "" {
 			return []Dirs{classic}
@@ -114,11 +136,13 @@ func Sets(goos, home string, getenv func(string) string) []Dirs {
 			Mode:    filepath.Join(pkg, "Local", "Claude"),
 			ThreeP:  filepath.Join(pkg, "Local", "Claude-3p"),
 			Package: pkg,
+			Shared:  shared,
 		}
 		// the usual folders while Desktop runs there; the package's when
 		// only it has run in its own, or ran there last (a Desktop moved
-		// from the usual install onto the package leaves its old data)
-		c, p := lastRun(classic.Data, classic.ThreeP), lastRun(packaged.Data, packaged.ThreeP)
+		// from the usual install onto the package leaves its old data).
+		// 3.x runs in Shared, so its mtime counts as the package's.
+		c, p := lastRun(classic.Data, classic.ThreeP), lastRun(packaged.Data, packaged.ThreeP, shared)
 		if !c.IsZero() && !p.After(c) {
 			return []Dirs{classic, packaged}
 		}
@@ -173,11 +197,49 @@ func LastRun(dirs ...string) time.Time { return lastRun(dirs...) }
 func lastRun(dirs ...string) time.Time {
 	var t time.Time
 	for _, d := range dirs {
+		if d == "" {
+			continue
+		}
 		if fi, err := os.Stat(filepath.Join(d, "Local State")); err == nil && fi.Mode().IsRegular() && fi.ModTime().After(t) {
 			t = fi.ModTime()
 		}
 	}
 	return t
+}
+
+// sharedDir is Desktop 3.x's userData under local (%LOCALAPPDATA%):
+// Claude-Data\claude_<publisher>, the package family's name lowercased. The
+// folder is per Windows account, not per package, so it is found by what is
+// there rather than by the package: the one Desktop ran in last (its "Local
+// State"), else the first. "" for a Desktop 2.x, which kept its data in the
+// package's LocalCache or %APPDATA%\Claude.
+func sharedDir(local string) string {
+	root := filepath.Join(local, "Claude-Data")
+	ents, err := os.ReadDir(root)
+	if err != nil {
+		return ""
+	}
+	var dirs []string
+	var last time.Time
+	best := ""
+	for _, e := range ents {
+		if !e.IsDir() {
+			continue
+		}
+		p := filepath.Join(root, e.Name())
+		dirs = append(dirs, p)
+		if t := lastRun(p); !t.IsZero() && !t.Before(last) {
+			last, best = t, p
+		}
+	}
+	if best != "" {
+		return best
+	}
+	if len(dirs) == 0 {
+		return ""
+	}
+	sort.Strings(dirs)
+	return dirs[0]
 }
 
 // packageDir is the LocalCache folder of Desktop's MSIX package under
@@ -224,9 +286,12 @@ func windowsDir(local string, threep bool) string {
 	ents, _ := os.ReadDir(local)
 	var found []string
 	for _, e := range ents {
-		if n := e.Name(); e.IsDir() && strings.HasPrefix(n, "Claude") && strings.Contains(n, "-3p") == threep {
-			found = append(found, n)
+		n := e.Name()
+		// Claude-Data is 3.x's own tree (sharedDir), not a userData folder
+		if !e.IsDir() || n == "Claude-Data" || !strings.HasPrefix(n, "Claude") || strings.Contains(n, "-3p") != threep {
+			continue
 		}
+		found = append(found, n)
 	}
 	if len(found) == 0 {
 		return exact
