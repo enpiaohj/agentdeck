@@ -36,6 +36,9 @@ type Config struct {
 	Version       int    `json:"version"`
 	DataRoot      string `json:"data_root,omitempty"`
 	TerminalShell string `json:"terminal_shell,omitempty"`
+	// 桌面生命周期选项均为显式启用，旧配置缺少字段时默认关闭。
+	StartAtLogin bool `json:"start_at_login"`
+	CloseToTray  bool `json:"close_to_tray"`
 	// PreviousDirs 是上一次迁移数据位置之前实际使用的数据目录（默认位置
 	// 时为 ConfigDir 与 LocalDir 两个）。迁移一律保留旧位置，这里记下来
 	// 供界面提示与「清理旧位置数据」使用；清理是显式动作，不自动执行。
@@ -111,6 +114,17 @@ func LoadFrom(path string) (Config, error) {
 		}
 		delete(fields, key)
 	}
+	for key, target := range map[string]*bool{
+		"start_at_login": &cfg.StartAtLogin,
+		"close_to_tray":  &cfg.CloseToTray,
+	} {
+		if value, ok := fields[key]; ok {
+			if err = json.Unmarshal(value, target); err != nil {
+				return Default(), fmt.Errorf("应用配置字段 %s 无效：%w", key, err)
+			}
+		}
+		delete(fields, key)
+	}
 	if value, ok := fields["previous_dirs"]; ok {
 		if err = json.Unmarshal(value, &cfg.PreviousDirs); err != nil {
 			return Default(), fmt.Errorf("应用配置字段 previous_dirs 无效：%w", err)
@@ -153,6 +167,10 @@ func SaveTo(path string, cfg Config) error {
 	}
 	shell, _ := json.Marshal(NormalizeShell(cfg.TerminalShell))
 	fields["terminal_shell"] = shell
+	startAtLogin, _ := json.Marshal(cfg.StartAtLogin)
+	fields["start_at_login"] = startAtLogin
+	closeToTray, _ := json.Marshal(cfg.CloseToTray)
+	fields["close_to_tray"] = closeToTray
 	if len(cfg.PreviousDirs) > 0 {
 		dirs := make([]string, 0, len(cfg.PreviousDirs))
 		for _, dir := range cfg.PreviousDirs {

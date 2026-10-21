@@ -25,13 +25,16 @@ export function TerminalShellControl({ id }: { id: string }) {
   const [error, setError] = useState('')
   // custom 是自定义路径输入框的内容；只有当前取值不是预置值时才非空。
   const [custom, setCustom] = useState('')
-  const load = useCallback(() => {
-    settingsService.TerminalShell().then(next => {
+  const [customMode, setCustomMode] = useState(false)
+  const load = useCallback((keepError = false) => {
+    return settingsService.TerminalShell().then(next => {
       setView(next)
       setCustom(isCustom(next.setting) ? next.setting : '')
+      setCustomMode(isCustom(next.setting))
+      if (!keepError) setError('')
     }).catch(reason => setError(`读取终端设置失败：${String(reason)}`))
   }, [])
-  useEffect(load, [load])
+  useEffect(() => { void load() }, [load])
   const save = async (value: string) => {
     if (saving) return
     setSaving(true)
@@ -40,10 +43,11 @@ export function TerminalShellControl({ id }: { id: string }) {
       const next = await settingsService.SetTerminalShell(value)
       setView(next)
       setCustom(isCustom(next.setting) ? next.setting : '')
+      setCustomMode(isCustom(next.setting))
     } catch (reason) {
       setError(String(reason))
       // 保存失败时以实际生效的取值为准，避免界面显示一个并未生效的值。
-      load()
+      await load(true)
     } finally {
       setSaving(false)
     }
@@ -64,11 +68,11 @@ export function TerminalShellControl({ id }: { id: string }) {
       setError(`选择文件失败：${String(reason)}`)
     }
   }
-  const selected = view ? (isCustom(view.setting) ? CUSTOM : view.setting) : ''
+  const selected = view ? (customMode ? CUSTOM : view.setting) : ''
   const note = error || (view?.error ?? '') || (view?.version ? `已检测到 ${view.version}` : '')
   return <div className="ad-terminal-shell">
     <Select id={id} aria-label="终端 PowerShell" value={selected} disabled={saving || !view}
-      onChange={(_, data) => { if (data.value === CUSTOM) { setCustom(view?.setting && isCustom(view.setting) ? view.setting : ''); return } void save(data.value) }}>
+      onChange={(_, data) => { if (data.value === CUSTOM) { setCustomMode(true); setCustom(view?.setting && isCustom(view.setting) ? view.setting : ''); return } void save(data.value) }}>
       {(view?.options ?? []).map(option => <option key={option.value} value={option.value} disabled={!!option.error}>
         {SHELL_LABELS[option.value] ?? option.value}{option.error ? '（未检测到）' : ''}
       </option>)}
@@ -85,6 +89,7 @@ export function TerminalShellControl({ id }: { id: string }) {
     {saving || note ? <Text block className={`ad-terminal-shell-note${error || view?.error ? ' ad-terminal-shell-note-error' : ''}`} role={error || view?.error ? 'alert' : 'status'}>
       {saving ? <Spinner size="extra-tiny" /> : null}{saving ? '正在检测…' : note}
     </Text> : null}
+    {!view && error ? <Button size="small" onClick={() => void load()}>重试读取终端设置</Button> : null}
   </div>
 }
 

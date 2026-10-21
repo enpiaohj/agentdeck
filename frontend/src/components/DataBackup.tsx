@@ -51,8 +51,8 @@ export function DataBackup({ onRestored }: { onRestored: () => void }) {
     finally { setBusy(null) }
   }
   return <section className="ad-backup-section" aria-label="完整数据备份与恢复">
-    <h3>完整数据备份与恢复</h3>
-    <p>将永久会话库及全部内容版本、收藏、归档、标签、备注、导入历史和界面偏好保存为一个 ZIP 文件。</p>
+    <h2>完整备份</h2>
+    <p>将本地会话库及全部内容版本、收藏、归档、标签、备注、导入历史和界面偏好保存为一个 ZIP 文件。</p>
     <div className="ad-backup-actions">
       <Button size="small" icon={busy === 'backup' ? <Spinner size="extra-tiny" /> : <DatabaseRegular />} disabled={!!busy} onClick={() => void backup()}>{busy === 'backup' ? '正在备份…' : '创建完整备份…'}</Button>
       <Button size="small" icon={busy === 'inspect' ? <Spinner size="extra-tiny" /> : <ArrowUploadRegular />} disabled={!!busy} onClick={() => void chooseRestore()}>{busy === 'inspect' ? '正在校验…' : '从完整备份恢复…'}</Button>

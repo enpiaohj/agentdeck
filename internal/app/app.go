@@ -52,6 +52,12 @@ type Config struct {
 	TerminalShell string
 	// Restart 重启应用（迁移数据位置后让新落点生效）；nil 时界面只提示手动重启。
 	Restart func() error
+	// StartAtLoginStatus 查询操作系统中的实际自启动注册状态。
+	StartAtLoginStatus func() (bool, error)
+	// SetStartAtLogin 显式注册或移除自启动；与查询回调同时存在才支持设置。
+	SetStartAtLogin func(bool) error
+	// TrayAvailable 表示当前桌面环境已装配可用托盘。
+	TrayAvailable bool
 }
 
 // App 是装配根：标注库句柄 + 会话列表缓存 + 索引状态。

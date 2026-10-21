@@ -36,6 +36,15 @@ export function CleanupPreview(): $CancellablePromise<$models.CleanupPlan> {
 }
 
 /**
+ * Desktop 读取设置，只查询实际注册状态，不创建配置或修改系统自启动。
+ */
+export function Desktop(): $CancellablePromise<$models.DesktopOptions> {
+    return $Call.ByID(3514621213).then(($result: any) => {
+        return $$createType2($result);
+    });
+}
+
+/**
  * Migrate 把 AgentDeck 自有数据迁移到 picked 目录下固定的 AgentDeck\Data，
  * 成功后写入数据位置指针。picked 是用户在目录选择器里选的目录，不是最终数据
  * 根：补全规则见 storageDestination。详细步骤与不变量见 migrate.go；进度经
@@ -46,7 +55,7 @@ export function CleanupPreview(): $CancellablePromise<$models.CleanupPlan> {
  */
 export function Migrate(picked: string): $CancellablePromise<$models.MigrateReport> {
     return $Call.ByID(434712964, picked).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType3($result);
     });
 }
 
@@ -68,7 +77,7 @@ export function ResetRoot(): $CancellablePromise<void> {
  */
 export function ResolveDestination(picked: string): $CancellablePromise<$models.DestinationView> {
     return $Call.ByID(432786299, picked).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType4($result);
     });
 }
 
@@ -81,6 +90,25 @@ export function Restart(): $CancellablePromise<void> {
 }
 
 /**
+ * SetCloseToTray 持久化关闭窗口行为，保存成功后立即对本次运行生效。
+ */
+export function SetCloseToTray(enabled: boolean): $CancellablePromise<$models.DesktopOptions> {
+    return $Call.ByID(3564853082, enabled).then(($result: any) => {
+        return $$createType2($result);
+    });
+}
+
+/**
+ * SetStartAtLogin 由显式用户操作改变系统注册，然后持久化配置。
+ * 保存失败时恢复操作前的实际注册状态，避免缓存与系统状态不一致。
+ */
+export function SetStartAtLogin(enabled: boolean): $CancellablePromise<$models.DesktopOptions> {
+    return $Call.ByID(388123143, enabled).then(($result: any) => {
+        return $$createType2($result);
+    });
+}
+
+/**
  * SetTerminalShell 校验并保存终端 shell 设置，立即对新开的终端生效。
  * 
  * 取值：appconfig 定义的三个预置值之一，或自定义可执行文件的绝对路径。
@@ -89,7 +117,7 @@ export function Restart(): $CancellablePromise<void> {
  */
 export function SetTerminalShell(value: string): $CancellablePromise<$models.TerminalShellView> {
     return $Call.ByID(3306319109, value).then(($result: any) => {
-        return $$createType4($result);
+        return $$createType5($result);
     });
 }
 
@@ -98,7 +126,7 @@ export function SetTerminalShell(value: string): $CancellablePromise<$models.Ter
  */
 export function Storage(): $CancellablePromise<$models.StorageView> {
     return $Call.ByID(1443616652).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType6($result);
     });
 }
 
@@ -107,14 +135,15 @@ export function Storage(): $CancellablePromise<$models.StorageView> {
  */
 export function TerminalShell(): $CancellablePromise<$models.TerminalShellView> {
     return $Call.ByID(3736505951).then(($result: any) => {
-        return $$createType4($result);
+        return $$createType5($result);
     });
 }
 
 // Private type creation functions
 const $$createType0 = $models.CleanupReport.createFrom;
 const $$createType1 = $models.CleanupPlan.createFrom;
-const $$createType2 = $models.MigrateReport.createFrom;
-const $$createType3 = $models.DestinationView.createFrom;
-const $$createType4 = $models.TerminalShellView.createFrom;
-const $$createType5 = $models.StorageView.createFrom;
+const $$createType2 = $models.DesktopOptions.createFrom;
+const $$createType3 = $models.MigrateReport.createFrom;
+const $$createType4 = $models.DestinationView.createFrom;
+const $$createType5 = $models.TerminalShellView.createFrom;
+const $$createType6 = $models.StorageView.createFrom;

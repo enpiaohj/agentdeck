@@ -26,6 +26,7 @@ export {
     DeclaredProjectView,
     DeletePreview,
     DeleteReport,
+    DesktopOptions,
     DestinationView,
     DiagRow,
     Filter,

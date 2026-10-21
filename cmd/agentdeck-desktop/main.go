@@ -14,6 +14,7 @@ import (
 	appkg "github.com/enpiaohj/agentdeck/internal/app"
 	"github.com/enpiaohj/agentdeck/internal/proc"
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed all:assets
@@ -44,6 +45,10 @@ const relaunchWait = 20 * time.Second
 func main() {
 	e := &lateEmitter{}
 	relaunch := slices.Contains(os.Args[1:], relaunchFlag)
+	trayIcon, iconErr := assets.ReadFile("assets/appicon-256.png")
+	trayAvailable := iconErr == nil && len(trayIcon) > 0
+	startup := desktopStartup()
+	var lifecycle *desktopLifecycle
 	a, err := appkg.New(appkg.Config{
 		Emit: e.Emit,
 		Clipboard: func(text string) error {
@@ -52,7 +57,10 @@ func main() {
 			}
 			return nil
 		},
-		Restart: func() error { return relaunchSelf() },
+		Restart:            func() error { return relaunchSelf(lifecycle.exit) },
+		StartAtLoginStatus: startup.enabled,
+		SetStartAtLogin:    startup.set,
+		TrayAvailable:      trayAvailable,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "装配失败:", err)
@@ -68,6 +76,9 @@ func main() {
 			break
 		}
 		if !relaunch || time.Now().After(deadline) {
+			if !slices.Contains(os.Args[1:], startupFlag) {
+				activateExistingWindow()
+			}
 			fmt.Fprintln(os.Stderr, "AgentDeck 已在运行，本次启动已退出。")
 			os.Exit(0)
 		}
@@ -120,8 +131,38 @@ func main() {
 		// 无边框:标题栏由前端自绘(顶栏品牌区即拖拽区,右侧为窗口控制按钮),
 		// 以便整屏都是应用自身的内容层级。
 		Frameless: true,
+		Hidden:    startupHidden(os.Args[1:], trayAvailable),
 	})
 	e.win = win
+	lifecycle = &desktopLifecycle{closeToTray: a.CloseToTrayEnabled, hide: func() { win.Hide() }, quit: wails.Quit}
+	win.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
+		if lifecycle.closeRequested() {
+			event.Cancel()
+		}
+	})
+	open := func() {
+		if win.IsMinimised() {
+			win.Restore()
+		}
+		win.Show()
+		win.Focus()
+	}
+	activation := &activationGate{dispatch: func() { application.InvokeAsync(open) }}
+	wails.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) { activation.start() })
+	if cleanup, err := listenForActivation(activationEventName, activation.request); err == nil {
+		defer cleanup()
+	} else {
+		fmt.Fprintln(os.Stderr, "无法注册窗口激活通知:", err)
+	}
+	defer activation.stop()
+	if trayAvailable {
+		menu := wails.NewMenu()
+		menu.Add("打开 AgentDeck").OnClick(func(*application.Context) { open() })
+		menu.AddSeparator()
+		menu.Add("退出").OnClick(func(*application.Context) { lifecycle.exit() })
+		tray := wails.SystemTray.New().SetIcon(trayIcon).SetMenu(menu).OnClick(open).OnDoubleClick(open)
+		tray.SetTooltip("AgentDeck")
+	}
 
 	// 启动即后台重建全文索引;进度/完成经 index:progress / index:ready 推送
 	a.NewSearchService().Rebuild()
@@ -137,7 +178,7 @@ func main() {
 // 新实例带 relaunchFlag，会等本进程走完正常退出（defer a.Close() 释放
 // 单实例互斥锁、清除运行标记），因此不会出现「重启后什么都没发生」。
 // 不用 os.Exit 硬退：那会留下假的「上次异常退出」标记。
-func relaunchSelf() error {
+func relaunchSelf(quit func()) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("无法定位 AgentDeck 程序路径：%w", err)
@@ -149,7 +190,7 @@ func relaunchSelf() error {
 	// 先让本次调用返回前端（界面要显示正在重启），再退出。
 	go func() {
 		time.Sleep(300 * time.Millisecond)
-		application.Get().Quit()
+		quit()
 	}()
 	return nil
 }

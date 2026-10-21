@@ -26,7 +26,7 @@ const useStyles = makeStyles({
   content: { maxWidth: '1100px', margin: '0 auto' },
   section: { marginBottom: '16px', padding: '20px', border: `1px solid ${tokens.colorNeutralStroke2}`, borderRadius: '8px', backgroundColor: tokens.colorNeutralBackground1 },
   tableWrap: { overflowX: 'auto' },
-  h: { display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '10px' },
+  h: { display: 'block', fontSize: '14px', fontWeight: 600, marginTop: 0, marginBottom: '10px' },
   table: { width: '100%', minWidth: '680px', borderCollapse: 'collapse', fontSize: '13px' },
   th: {
     textAlign: 'left',
@@ -43,7 +43,10 @@ const useStyles = makeStyles({
   err: { fontSize: '12px', color: tokens.colorPaletteRedForeground1 },
 })
 
-export function DiagnosticsView({ revision = 0, embedded = false }: { revision?: number; embedded?: boolean }) {
+export type SettingsDataSection = 'storage' | 'library' | 'backup' | 'agents' | 'index'
+const allSections: SettingsDataSection[] = ['storage', 'library', 'backup', 'agents', 'index']
+
+export function DiagnosticsView({ revision = 0, embedded = false, sections = allSections }: { revision?: number; embedded?: boolean; sections?: readonly SettingsDataSection[] }) {
   const styles = useStyles()
   const Heading = embedded ? 'h2' : 'h1'
   const [rows, setRows] = useState<DiagRow[] | null>(null)
@@ -52,16 +55,18 @@ export function DiagnosticsView({ revision = 0, embedded = false }: { revision?:
   const status = useIndexStatus()
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
-  // 压缩历史库是几十秒到几分钟的原地重写：进度经 storage:progress 推来
+  const showAgents = sections.includes('agents')
+  const showLibrary = sections.includes('library')
+  // 压缩会话库是几十秒到几分钟的原地重写：进度经 storage:progress 推来
   // （stage=compact），期间禁掉按钮，避免并发压同一批行。
   const [compactBusy, setCompactBusy] = useState('')
   const [compactDone, setCompactDone] = useState('')
   const [compactProgress, setCompactProgress] = useState<StorageProgress | null>(null)
 
   const load = useCallback(() => {
-    sessionService.Diagnostics().then(setRows).catch((e) => setErr(String(e)))
-    sessionService.LibraryStatus().then(value => { setLibrary(value); setLibraryError('') }).catch(reason => setLibraryError(String(reason)))
-  }, [])
+    if (showAgents) sessionService.Diagnostics().then(setRows).catch((e) => setErr(String(e)))
+    if (showLibrary) sessionService.LibraryStatus().then(value => { setLibrary(value); setLibraryError('') }).catch(reason => setLibraryError(String(reason)))
+  }, [showAgents, showLibrary])
 
   useEffect(() => {
     load()
@@ -90,7 +95,7 @@ export function DiagnosticsView({ revision = 0, embedded = false }: { revision?:
     setLibraryError('')
     setCompactDone('')
     setCompactProgress(null)
-    setCompactBusy('正在压缩历史库…')
+    setCompactBusy('正在压缩会话库…')
     sessionService.CompactLibrary()
       .then(report => {
         setCompactDone(`压缩完成：${formatBytes(report.before)} → ${formatBytes(report.after)}（共 ${report.versions} 个版本，用时 ${fmtElapsed(report.elapsed)}）`)
@@ -102,16 +107,16 @@ export function DiagnosticsView({ revision = 0, embedded = false }: { revision?:
 
   return (
     <div className={styles.wrap} style={embedded ? { height:'auto',overflow:'visible',padding:0,background:'transparent' } : undefined}><div className={styles.content}>
-      <Heading style={{ fontSize: embedded ? 17 : 20, margin: '0 0 8px' }}>{embedded ? '数据与诊断' : '设置'}</Heading>
-      <p className={styles.msg} style={{ margin: '0 0 24px' }}>备份与恢复、数据存储位置、数据来源、全文索引与本机标注。</p>
-      <DataBackup onRestored={load} />
-      <DataLocation />
-      <div className={styles.section}>
-        <Text className={styles.h}>永久会话库</Text>
+      {!embedded ? <><Heading style={{ fontSize: 20, margin: '0 0 8px' }}>设置</Heading>
+      <p className={styles.msg} style={{ margin: '0 0 24px' }}>备份与恢复、数据存储位置、数据来源、全文索引与本机标注。</p></> : null}
+      {sections.includes('backup') ? <DataBackup onRestored={load} /> : null}
+      {sections.includes('storage') ? <DataLocation /> : null}
+      {showLibrary ? <div className={styles.section}>
+        <Text as="h2" className={styles.h}>本地会话库</Text>
         <div className={styles.row}>
           <Text size={300}>默认开启 · 不自动清理</Text>
           <Button size="small" appearance="subtle" icon={<ArrowClockwiseRegular />} onClick={load}>更新统计</Button>
-          <Button size="small" appearance="subtle" onClick={compact} disabled={!!compactBusy}>压缩历史库</Button>
+          <Button size="small" appearance="subtle" onClick={compact} disabled={!!compactBusy}>压缩会话库</Button>
         </div>
         {library ? <>
           <Text block size={300}>{library.sessions} 个会话 · {library.versions} 个内容版本 · 正文约 {formatBytes(library.bytes)}</Text>
@@ -124,11 +129,11 @@ export function DiagnosticsView({ revision = 0, embedded = false }: { revision?:
           {compactProgress ? ` · 已用 ${fmtElapsed(compactProgress.elapsed)}` : ''}
         </Text> : null}
         {compactDone ? <Text block role="status" className={styles.ok} style={{ marginTop: 8 }}>{compactDone}</Text> : null}
-        <Text block className={styles.msg} style={{ marginTop: 8 }}>启动、刷新后的索引构建及打开正文时自动保存成功读取的内容。相同正文去重，变化保留版本；上游清理后仍可阅读、搜索和导出。重建索引不删除永久库。</Text>
-        <Text block className={styles.msg} style={{ marginTop: 8 }}>压缩历史库只重新编码正文（原始内容不变，逐行校验过），并回收文件空间；可以随时重复执行。</Text>
-      </div>
-      <div className={styles.section}>
-        <Text className={styles.h}>智能体能力诊断</Text>
+        <Text block className={styles.msg} style={{ marginTop: 8 }}>启动、刷新后的索引构建及打开正文时自动保存成功读取的内容。相同正文去重，变化保留版本；上游清理后仍可阅读、搜索和导出。重建索引不删除本地会话库。</Text>
+        <Text block className={styles.msg} style={{ marginTop: 8 }}>压缩会话库只重新编码正文（原始内容不变，逐行校验过），并回收文件空间；可以随时重复执行。</Text>
+      </div> : null}
+      {showAgents ? <div className={styles.section}>
+        <Text as="h2" className={styles.h}>智能体检测</Text>
         <Text className={styles.msg} style={{ display: 'block', marginBottom: '8px' }}>
           诊断结果基于当前扫描数据。新增记录需返回工作台后单击“刷新”。
         </Text>
@@ -165,10 +170,10 @@ export function DiagnosticsView({ revision = 0, embedded = false }: { revision?:
             </tbody>
           </table></div>
         )}
-      </div>
+      </div> : null}
 
-      <div className={styles.section}>
-        <Text className={styles.h}>全文索引</Text>
+      {sections.includes('index') ? <div className={styles.section}>
+        <Text as="h2" className={styles.h}>搜索索引</Text>
         <div className={styles.row}>
           <IndexLine status={status} />
           <Button size="small" icon={<ArrowClockwiseRegular />} onClick={rebuild}>重建索引</Button>
@@ -176,8 +181,8 @@ export function DiagnosticsView({ revision = 0, embedded = false }: { revision?:
         {upgradeProgress && upgradeProgress.done < upgradeProgress.total ? <Text block className={styles.msg} style={{ marginBottom: 8 }}>
           正在把旧索引改成不重复存正文的形态：{upgradeProgress.done} / {upgradeProgress.total} 段（只需一次）
         </Text> : null}
-        <Text className={styles.msg}>重建期间搜索自动降级为快速扫描；永久会话库及收藏 / 标签 / 备注不受影响。</Text>
-      </div>
+        <Text className={styles.msg}>重建期间搜索自动降级为快速扫描；本地会话库及收藏 / 标签 / 备注不受影响。</Text>
+      </div> : null}
 
       {msg ? <Text className={styles.msg}>{msg}</Text> : null}
       {err ? <Text className={styles.err}>{err}</Text> : null}

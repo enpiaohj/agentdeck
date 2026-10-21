@@ -355,6 +355,42 @@ export class DeleteReport {
 }
 
 /**
+ * DesktopOptions 是桌面生命周期的当前设置及当前环境支持的能力。
+ */
+export class DesktopOptions {
+    "start_at_login": boolean;
+    "close_to_tray": boolean;
+    "start_at_login_supported": boolean;
+    "tray_supported": boolean;
+
+    /** Creates a new DesktopOptions instance. */
+    constructor($$source: Partial<DesktopOptions> = {}) {
+        if (!("start_at_login" in $$source)) {
+            this["start_at_login"] = false;
+        }
+        if (!("close_to_tray" in $$source)) {
+            this["close_to_tray"] = false;
+        }
+        if (!("start_at_login_supported" in $$source)) {
+            this["start_at_login_supported"] = false;
+        }
+        if (!("tray_supported" in $$source)) {
+            this["tray_supported"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DesktopOptions instance from a string or object.
+     */
+    static createFrom($$source: any = {}): DesktopOptions {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new DesktopOptions($$parsedSource as Partial<DesktopOptions>);
+    }
+}
+
+/**
  * DestinationView 是补全后的迁移目标与它当前的状态：界面在用户确认之前就能
  * 显示数据究竟会落在哪个目录、那里是不是已经有目录，而不是点下「开始迁移」
  * 之后才被拒绝。

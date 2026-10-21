@@ -144,7 +144,7 @@ export function DataLocation() {
   const copy = (view?.items ?? []).filter(item => item.present && !item.rebuild)
   const skipped = (view?.items ?? []).filter(item => item.rebuild)
   return <section className="ad-storage-section" aria-label="数据存储位置">
-    <h3>数据存储位置</h3>
+    <h2>存储位置</h2>
     <p>AgentDeck 自己的数据库与导入副本。原生智能体的会话仍保存在它们各自的目录里，不随这里迁移。</p>
     {view?.note ? <Text block role="alert" className="ad-storage-warn">{view.note}</Text> : null}
     {restartNeeded ? <Text block role="status" className="ad-storage-restart">数据位置已改变，重启后生效。

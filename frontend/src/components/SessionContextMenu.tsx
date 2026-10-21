@@ -15,9 +15,11 @@ export function SessionContextMenu({ items, point, onClose, onAction }: {
   const archived = items.every(item => item.archived)
   const canResume = single && !!items[0].resume
   const deleteReason = deletionUnavailableReason(items)
-  return <Menu open positioning={{ target, position: 'below', align: 'start', offset: 2 }} closeOnScroll onOpenChange={(_, data) => { if (!data.open) onClose() }}>
-    <MenuPopover className="ad-context-menu" onKeyDown={event => event.stopPropagation()}>
-      <MenuList aria-label="会话操作菜单">
+  return <Menu open positioning={{ target, position: 'below', align: 'start', offset: 2, strategy: 'fixed', autoSize: 'height', flipBoundary: 'window', overflowBoundary: 'window', overflowBoundaryPadding: 8 }} closeOnScroll onOpenChange={(_, data) => { if (!data.open) onClose() }}>
+    <MenuPopover className="ad-context-menu" style={{ overflowY: 'hidden' }} onKeyDown={event => event.stopPropagation()}>
+      <MenuList className="ad-context-menu-list" aria-label="会话操作菜单" onFocus={event => {
+        if (event.target instanceof HTMLElement && event.target.getAttribute('role') === 'menuitem') event.target.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+      }}>
         <div className="ad-context-heading">{single ? items[0].title || '未命名会话' : `已选择 ${items.length} 个会话`}</div>
         {single ? <>
           <MenuItem icon={<OpenRegular />} secondaryContent="Enter" onClick={() => onAction('open')}>打开会话</MenuItem>
