@@ -360,3 +360,15 @@ button:focus-visible, select:focus-visible, [role='button']:focus-visible, [role
   .ad-setting-control { justify-content: flex-start; }
   .ad-setting-control > .fui-Select, .ad-setting-control > select { width: 100%; }
 }
+.ad-update-version { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.ad-update-current { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--ad-text); }
+.ad-update-status { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; line-height: 1.7; color: var(--ad-muted); }
+.ad-update-error { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; line-height: 1.7; color: var(--colorPaletteRedForeground1); overflow-wrap: anywhere; }
+.ad-update-download { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; font-size: 12px; line-height: 1.7; color: var(--ad-muted); }
+.ad-update-found, .ad-update-downloaded { margin-top: 14px; padding: 14px 16px; border: 1px solid var(--ad-line); border-radius: 10px; background: var(--ad-soft); }
+.ad-update-found-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ad-update-found-head strong, .ad-update-downloaded strong { font-size: 13px; font-weight: 600; }
+.ad-update-found-head span { font-size: 12px; color: var(--ad-muted); }
+.ad-update-notes { margin: 10px 0 0; max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; font-size: 12px; line-height: 1.75; color: var(--ad-muted); user-select: text; }
+.ad-update-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.ad-update-path { margin: 8px 0 0; font-size: 12px; line-height: 1.7; color: var(--ad-muted); overflow-wrap: anywhere; user-select: text; }

@@ -264,3 +264,42 @@ type CleanupReport struct {
 	Dirs    int    `json:"dirs"`
 	Message string `json:"message"`
 }
+
+// UpdateView 是在线更新的当前状态，供「设置 → 更新」展示。
+//
+// 只描述状态，不含可执行动作：下载完成后由用户自己关闭程序、替换 exe。
+type UpdateView struct {
+	// Current 是当前版本；开发构建（读不到 VERSIONINFO）为 "dev"。
+	Current string `json:"current"`
+	// Dev 表示当前是开发构建，没有可比较的版本号。
+	Dev bool `json:"dev"`
+	// Checked 表示已有检查结论（可能是本次运行查到的，也可能是启动时
+	// 沿用的缓存）。
+	Checked bool `json:"checked"`
+	// Latest 是远端最新正式版。
+	Latest string `json:"latest"`
+	// Available 表示 Latest 比 Current 新。
+	Available bool `json:"available"`
+	// Notes 是发布说明正文（Markdown）。
+	Notes string `json:"notes"`
+	// PageURL 是该版本的 Release 页面。
+	PageURL string `json:"page_url"`
+	// CheckedAt / PublishedAt 是 RFC3339 时间；未知为空串。
+	CheckedAt   string `json:"checked_at"`
+	PublishedAt string `json:"published_at"`
+	// Checking / Downloading 表示对应操作正在进行。
+	Checking    bool `json:"checking"`
+	Downloading bool `json:"downloading"`
+	// Progress 是下载进度，0..1；未知时为 0。
+	Progress float64 `json:"progress"`
+	// DownloadedDir 是上一次下载解压到的目录；未下载过为空。
+	DownloadedDir string `json:"downloaded_dir"`
+	// Downloadable 表示现在可以点「下载」。
+	Downloadable bool `json:"downloadable"`
+	// AutoCheck 是「启动后自动检查」开关的当前取值。
+	AutoCheck bool `json:"auto_check"`
+	// Error 是上一次操作的错误说明；空表示没有错误。
+	Error string `json:"error"`
+	// ReleasePageURL 是全部发布的页面，供「打不开接口时手动查看」。
+	ReleasePageURL string `json:"release_page_url"`
+}

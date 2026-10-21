@@ -206,6 +206,19 @@ releases/     正式发布快照（vX.Y.Z/）
     走 `wt.exe` 时 stdout 是真 TTY（`IsOutputRedirected=false`），补不补都行，
     统一补上使两条路一致。
 
+19. **Go 侧不需要也不允许再存一份版本号**。`internal/app/version_windows.go`
+    在运行时从 exe 的 VERSIONINFO 读回 `build/windows/info.json` 经 syso 写进去的
+    ProductVersion（`internal/update` 用它判断是否有新版本）。因此版本号仍然只有
+    #14 那些位置，新增 Go 常量会立刻制造第二个真相。
+    `go run` 与测试二进制读不到时返回空串，`App.Version()` 报 `dev`，
+    更新检查据此不提示「有新版本」（开发构建没有可比较的版本号）。
+
+20. **在线更新的边界**：`internal/update` 只做只读的 release 查询与下载，
+    校验 `SHA256SUMS` 后解压到数据目录 `updates/vX.Y.Z/`，**绝不自动替换正在运行的
+    exe，也绝不启动下载到的程序**。GitHub 匿名接口限 60 次/小时，所以启动检查
+    受「自动检查开关 + 同版本每天一次」（`updates/check.json`）双重约束；
+    手动「检查更新」不受限。测试通过 `Config.UpdateAPIURL` 指向本机服务。
+
 ## 安全约定
 
 - **默认只读访问上游存储**：发现、读取、索引、导出全链路不写入上游。

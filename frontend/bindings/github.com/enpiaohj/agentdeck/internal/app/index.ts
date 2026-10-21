@@ -7,13 +7,15 @@ import * as ResumeService from "./resumeservice.js";
 import * as SearchService from "./searchservice.js";
 import * as SessionService from "./sessionservice.js";
 import * as SettingsService from "./settingsservice.js";
+import * as UpdateService from "./updateservice.js";
 export {
     MarkService,
     ProjectService,
     ResumeService,
     SearchService,
     SessionService,
-    SettingsService
+    SettingsService,
+    UpdateService
 };
 
 export {
@@ -47,5 +49,6 @@ export {
     TerminalShellOption,
     TerminalShellView,
     TranscriptPart,
-    TranscriptView
+    TranscriptView,
+    UpdateView
 } from "./models.js";

@@ -19,4 +19,6 @@ const (
 	EventMessagesReady = "sessions:messages"
 	// EventStorageProgress 数据位置迁移进度，data 是 StorageProgress。
 	EventStorageProgress = "storage:progress"
+	// EventUpdateStatus 在线更新的检查/下载状态变化，data 是 UpdateView。
+	EventUpdateStatus = "update:status"
 )

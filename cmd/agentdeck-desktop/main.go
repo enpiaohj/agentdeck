@@ -98,6 +98,7 @@ func main() {
 			application.NewService(a.NewResumeService()),
 			application.NewService(a.NewProjectService()),
 			application.NewService(a.NewSettingsService()),
+			application.NewService(a.NewUpdateService()),
 		},
 	})
 
@@ -166,6 +167,11 @@ func main() {
 
 	// 启动即后台重建全文索引;进度/完成经 index:progress / index:ready 推送
 	a.NewSearchService().Rebuild()
+
+	// 启动后检查更新:受「自动检查」开关与 24 小时缓存约束,不阻塞启动,
+	// 失败只落在状态里。结果经 update:status 推送。
+	updateService := a.NewUpdateService()
+	go updateService.AutoCheckOnStartup()
 
 	if err := wails.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

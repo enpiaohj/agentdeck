@@ -58,6 +58,9 @@ type Config struct {
 	SetStartAtLogin func(bool) error
 	// TrayAvailable 表示当前桌面环境已装配可用托盘。
 	TrayAvailable bool
+	// UpdateAPIURL 覆盖更新检查的接口地址；空用 GitHub 的正式接口。
+	// 测试指向本机服务，正式运行不需要设置。
+	UpdateAPIURL string
 }
 
 // App 是装配根：标注库句柄 + 会话列表缓存 + 索引状态。
@@ -108,6 +111,12 @@ type App struct {
 	// migrateMu 保护数据位置迁移的独占权（同一时间只允许一次迁移）。
 	migrateMu sync.Mutex
 	migrating bool
+	// version 是从 exe 的 VERSIONINFO 读出的产品版本（构建时由
+	// build/windows/info.json 写入）；空表示开发版本。
+	version string
+	// updateMu 保护在线更新的检查/下载状态（见 updatesvc.go）。
+	updateMu sync.Mutex
+	update   updateState
 	// singleRelease 释放单实例互斥锁；nil 表示本进程没有取得所有权。
 	singleRelease func()
 }
@@ -192,6 +201,7 @@ func New(cfg Config) (*App, error) {
 		deleted:       deleted,
 		codexName:     setCodexThreadName,
 		probeShell:    probeShellVersion,
+		version:       exeVersion(),
 	}
 	return a, nil
 }
@@ -241,6 +251,7 @@ func (a *App) NewProjectService() *ProjectService {
 	return &ProjectService{a: a}
 }
 func (a *App) NewSettingsService() *SettingsService { return &SettingsService{a: a} }
+func (a *App) NewUpdateService() *UpdateService     { return &UpdateService{a: a} }
 
 // emit nil 安全的事件推送。
 func (a *App) emit(event string, data any) {

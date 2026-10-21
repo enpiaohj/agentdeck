@@ -1640,6 +1640,156 @@ export class TranscriptView {
     }
 }
 
+/**
+ * UpdateView 是在线更新的当前状态，供「设置 → 更新」展示。
+ * 
+ * 只描述状态，不含可执行动作：下载完成后由用户自己关闭程序、替换 exe。
+ */
+export class UpdateView {
+    /**
+     * Current 是当前版本；开发构建（读不到 VERSIONINFO）为 "dev"。
+     */
+    "current": string;
+
+    /**
+     * Dev 表示当前是开发构建，没有可比较的版本号。
+     */
+    "dev": boolean;
+
+    /**
+     * Checked 表示已有检查结论（可能是本次运行查到的，也可能是启动时
+     * 沿用的缓存）。
+     */
+    "checked": boolean;
+
+    /**
+     * Latest 是远端最新正式版。
+     */
+    "latest": string;
+
+    /**
+     * Available 表示 Latest 比 Current 新。
+     */
+    "available": boolean;
+
+    /**
+     * Notes 是发布说明正文（Markdown）。
+     */
+    "notes": string;
+
+    /**
+     * PageURL 是该版本的 Release 页面。
+     */
+    "page_url": string;
+
+    /**
+     * CheckedAt / PublishedAt 是 RFC3339 时间；未知为空串。
+     */
+    "checked_at": string;
+    "published_at": string;
+
+    /**
+     * Checking / Downloading 表示对应操作正在进行。
+     */
+    "checking": boolean;
+    "downloading": boolean;
+
+    /**
+     * Progress 是下载进度，0..1；未知时为 0。
+     */
+    "progress": number;
+
+    /**
+     * DownloadedDir 是上一次下载解压到的目录；未下载过为空。
+     */
+    "downloaded_dir": string;
+
+    /**
+     * Downloadable 表示现在可以点「下载」。
+     */
+    "downloadable": boolean;
+
+    /**
+     * AutoCheck 是「启动后自动检查」开关的当前取值。
+     */
+    "auto_check": boolean;
+
+    /**
+     * Error 是上一次操作的错误说明；空表示没有错误。
+     */
+    "error": string;
+
+    /**
+     * ReleasePageURL 是全部发布的页面，供「打不开接口时手动查看」。
+     */
+    "release_page_url": string;
+
+    /** Creates a new UpdateView instance. */
+    constructor($$source: Partial<UpdateView> = {}) {
+        if (!("current" in $$source)) {
+            this["current"] = "";
+        }
+        if (!("dev" in $$source)) {
+            this["dev"] = false;
+        }
+        if (!("checked" in $$source)) {
+            this["checked"] = false;
+        }
+        if (!("latest" in $$source)) {
+            this["latest"] = "";
+        }
+        if (!("available" in $$source)) {
+            this["available"] = false;
+        }
+        if (!("notes" in $$source)) {
+            this["notes"] = "";
+        }
+        if (!("page_url" in $$source)) {
+            this["page_url"] = "";
+        }
+        if (!("checked_at" in $$source)) {
+            this["checked_at"] = "";
+        }
+        if (!("published_at" in $$source)) {
+            this["published_at"] = "";
+        }
+        if (!("checking" in $$source)) {
+            this["checking"] = false;
+        }
+        if (!("downloading" in $$source)) {
+            this["downloading"] = false;
+        }
+        if (!("progress" in $$source)) {
+            this["progress"] = 0;
+        }
+        if (!("downloaded_dir" in $$source)) {
+            this["downloaded_dir"] = "";
+        }
+        if (!("downloadable" in $$source)) {
+            this["downloadable"] = false;
+        }
+        if (!("auto_check" in $$source)) {
+            this["auto_check"] = false;
+        }
+        if (!("error" in $$source)) {
+            this["error"] = "";
+        }
+        if (!("release_page_url" in $$source)) {
+            this["release_page_url"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new UpdateView instance from a string or object.
+     */
+    static createFrom($$source: any = {}): UpdateView {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new UpdateView($$parsedSource as Partial<UpdateView>);
+    }
+}
+
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);
 const $$createType1 = SearchHitView.createFrom;

@@ -39,6 +39,9 @@ type Config struct {
 	// 桌面生命周期选项均为显式启用，旧配置缺少字段时默认关闭。
 	StartAtLogin bool `json:"start_at_login"`
 	CloseToTray  bool `json:"close_to_tray"`
+	// AutoCheckUpdates 控制启动后的后台检查更新。与上面两项相反，它默认
+	// 开启，因此旧配置缺少该字段时按 Default() 的取值保留，而不是 false。
+	AutoCheckUpdates bool `json:"auto_check_updates"`
 	// PreviousDirs 是上一次迁移数据位置之前实际使用的数据目录（默认位置
 	// 时为 ConfigDir 与 LocalDir 两个）。迁移一律保留旧位置，这里记下来
 	// 供界面提示与「清理旧位置数据」使用；清理是显式动作，不自动执行。
@@ -48,9 +51,10 @@ type Config struct {
 	extra map[string]json.RawMessage
 }
 
-// Default 返回默认配置：默认数据位置，终端使用 Windows PowerShell 5.1。
+// Default 返回默认配置：默认数据位置，终端使用 Windows PowerShell 5.1，
+// 启动后检查更新。
 func Default() Config {
-	return Config{Version: Version, TerminalShell: ShellPowerShell}
+	return Config{Version: Version, TerminalShell: ShellPowerShell, AutoCheckUpdates: true}
 }
 
 // NormalizeShell 把终端 shell 取值归一化：空串与无法识别的取值回退到
@@ -115,8 +119,9 @@ func LoadFrom(path string) (Config, error) {
 		delete(fields, key)
 	}
 	for key, target := range map[string]*bool{
-		"start_at_login": &cfg.StartAtLogin,
-		"close_to_tray":  &cfg.CloseToTray,
+		"start_at_login":     &cfg.StartAtLogin,
+		"close_to_tray":      &cfg.CloseToTray,
+		"auto_check_updates": &cfg.AutoCheckUpdates,
 	} {
 		if value, ok := fields[key]; ok {
 			if err = json.Unmarshal(value, target); err != nil {
@@ -171,6 +176,8 @@ func SaveTo(path string, cfg Config) error {
 	fields["start_at_login"] = startAtLogin
 	closeToTray, _ := json.Marshal(cfg.CloseToTray)
 	fields["close_to_tray"] = closeToTray
+	autoCheck, _ := json.Marshal(cfg.AutoCheckUpdates)
+	fields["auto_check_updates"] = autoCheck
 	if len(cfg.PreviousDirs) > 0 {
 		dirs := make([]string, 0, len(cfg.PreviousDirs))
 		for _, dir := range cfg.PreviousDirs {
