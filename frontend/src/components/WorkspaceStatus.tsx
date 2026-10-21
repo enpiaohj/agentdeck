@@ -13,7 +13,7 @@ export function WorkspaceStatus({ session }: { session: SessionView | null }) {
     : state === 'building' ? building
     : state === 'failed' ? '索引暂不可用 · 使用快速搜索'
     : '全文索引尚未就绪'
-  const source = session?.source === 'retained' ? '永久保留副本' : session?.source === 'import' ? '导入副本' : session?.source === 'wsl' ? 'WSL' : session?.source === 'gateway' ? '网关记录' : '本地文件'
+  const source = session?.source === 'retained' ? '永久保留副本' : session?.source === 'import' ? '导入副本' : session?.source === 'cache' ? 'Desktop 聊天缓存' : session?.source === 'wsl' ? 'WSL' : session?.source === 'gateway' ? '网关记录' : '本地文件'
   return <footer className="ad-workspace-status" aria-label="工作台状态">
     <span className="ad-status-item" role="status" title={status?.error || label}>{icon}{label}</span>
     <span className="ad-status-trailing">

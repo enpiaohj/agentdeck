@@ -73,7 +73,7 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
   if (matches('backup', '备份与恢复 完整数据备份 ZIP 文件 导入历史 收藏 标签 备注 偏好设置')) dataSections.push('backup')
   if (matches('diagnostics', '诊断 智能体检测 能力 状态 发现 原生恢复 会话来源')) dataSections.push('agents')
   if (matches('diagnostics', '诊断 搜索索引 全文索引 重建 检索')) dataSections.push('index')
-  const shortcuts = matches('shortcuts', '快捷键 键盘 搜索 Ctrl 选择 Shift 阅读 设置 F2 重命名 Delete 删除')
+  const shortcuts = matches('shortcuts', '快捷键 键盘 搜索 Ctrl 选择 Shift 阅读 设置 F2 重命名 Delete 删除 F5 刷新')
   const updates = q ? matchesUpdateSettings(q) : category === 'updates'
   const empty = !shown.length && !desktop && !dataSections.length && !shortcuts && !updates
   const chooseCategory = (id: string) => { setCategory(id); setQuery(''); contentRef.current?.scrollTo({ top: 0 }) }
@@ -106,7 +106,7 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
             <UpdateControl id={`${baseId}-update`} />
           </section> : null}
           {shortcuts ? <section className="ad-settings-section"><h2>快捷键列表</h2><dl className="ad-shortcuts">{[
-            ['搜索所有会话','Ctrl + K'],['新建会话','Ctrl + N'],['新建项目','Ctrl + Shift + N'],['打开设置','Ctrl + ,'],['调整侧栏宽度','拖拽分隔条 / 方向键'],['打开操作菜单','Shift + F10 / 菜单键'],['重命名所选会话','F2'],['删除所选会话','Delete'],['查找当前会话','Ctrl + F'],['下一 / 上一处匹配','Enter / Shift + Enter'],['全选当前列表','Ctrl + A'],['追加 / 取消选择','Ctrl + 单击'],['连续选择','Shift + 单击'],['追加连续范围','Ctrl + Shift + 单击'],['清空选择','Esc'],['移动焦点 / 扩展选择','方向键 / Shift + 方向键'],['保存备注','Ctrl + Enter'],
+            ['搜索所有会话','Ctrl + K'],['刷新会话列表','F5'],['新建会话','Ctrl + N'],['新建项目','Ctrl + Shift + N'],['打开设置','Ctrl + ,'],['调整侧栏宽度','拖拽分隔条 / 方向键'],['打开操作菜单','Shift + F10 / 菜单键'],['重命名所选会话','F2'],['删除所选会话','Delete'],['查找当前会话','Ctrl + F'],['下一 / 上一处匹配','Enter / Shift + Enter'],['全选当前列表','Ctrl + A'],['多选 / 连选智能体（侧栏）','Ctrl + 单击 / Shift + 单击'],['追加 / 取消选择','Ctrl + 单击'],['连续选择','Shift + 单击'],['追加连续范围','Ctrl + Shift + 单击'],['清空选择','Esc'],['移动焦点 / 扩展选择','方向键 / Shift + 方向键'],['保存备注','Ctrl + Enter'],
           ].map(([label, key]) => <div key={label}><dt>{label}</dt><dd><kbd>{key}</kbd></dd></div>)}</dl><p className="ad-settings-note">全选仅作用于筛选后当前展开的会话。删除操作会先显示确认窗口。</p></section> : null}
           {empty ? <div className="ad-settings-empty"><SearchRegular /><h2>未找到匹配的设置</h2><p>尝试使用“主题”“托盘”或“备份”等关键词。</p><Button size="small" onClick={() => setQuery('')}>清除搜索</Button></div> : null}
           {!q && ['general', 'appearance', 'sessions'].includes(category) ? <footer className="ad-settings-footer"><div><strong>偏好设置</strong><p>恢复外观、布局、阅读与默认智能体的初始设置。</p></div><Button appearance="subtle" size="small" icon={<ArrowResetRegular />} onClick={() => setResetOpen(true)}>恢复偏好设置…</Button></footer> : null}

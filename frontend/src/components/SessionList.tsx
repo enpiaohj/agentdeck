@@ -16,6 +16,8 @@ import {
   StarRegular,
   ArchiveRegular,
   ArchiveArrowBackRegular,
+  ArrowClockwiseRegular,
+  DocumentDismissRegular,
   ArrowSortRegular,
   SearchRegular,
   DismissRegular,
@@ -37,7 +39,7 @@ import { pickOpenPath } from '../nativeDialogs'
 import { AgentMark } from '../icons/AgentMark'
 import type { SidebarFilter } from './Sidebar'
 import { usePreferences } from '../hooks/usePreferences'
-import { presentSessions, sessionDateGroup, sessionMonth, type SessionOrder } from '../sessionPresentation'
+import { presentSessions, sessionDateGroup, sessionMonth, UPSTREAM_DELETED_HINT, type SessionOrder } from '../sessionPresentation'
 import { selectSession, selectContextSession, pruneSelection, type SessionSelection, type SelectionModifiers } from '../sessionSelection'
 import { SessionContextMenu, type SessionAction } from './SessionContextMenu'
 import { groupSessionRows } from '../sessionHierarchy'
@@ -61,9 +63,10 @@ const useStyles = makeStyles({
     gap: '8px',
     padding: '16px 16px 10px',
   },
-  headTitle: { fontSize: '14px', fontWeight: 650, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  // 标题优先完整显示（最多占一半宽），计数在剩余空间里省略；按钮靠右
+  headTitle: { fontSize: '14px', fontWeight: 650, flexShrink: 0, maxWidth: '50%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   tools: { padding: '0 16px 12px', display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: `1px solid ${tokens.colorNeutralStroke3}` },
-  count: { fontSize: '11px', color: tokens.colorNeutralForeground3, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' },
+  count: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '11px', color: tokens.colorNeutralForeground3, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' },
   headBtn: {
     border: 'none',
     background: 'transparent',
@@ -86,7 +89,7 @@ const useStyles = makeStyles({
     fontWeight: 600,
     color: tokens.colorNeutralForeground3,
   },
-  groupCount: { color: tokens.colorNeutralForeground4, fontWeight: 400 },
+  groupCount: { color: tokens.colorNeutralForeground4, fontWeight: 400, fontVariantNumeric: 'tabular-nums' },
   // 两行会话：标题与时间、来源与项目；保留完整信息的悬停说明。
   row: {
     position: 'relative',
@@ -129,6 +132,8 @@ const useStyles = makeStyles({
   agentName: { fontSize: '11px', flexShrink: 0 },
   context: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '11px' },
   tagCount: { display: 'inline-flex', alignItems: 'center', gap: '2px', fontSize: '10px', flexShrink: 0 },
+  // 「上游已删」是状态而不是操作：低调的灰色图标，悬停给出说明，不抢标题与时间
+  upstreamGone: { display: 'inline-flex', alignItems: 'center', flexShrink: 0, color: tokens.colorNeutralForeground4, cursor: 'default' },
   time: { fontSize: '11px', color: tokens.colorNeutralForeground3, flexShrink: 0, fontWeight: 400 },
   center: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '8px', padding: '0 16px', textAlign: 'center' },
   bulkBar: {
@@ -158,9 +163,12 @@ type Props = {
   onFilter: (filter: SidebarFilter) => void
   /** 递增即清空列表自身的筛选（关键词、月份、账号、排序）；侧栏「全部会话」用它回到全集。 */
   resetToken?: number
+  /** 重新扫描本机会话（与 F5 同一入口）；放在列表头部，就在结果旁边。 */
+  onRefresh?: () => void
+  refreshing?: boolean
 }
 
-export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDeleteSessions, listVersion, onFilter, resetToken }: Props) {
+export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDeleteSessions, listVersion, onFilter, resetToken, onRefresh, refreshing = false }: Props) {
   const styles = useStyles()
   const { rows, loading, error, reload } = useRows(filter, listVersion)
   const [selection, setSelection] = useState<SessionSelection>(() => ({ keys: new Set(selectedKey ? [selectedKey] : []), anchor: selectedKey, focus: selectedKey }))
@@ -197,7 +205,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
   const checked = visibleSelection.keys
   const deletionTargets = explicitDeletionTargets(visibleRows, checked)
   const deleteReason = deletionUnavailableReason(deletionTargets)
-  const scope = JSON.stringify([filter.agent, filter.project, filter.favorites, filter.archived, query, month, account])
+  const scope = JSON.stringify([filter.agents ?? [], filter.project, filter.favorites, filter.archived, query, month, account])
   const previousScope = useRef(scope)
   const contextItems = context?.scope === scope ? context.keys.map(key => visibleRows[visibleIndexes.get(key) ?? -1]).filter((row): row is SessionView => !!row) : []
   const contextOpen = !!context && contextItems.length === context.keys.length && contextItems.length > 0 && !busy
@@ -385,7 +393,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
     filter.archived ? '归档' : '',
     filter.favorites ? '收藏' : '',
     projectName ?? '',
-    filter.agent ? agentMeta(filter.agent).label : '',
+    (filter.agents ?? []).map(agent => agentMeta(agent).label).join('、'),
   ].filter(Boolean)
   const listTitle = titleParts.length === 0 ? '全部会话'
     : titleParts.length === 1 ? (filter.archived ? '归档会话' : filter.favorites ? '收藏会话' : titleParts[0])
@@ -416,11 +424,21 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
           <ArrowSortRegular fontSize={15} />
         </button>
         </Tooltip>
+        {onRefresh ? <Tooltip content={refreshing ? '正在扫描本机会话…' : '重新扫描本机会话 (F5)'} relationship="label">
+          <Button size="small" appearance="subtle" aria-label="刷新会话列表" disabled={refreshing}
+            icon={refreshing ? <Spinner size="extra-tiny" /> : <ArrowClockwiseRegular />}
+            onClick={onRefresh} />
+        </Tooltip> : null}
       </div>
       <span id={helpId} className="ad-sr-only">单击选中；Ctrl 点击切换；Shift 连选；Ctrl+Shift 追加连选；Ctrl+A 全选筛选后当前展开项（包含屏幕外行）；Esc 清空选择。上下方向键移动，Home / End 到首尾；左右方向键展开或收起子会话。</span>
       <div className={styles.tools}>
         <div className="ad-filter-chips">
-          {filter.agent ? <Button size="small" onClick={() => onFilter({ ...filter, agent: undefined })}>{agentMeta(filter.agent).label} ×</Button> : null}
+          {(filter.agents ?? []).map(agent => <Button key={agent} size="small" onClick={() => {
+            const agents = (filter.agents ?? []).filter(value => value !== agent)
+            const next: SidebarFilter = { ...filter, agents }
+            if (!agents.length) delete next.agents
+            onFilter(next)
+          }}>{agentMeta(agent).label} ×</Button>)}
           {filter.project ? <Button size="small" title={filter.project} onClick={() => onFilter({ ...filter, project: undefined })}>{projectName} ×</Button> : null}
           {filter.favorites || filter.archived ? <Button size="small" onClick={() => onFilter({ ...filter, favorites: false, archived: false })}>{filter.archived ? '归档' : '收藏'} ×</Button> : null}
         </div>
@@ -437,7 +455,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
             {accounts.map(value => <option key={value} value={value}>{value}</option>)}
           </select>
         </div> : null}</div>
-        {filter.agent === 'claude-desktop' ? <div className="ad-source-note">本地记录与导入的聊天历史</div> : null}
+        {filter.agents?.length === 1 && filter.agents[0] === 'claude-desktop' ? <div className="ad-source-note">本地记录与导入的聊天历史</div> : null}
       </div>
 
       {error ? (
@@ -475,14 +493,15 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
           {groups.map(([day, list]) => (
             <div key={day} role="rowgroup" aria-label={day}>
               <div className={styles.groupTitle} aria-hidden="true">
-                {day}<span className={styles.groupCount}>({list.filter(row => !hierarchy.childKeys.has(row.key)).length})</span>
+                {day}<span className={styles.groupCount}>{list.filter(row => !hierarchy.childKeys.has(row.key)).length}</span>
               </div>
               {list.map((s) => {
                 const selected = checked.has(s.key)
                 const active = selected && selectedKey === s.key
                 const m = agentMeta(s.agent)
-                const contextLabel = [s.account, filter.project ? '' : s.project].filter(Boolean).join(' · ')
-                const detail = [m.label, s.role === 'subagent' ? '子会话' : '', contextLabel, s.tags.length ? `标签：${s.tags.join('、')}` : ''].filter(Boolean).join(' · ')
+                // 行内信息与「全部会话」一致：筛选只决定列哪些会话，不省略行里的智能体与项目
+                const contextLabel = [s.account, s.project].filter(Boolean).join(' · ')
+                const detail = [m.label, s.role === 'subagent' ? '子会话' : '', contextLabel, s.tags.length ? `标签：${s.tags.join('、')}` : '', s.upstream_deleted ? '上游已删除' : ''].filter(Boolean).join(' · ')
                 const childCount = hierarchy.children.get(s.key)?.length ?? 0
                 const nested = hierarchy.childKeys.has(s.key)
                 return (
@@ -562,12 +581,13 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
                       <div className={styles.meta} title={detail}>
                         <AgentMark agent={s.agent} size={14} />
                         {s.role === 'subagent' ? <span className={styles.childLabel}>子会话</span> : null}
-                        {!filter.agent ? <><span className={styles.agentName} title={m.label}>{m.label}</span><span aria-hidden="true">·</span></> : null}
-                        <span className={styles.context}>{contextLabel || (filter.project ? '当前项目' : '无项目')}</span>
+                        <span className={styles.agentName} title={m.label}>{m.label}</span><span aria-hidden="true">·</span>
+                        <span className={styles.context}>{contextLabel || '无项目'}</span>
                         {childCount ? <button type="button" className={styles.familyToggle} aria-label={`${expandedFamilies.has(s.key) ? '收起' : '展开'} ${childCount} 个子会话`} aria-expanded={expandedFamilies.has(s.key)} disabled={busy} onClick={event => { event.stopPropagation(); toggleFamily(s) }}>
                           {expandedFamilies.has(s.key) ? <ChevronDownRegular fontSize={12} /> : <ChevronRightRegular fontSize={12} />}{childCount} 个子会话
                         </button> : null}
                         {s.tags.length ? <span className={styles.tagCount} aria-label={`${s.tags.length} 个标签`}><TagRegular fontSize={11} />{s.tags.length}</span> : null}
+                        {s.upstream_deleted ? <span className={styles.upstreamGone} role="img" aria-label="已在原 Agent 中删除" title={UPSTREAM_DELETED_HINT}><DocumentDismissRegular fontSize={13} /></span> : null}
                         {filter.archived ? <Button size="small" appearance="subtle" icon={<ArchiveArrowBackRegular />} aria-label="取消归档" title="取消归档" tabIndex={(visibleSelection.focus ?? visibleKeys[0]) === s.key ? 0 : -1} onClick={unarchive(s)} /> : null}
                       </div>
                     </div>
@@ -601,7 +621,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
 type RowsState = { rows: SessionView[]; loading: boolean; error: string; reload: () => void }
 
 function useRows(filter: SidebarFilter, listVersion?: number): RowsState {
-  const scope = JSON.stringify([filter.agent ?? '', filter.project ?? '', !!filter.favorites, !!filter.archived])
+  const scope = JSON.stringify([filter.agents ?? [], filter.project ?? '', !!filter.favorites, !!filter.archived])
   const [state, setState] = useState({ rows: [] as SessionView[], loading: true, error: '', scope })
 
   const request = useRef(0)
@@ -610,7 +630,8 @@ function useRows(filter: SidebarFilter, listVersion?: number): RowsState {
     setState((s) => ({ rows: s.scope === scope ? s.rows : [], loading: true, error: '', scope }))
     sessionService
       .List({
-        agent: filter.agent ?? '',
+        agent: '',
+        agents: filter.agents ?? [],
         favorites: filter.favorites ?? false,
         archived: filter.archived ?? false,
         project: filter.project ?? '',

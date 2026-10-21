@@ -1,6 +1,7 @@
 // 会话详情：元数据、标签和备注；路径按需展开，恢复操作统一放在阅读区。
 import {
   makeStyles,
+  mergeClasses,
   shorthands,
   tokens,
   Text,
@@ -20,6 +21,8 @@ import {
   DeleteRegular,
   EditRegular,
   ArrowResetRegular,
+  DocumentDismissRegular,
+  ChevronRightRegular,
 } from '@fluentui/react-icons'
 import { useEffect, useRef, useState } from 'react'
 import type { SessionView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
@@ -27,6 +30,7 @@ import * as markService from '../../bindings/github.com/enpiaohj/agentdeck/inter
 import { agentMeta, fmtTime, relTime } from '../util'
 import { AgentMark } from '../icons/AgentMark'
 import { deletionUnavailableReason } from '../sessionDeletion'
+import { UPSTREAM_DELETED_HINT } from '../sessionPresentation'
 
 const useStyles = makeStyles({
   wrap: {
@@ -58,9 +62,18 @@ const useStyles = makeStyles({
   },
   paneTitle: { flex: 1, minWidth: 0, fontSize: '13px', lineHeight: 1.6, overflowWrap: 'anywhere', fontWeight: 600 },
   titleInput: { flex: 1, minWidth: 0 },
-  agentRow: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', backgroundColor: tokens.colorNeutralBackground2, ...shorthands.borderRadius('6px') },
+  // 智能体与来源只占一行，不再用灰底卡片框住两个字
+  agentRow: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minHeight: '24px' },
+  agentSource: { fontSize: '12px', color: tokens.colorNeutralForeground3 },
+  agentSep: { color: tokens.colorNeutralForeground4 },
+  noteState: { display: 'inline-flex', alignItems: 'center', gap: '3px', marginLeft: 'auto', fontSize: '11px', color: tokens.colorNeutralForeground3 },
+  noteDirty: { color: tokens.colorPaletteMarigoldForeground1 },
+  danger: {
+    color: tokens.colorPaletteRedForeground1,
+    ':hover': { color: tokens.colorPaletteRedForeground1, ...shorthands.borderColor(tokens.colorPaletteRedBorder2) },
+  },
   advanced: { borderTop: `1px solid ${tokens.colorNeutralStroke3}`, paddingTop: '12px', fontSize: '12px', color: tokens.colorNeutralForeground2, lineHeight: 1.6 },
-  advancedSummary: { cursor: 'pointer', color: tokens.colorNeutralForeground3, marginBottom: '8px' },
+  advancedSummary: { display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: tokens.colorNeutralForeground3, marginBottom: '8px', listStyle: 'none', ':hover': { color: tokens.colorNeutralForeground1 } },
   capability: { display: 'inline-flex', gap: '3px', alignItems: 'center', marginLeft: 'auto', fontSize: '11px', color: tokens.colorBrandForeground1, whiteSpace: 'nowrap' },
   kv: { display: 'grid', gridTemplateColumns: '70px minmax(0, 1fr)', gap: '6px 8px', fontSize: '12px', lineHeight: 1.6 },
   k: { color: tokens.colorNeutralForeground3 },
@@ -80,6 +93,9 @@ const useStyles = makeStyles({
     ...shorthands.borderRadius('6px'),
     ...shorthands.border('1px', 'dashed', tokens.colorNeutralStroke1),
     color: tokens.colorNeutralForeground3,
+    backgroundColor: 'transparent',
+    cursor: 'pointer',
+    ':hover': { color: tokens.colorBrandForeground1, ...shorthands.borderColor(tokens.colorBrandStroke1) },
   },
   foot: {
     flexShrink: 0,
@@ -223,7 +239,8 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
         <div className={styles.agentRow}>
           <AgentMark agent={session.agent} size={22} />
           <Text size={300}>{m.label}{session.source === 'wsl' ? '(WSL)' : ''}</Text>
-          {session.source === 'import' || session.source === 'retained' ? <Text size={200}>{session.source === 'import' ? '官方导入' : '永久保留副本'}</Text> : null}
+          {session.source === 'import' || session.source === 'cache' || session.source === 'retained' ? <><span aria-hidden="true" className={styles.agentSep}>·</span><span className={styles.agentSource}>{session.source === 'import' ? '官方导入' : session.source === 'cache' ? 'Desktop 聊天缓存' : '永久保留副本'}</span></> : null}
+          {session.upstream_deleted ? <span role="img" aria-label="已在原 Agent 中删除" title={UPSTREAM_DELETED_HINT} style={{ display: 'inline-flex', color: tokens.colorNeutralForeground4, cursor: 'default' }}><DocumentDismissRegular fontSize={16} /></span> : null}
         </div>
 
         <div className={styles.section}>
@@ -257,7 +274,9 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
         <div className={styles.section}>
           <div className={styles.sectionHead}>
             <span className={styles.sectionTitle}>备注</span>
-            <Text size={200} role="status">{noteDraft !== session.note ? '未保存 · 本次运行保留草稿' : '已保存'}</Text>
+            <span role="status" className={mergeClasses(styles.noteState, noteDraft !== session.note && styles.noteDirty)}>
+              {noteDraft !== session.note ? '未保存 · 本次运行保留草稿' : <><CheckmarkRegular fontSize={12} />已保存</>}
+            </span>
             {noteDraft !== session.note ? (
               <button className={styles.linkBtn} title="Ctrl+Enter 保存备注" onClick={saveNote}>保存</button>
             ) : null}
@@ -273,8 +292,8 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
           />
         </div>
 
-        <details className={styles.advanced} key={`metadata-${session.key}`}>
-          <summary className={styles.advancedSummary}>完整会话信息</summary>
+        <details className={mergeClasses('ad-disclosure', styles.advanced)} key={`metadata-${session.key}`}>
+          <summary className={styles.advancedSummary}><ChevronRightRegular className="ad-disclosure-icon" fontSize={12} />完整会话信息</summary>
           <div className={styles.kv}>
             <span className={styles.k}>会话类型</span><span className={styles.v}>{session.role === 'subagent' ? '子 Agent 会话' : '主会话'}</span>
             {session.account ? <><span className={styles.k}>账号</span><span className={styles.v}>{session.account}</span></> : null}
@@ -286,8 +305,8 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
             <span className={styles.k}>项目</span><span className={styles.v}>{session.project || '未识别项目'}</span>
           </div>
         </details>
-        {session.cwd || session.source_path ? <details className={styles.advanced} key={session.key}>
-          <summary className={styles.advancedSummary}>工作目录与存储位置</summary>
+        {session.cwd || session.source_path ? <details className={mergeClasses('ad-disclosure', styles.advanced)} key={session.key}>
+          <summary className={styles.advancedSummary}><ChevronRightRegular className="ad-disclosure-icon" fontSize={12} />工作目录与存储位置</summary>
           <div className={styles.kv}>
             {session.cwd ? <><span className={styles.k}>工作目录</span><span className={styles.v}>{session.cwd}</span></> : null}
             {session.source_path ? <><span className={styles.k}>源路径</span><span className={styles.v}>{session.source_path}</span></> : null}
@@ -299,7 +318,7 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
             <Button size="small" icon={<ArchiveRegular />} style={{ width: '100%' }} onClick={toggleArchive}>
               {session.archived ? '取消归档' : '归档'}
             </Button>
-            <Button size="small" icon={<DeleteRegular />} style={{ width: '100%' }} disabled={!!deleteReason} title={deleteReason || '删除原始记录及全部保留版本'} onClick={() => onDeleteSessions([session])}>删除会话…</Button>
+            <Button size="small" icon={<DeleteRegular />} className={deleteReason ? undefined : styles.danger} style={{ width: '100%' }} disabled={!!deleteReason} title={deleteReason || '删除原始记录及全部保留版本'} onClick={() => onDeleteSessions([session])}>删除会话…</Button>
           </div>
           {deleteReason ? <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{deleteReason}</Text> : null}
         </div>

@@ -25,6 +25,7 @@ import {
   ArrowUpRegular,
   ArrowDownRegular,
   ChevronLeftRegular,
+  TextBulletListLtrRegular,
 } from '@fluentui/react-icons'
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Browser } from '@wailsio/runtime'
@@ -34,6 +35,8 @@ import * as resumeService from '../../bindings/github.com/enpiaohj/agentdeck/int
 import { agentMeta, fmtTime } from '../util'
 import { pickOpenPath } from '../nativeDialogs'
 import { AgentMark } from '../icons/AgentMark'
+import { PromptRail } from './PromptRail'
+import { currentPrompt } from '../promptRail'
 import { highlight } from '../highlight'
 import { useTheme } from '../hooks/useTheme'
 import { foldedContent, isLongCode, markdownCodeText, transcriptGroups, processSummary, type FoldedContent } from '../transcriptPresentation'
@@ -247,7 +250,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
   const styles = useStyles()
   const theme = useTheme()
   const m = agentMeta(session.agent)
-  const { preferences } = usePreferences()
+  const { preferences, update: updatePreferences } = usePreferences()
   const explicitJump = useRef(jumpPart >= 0 && consumedJumps.get(session.key) !== jumpToken)
   const savedPosition = useRef(readingPositions.get(session.key))
   const restoreAnchor = useRef<ReadingPosition | null>(explicitJump.current ? null : savedPosition.current ?? null)
@@ -292,6 +295,17 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
     restoreScroll.current=null; setDestination(previous=>({at,before,focus:null,revision:previous.revision+1}))
   }
   const position = useRef<ReadingPosition>({ at: destination.at, before: destination.before, scroll: 0 })
+  // 视口顶部是全文第几段：决定提问导航「当前第几问」；载入新窗口前沿用窗口起点
+  const [viewPart, setViewPart] = useState<number | null>(null)
+  const prompts = tr?.prompts ?? []
+  const promptAt = currentPrompt(prompts, viewPart ?? destination.focus ?? tr?.start ?? 0)
+  // 跳到某一问：已在当前窗口里就直接滚过去，否则从那一问起载入新窗口
+  const jumpToPrompt = (index: number) => {
+    const element = bodyRef.current?.querySelector<HTMLElement>(`[data-part-index="${index}"]`)
+    if (element) { element.scrollIntoView({ block: 'start' }); setViewPart(index); return }
+    setPageContext(''); restoreScroll.current = null; setViewPart(index)
+    setDestination(previous => ({ at: index, before: false, focus: index, revision: previous.revision + 1 }))
+  }
   position.current = { ...position.current, at: destination.at, before: destination.before }
   useEffect(() => () => { readingPositions.set(session.key, position.current) }, [session.key])
   const openFind = useCallback(() => {
@@ -424,10 +438,19 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
 
       <nav className="ad-reader-nav" aria-label="会话阅读导航">
         <Button size="small" appearance="subtle" icon={<ArrowUpRegular />} onClick={()=>navigate(0)} disabled={loading}>会话开头</Button>
-        <Tooltip content="更早的内容" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronLeftRegular />} aria-label="阅读更早内容" disabled={loading||!tr?.has_before} onClick={()=>navigate(tr?.start??0,true)} /></Tooltip>
-        <span role="status" className="ad-reader-range" title="「段」是会话正文的一个片段：消息、思考、工具调用与结果各算一段">{loading?`正在载入…${tr?.total?`（${tr.total} 段）`:''}`:tr?.total?`第 ${tr.start+1}–${tr.start+tr.parts.length} 段，共 ${tr.total} 段`:'暂无正文'}</span>
-        <Tooltip content="较新的内容" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronRightRegular />} aria-label="阅读较新内容" disabled={loading||!tr?.has_after} onClick={()=>navigate((tr?.start??0)+(tr?.parts.length??0))} /></Tooltip>
+        {prompts.length ? <>
+          <Tooltip content="上一问" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronLeftRegular />} aria-label="跳到上一问" disabled={loading||promptAt<=0} onClick={()=>jumpToPrompt(prompts[promptAt-1].index)} /></Tooltip>
+          <span role="status" className="ad-reader-range" title={tr ? `当前窗口为第 ${tr.start+1}–${tr.start+tr.parts.length} 段，共 ${tr.total} 段（消息、思考、工具调用与结果各算一段）` : undefined}>{loading?'正在载入…':promptAt<0?`共 ${prompts.length} 问`:`第 ${promptAt+1} / ${prompts.length} 问`}</span>
+          <Tooltip content="下一问" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronRightRegular />} aria-label="跳到下一问" disabled={loading||promptAt>=prompts.length-1} onClick={()=>jumpToPrompt(prompts[promptAt+1].index)} /></Tooltip>
+        </> : <>
+          <Tooltip content="更早的内容" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronLeftRegular />} aria-label="阅读更早内容" disabled={loading||!tr?.has_before} onClick={()=>navigate(tr?.start??0,true)} /></Tooltip>
+          <span role="status" className="ad-reader-range" title="「段」是会话正文的一个片段：消息、思考、工具调用与结果各算一段">{loading?`正在载入…${tr?.total?`（${tr.total} 段）`:''}`:tr?.total?`第 ${tr.start+1}–${tr.start+tr.parts.length} 段，共 ${tr.total} 段`:'暂无正文'}</span>
+          <Tooltip content="较新的内容" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronRightRegular />} aria-label="阅读较新内容" disabled={loading||!tr?.has_after} onClick={()=>navigate((tr?.start??0)+(tr?.parts.length??0))} /></Tooltip>
+        </>}
         <Button size="small" appearance="subtle" onClick={openFind} title="查找当前会话 (Ctrl+F)">查找</Button>
+        {prompts.length > 1 ? <Tooltip content={preferences.promptRail ? '隐藏提问导航条' : '显示提问导航条：右侧每根刻度是一次提问，点击跳转'} relationship="label">
+          <Button size="small" appearance={preferences.promptRail ? 'secondary' : 'subtle'} icon={<TextBulletListLtrRegular />} aria-pressed={preferences.promptRail} aria-label="提问导航条" onClick={() => updatePreferences({ promptRail: !preferences.promptRail })} />
+        </Tooltip> : null}
         <Button size="small" appearance={destination.at<0?'secondary':'subtle'} icon={<ArrowDownRegular />} onClick={()=>navigate(-1)} disabled={loading}>最新消息</Button>
       </nav>
       {findOpen ? <div className="ad-reader-nav" role="search" aria-label="会话内查找">
@@ -438,11 +461,13 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
         <Button size="small" onClick={closeFind}>返回原阅读位置</Button>
       </div> : null}
       {findOpen && findIndex >= 0 ? <p className="ad-find-context" role="status">命中段 {findHits[findIndex] + 1}：{findSnippets[findIndex]}<small>查找范围为已读取正文；长段预览可能仅显示部分内容。</small></p> : null}
+      <div className="ad-reading-wrap">
       <div ref={bodyRef} tabIndex={-1} onScroll={event => {
         const body = event.currentTarget
         const top = body.getBoundingClientRect().top
         const anchor = [...body.querySelectorAll<HTMLElement>('[data-part-index]')].find(element => element.getClientRects().length > 0 && element.getBoundingClientRect().bottom >= top)
         position.current = { ...position.current, scroll: body.scrollTop, anchor: anchor ? Number(anchor.dataset.partIndex) : undefined, offset: anchor ? anchor.getBoundingClientRect().top - top : undefined }
+        if (anchor) setViewPart(Number(anchor.dataset.partIndex))
       }} className={`ad-reading-body ${styles.body}`}>
         {pageContext && !loading ? <blockquote className="ad-page-context"><small>相邻窗口摘录 · 不计入当前段数</small>{pageContext}</blockquote> : null}
         {tr?.has_before && !loading ? <div className="ad-page-boundary"><Button size="small" onClick={() => navigate(tr.start, true)}>继续阅读更早内容</Button><span>当前从原始第 {tr.start + 1} 段开始；上一窗口紧接此处。</span></div> : null}
@@ -511,6 +536,8 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
           })}</ProcessGroup>)
         ) : null}
         {tr?.has_after && !loading ? <div className="ad-page-boundary"><span>已读至原始第 {tr.start + tr.parts.length} 段；下一窗口紧接此处。</span><Button size="small" onClick={() => navigate(tr.start + tr.parts.length)}>继续阅读后续内容</Button></div> : null}
+      </div>
+      {tr && prompts.length > 1 && preferences.promptRail ? <PromptRail prompts={prompts} total={tr.total} current={promptAt} onJump={jumpToPrompt} /> : null}
       </div>
 
       {actionError ? <div role="alert" style={{ padding: '8px 24px', color: tokens.colorPaletteRedForeground1, fontSize: 12 }}>{actionError}</div> : null}

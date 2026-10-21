@@ -30,7 +30,9 @@ wails3 generate syso -icon build/windows/icon.ico -info build/windows/info.json 
   Pi Coding Agent 与 Inflection Pi 不是同一产品，不借用同名标志。
 
 品牌 SVG 的来源、固定提交与文件映射见 `frontend/public/agents/README.md`。
-ZCode、Hermes、WorkBuddy 没有可再分发的开源图标，使用通用兜底图标；此前从各产品
+Claude 按官方应用图标的形态呈现：品牌色满幅底板 + Lobe Icons 单色图形（CSS mask 着白，不改形）。
+Codex 桌面版已并入 ChatGPT 应用，与用户在开始菜单、任务栏看到的一致：白底黑色 OpenAI 标志。
+ZCode 没有可再分发的图标，使用自绘字母标；Hermes 使用出品方 Nous Research 在 Lobe Icons 中的标识；Pi、Alma 等仍无可再分发的开源图标，使用通用兜底图标；此前从各产品
 安装包提取的 PNG 已移除。
 
 新增 Agent 时登记 key / label / color / icon；使用透明品牌 SVG 时设置 `glyph: true`。

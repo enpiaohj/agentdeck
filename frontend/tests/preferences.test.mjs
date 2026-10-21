@@ -54,4 +54,14 @@ test('工作台偏好：缺省值、合法值保留、非法值回退', () => {
   assert.deepEqual([p.navCollapsed,p.infoPanel,p.listOrder,p.hideEmptyProjects],[true,'closed','oldest',true])
   const bad = parsePreferences(JSON.stringify({navCollapsed:'yes',infoPanel:'x',listOrder:1,hideEmptyProjects:'1'}))
   assert.deepEqual([bad.navCollapsed,bad.infoPanel,bad.listOrder,bad.hideEmptyProjects],[false,'open','latest',false])
+  // 侧栏分区折叠与「显示全部项目」：缺省展开、只列前几个；非布尔值回退缺省
+  assert.deepEqual([d.agentsCollapsed,d.projectsCollapsed,d.showAllProjects],[false,false,false])
+  const s = parsePreferences(JSON.stringify({agentsCollapsed:true,projectsCollapsed:true,showAllProjects:true}))
+  assert.deepEqual([s.agentsCollapsed,s.projectsCollapsed,s.showAllProjects],[true,true,true])
+  const sb = parsePreferences(JSON.stringify({agentsCollapsed:1,projectsCollapsed:'y',showAllProjects:null}))
+  assert.deepEqual([sb.agentsCollapsed,sb.projectsCollapsed,sb.showAllProjects],[false,false,false])
+  // 提问导航条缺省显示，只认布尔值
+  assert.equal(d.promptRail, true)
+  assert.equal(parsePreferences(JSON.stringify({promptRail:false})).promptRail, false)
+  assert.equal(parsePreferences(JSON.stringify({promptRail:'off'})).promptRail, true)
 })

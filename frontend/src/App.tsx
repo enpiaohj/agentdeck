@@ -8,7 +8,6 @@ import {
 } from '@fluentui/react-components'
 import {
   SearchRegular,
-  ArrowClockwiseRegular,
   ArrowUploadRegular,
   SettingsRegular,
   DismissRegular,
@@ -337,6 +336,8 @@ export function App() {
       // Ctrl+Shift+N 先判：Shift 没判的话会先被 Ctrl+N 吃掉。
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); openNewProject(); return }
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); openNewSession(); return }
+      // F5 重新扫描本机会话；同时拦下 WebView 默认的整页重新加载
+      if (e.key === 'F5' && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); void refreshRef.current(); return }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -353,6 +354,9 @@ export function App() {
     } catch (reason) { setRefreshError(String(reason)) }
     finally { setRefreshing(false) }
   }
+  // 键盘处理在挂载时注册一次，经 ref 调到最新的 refresh（它读 refreshing 状态）
+  const refreshRef = useRef(refresh)
+  refreshRef.current = refresh
 
   // 启动会话后的自动刷新：CLI 写会话记录要时间，扫早了看不到；两次之后若
   // 仍没有，就把「点刷新」这条下一步摆出来，不让用户对着空列表等。
@@ -364,7 +368,7 @@ export function App() {
       window.setTimeout(() => setListVersion(value => value + 1), 12_000),
       window.setTimeout(() => {
         setListVersion(value => value + 1)
-        notify('若仍未看到新会话，请点右上角「刷新」重新扫描本机会话。')
+        notify('若仍未看到新会话，请按 F5 或点会话列表顶部的刷新按钮重新扫描本机会话。')
       }, 45_000),
     ]
   }
@@ -382,7 +386,7 @@ export function App() {
     const rows = await sessionService.List({ agent: 'claude-desktop', favorites: false, archived: false, project: '', tag: '', search: '' })
     const first = rows.find(row => row.source === 'import' && row.account === report.account)
     notify(`${report.already_imported ? '文件已导入，未重复导入' : '聊天记录已导入'} · ${report.account} · ${report.conversations} 个会话${report.skipped_blocks ? `；${report.skipped_blocks} 个非文本内容块未纳入` : ''}`, { tone: 'success' })
-    setFilter({ agent: 'claude-desktop' }); setSearchQuery('')
+    setFilter({ agents: ['claude-desktop'] }); setSearchQuery('')
     if (first) onSelect(first)
     else setView('sessions')
   }
@@ -458,15 +462,6 @@ export function App() {
             </Tooltip>
             <Tooltip content="导入 Claude 普通聊天 / 新版任务历史" relationship="description">
               <Button size="small" appearance="secondary" icon={<ArrowUploadRegular />} onClick={() => setView('imports')}>导入</Button>
-            </Tooltip>
-            <Tooltip content="重新扫描本机会话" relationship="description">
-              <Button
-                size="small"
-                appearance="subtle"
-                icon={<ArrowClockwiseRegular />}
-                disabled={refreshing}
-                onClick={() => void refresh()}
-              >{refreshing ? '扫描中…' : '刷新'}</Button>
             </Tooltip>
             <Tooltip content="设置 (Ctrl+,)" relationship="label">
               <Button
@@ -554,6 +549,8 @@ export function App() {
                 onOpenDetails={session => { onSelect(session); setInfoOpen(true) }}
                 onDeleteSessions={deletion.open}
                 listVersion={listVersion}
+                refreshing={refreshing}
+                onRefresh={() => void refresh()}
               /></div>
               {searchQuery.trim() ? <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}><Button size="small" onClick={() => setSearchQuery('')}>返回会话列表 · 保留筛选与位置</Button><SearchResults query={searchQuery} revision={listVersion} selectedKey={selected?.key ?? null} onFocusSearch={() => searchRef.current?.focus()} onJump={onJump} /></div> : null}
               <MessagePane session={selected} sourceVersion={sourceVersion} jumpPart={jumpPart} jumpToken={jumpToken} infoOpen={infoOpen} onToggleInfo={() => setInfoOpen(value => !value)} onOpenInfo={() => setInfoOpen(true)} />
