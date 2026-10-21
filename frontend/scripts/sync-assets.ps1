@@ -16,11 +16,11 @@ if (-not (Test-Path -LiteralPath (Join-Path $dist 'index.html') -PathType Leaf))
 # said 0.9.0 in its properties but 0.8.0 in the title bar. Fail before touching
 # cmd/agentdeck-desktop/assets so a stale dist cannot be packaged.
 $infoPath = Join-Path $projectRoot 'build\windows\info.json'
-$expected = (Get-Content -LiteralPath $infoPath -Raw | ConvertFrom-Json).fixed.product_version
+$expected = (Get-Content -LiteralPath $infoPath -Raw -Encoding UTF8 | ConvertFrom-Json).fixed.product_version
 $bundleDir = Join-Path $dist 'assets'
 $seen = @()
 foreach ($file in Get-ChildItem -LiteralPath $bundleDir -Filter '*.js' -File) {
-    $text = Get-Content -LiteralPath $file.FullName -Raw
+    $text = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
     foreach ($match in [regex]::Matches($text, 'product_version:"([^"]+)"')) {
         $seen += $match.Groups[1].Value
     }
@@ -36,8 +36,29 @@ if ($seen.Count -ne 1 -or $seen[0] -ne $expected) {
 if (-not $bundles.StartsWith($projectRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
     throw "Asset destination is outside the project: $bundles"
 }
-if (Test-Path -LiteralPath $bundles) {
-    Remove-Item -LiteralPath $bundles -Recurse -Force
-}
+# Everything under assets/ is generated from frontend/dist and embedded whole
+# (//go:embed all:assets). Clearing only assets/assets left files deleted from
+# frontend/public behind in assets/agents, and they went into the exe: v0.9.0
+# shipped the brand PNGs its CHANGELOG says were removed. Clear every generated
+# entry (only .gitkeep is tracked), then require an exact mirror of dist.
 New-Item -ItemType Directory -Path $destination -Force | Out-Null
+foreach ($entry in Get-ChildItem -LiteralPath $destination -Force) {
+    if ($entry.Name -ne '.gitkeep') {
+        Remove-Item -LiteralPath $entry.FullName -Recurse -Force
+    }
+}
 Get-ChildItem -LiteralPath $dist | Copy-Item -Destination $destination -Recurse -Force
+
+function Get-RelativeFiles([string]$root) {
+    $sep = [System.IO.Path]::DirectorySeparatorChar
+    $full = [System.IO.Path]::GetFullPath($root).TrimEnd($sep) + $sep
+    Get-ChildItem -LiteralPath $root -Recurse -File -Force |
+        ForEach-Object { $_.FullName.Substring($full.Length) } |
+        Where-Object { $_ -ne '.gitkeep' } | Sort-Object
+}
+$want = @(Get-RelativeFiles $dist)
+$got = @(Get-RelativeFiles $destination)
+$diff = @(Compare-Object -ReferenceObject $want -DifferenceObject $got)
+if ($diff.Count -ne 0) {
+    throw "cmd/agentdeck-desktop/assets does not mirror frontend/dist: $(($diff | ForEach-Object { $_.SideIndicator + ' ' + $_.InputObject }) -join '; ')"
+}
