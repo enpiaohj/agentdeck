@@ -60,10 +60,11 @@
 - **来源**：<https://github.com/lobehub/lobe-icons>
 - **许可**：MIT License
 - **版权**：Copyright (c) 2023 LobeHub
-- **取用版本**：commit `8a1b2821bb768c484fe8da20c5e1838b6bf551a9`
+- **取用版本**：commit `8a1b2821bb768c484fe8da20c5e1838b6bf551a9`；`workbuddy-color.svg`
+  在该提交之后才收录，取自 commit `9046e389bf50067adbb4dd794eba2164cac41197`
 - **取用方式**：复制 `packages/static-svg/icons/` 下的 SVG 到
-  `frontend/public/agents/`，保留原始内容；许可证全文见
-  `frontend/public/agents/LOBE-ICONS-LICENSE`
+  `frontend/public/agents/`，保留原始内容；单色图形在界面上经 CSS mask 着色，
+  图形本身不改动。许可证全文见 `frontend/public/agents/LOBE-ICONS-LICENSE`
 
 这些 SVG 是开源图标库提供的品牌资源。品牌名称与标识的商标归各自权利人所有；
 本项目仅作指示性使用，不表示任何形式的背书或授权代言。仓库不包含从第三方

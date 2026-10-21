@@ -69,8 +69,10 @@ releases/     正式发布快照（vX.Y.Z/）
 - 测试：`go test ./... -count=1`
 - 格式化：`gofmt -l cmd internal` 应为空
 
-当前基线：21 个包全部通过（`sessions` 约 14s，`settings` 约 14s，`proc` 约 12s，
-全套约 50s）。
+当前基线（v0.10.0）：29 个包，27 个含测试，本轮完整测试全部通过（`sessions` 约 20s，
+`settings` 约 17s，`proc` 约 16s）。`internal/filememo` 的 `TestReadWhileReplaced` 曾在
+Windows 上偶发失败；遇到时保留失败输出并调查，不通过删除测试或降低断言规避。前端 `npm test` 62 项。
+README 截图用隔离的演示用户目录生成（见陷阱 #21），不得截真实会话。
 运行验证：`go run ./cmd/agentdeck -all` 应读出本机 600+ 条会话；
 `-search "查询"`（可配 `-agent`/`-all`）对所选会话正文建 FTS5 索引并
 全文检索，`-all -search` 实测索引 476 条会话正文。
@@ -245,6 +247,17 @@ releases/     正式发布快照（vX.Y.Z/）
     exe，也绝不启动下载到的程序**。GitHub 匿名接口限 60 次/小时，所以启动检查
     受「自动检查开关 + 同版本每天一次」（`updates/check.json`）双重约束；
     手动「检查更新」不受限。测试通过 `Config.UpdateAPIURL` 指向本机服务。
+
+21. **README 截图必须用演示数据，且隔离要彻底**。仓库是公开的，真实会话的标题、项目名、
+    账号都不能出现。做法：生成虚构会话到一个临时用户目录，把 `USERPROFILE`、`HOME`、
+    `APPDATA`、`LOCALAPPDATA` 指过去再启动 exe（应用是单实例，先退出正在运行的那个）。
+    两个坑：
+    - **只改用户目录不够**：`agentenv.Vars` 里的变量（本机实测 `HERMES_HOME`）会把某个
+      智能体指回真实目录，启动前要逐个清掉，并用 `go run ./cmd/agentdeck -all` 先确认
+      只剩演示会话。
+    - **演示 jsonl 必须是紧凑 JSON**：解析器按 `"type":"user"` 这类紧凑写法做字节匹配，
+      Python `json.dumps` 默认的 `": "` 会让整批会话一条都识别不到。
+    「开机启动」开关读写的是真实的 Windows 启动注册表，隔离不了，截图时不要碰。
 
 ## 安全约定
 
