@@ -172,8 +172,15 @@ releases/     正式发布快照（vX.Y.Z/）
       刮出旧版本号。v0.1.1 就是只提了 `info.json`，清单里残留 `0.1.0`。
     - 两个文件都改完**必须重跑** `wails3 generate syso`（见 `tools/gen_appicon.ps1`
       顶部注释里的完整命令），否则 syso 里还是旧值；`go build` 不会自己重生成。
+    - **`info.json` 还会被前端打包**：`frontend/src/App.tsx` 直接 `import` 它来显示
+      标题栏版本，Vite 把值内联进 bundle。改完 info.json 必须重跑 `npm run build`
+      再 `sync-assets.ps1`，否则 exe 属性是新版本、标题栏还是旧版本——v0.9.0 发布
+      产物就是这样：属性 0.9.0，标题栏 0.8.0（前端包在提版本号之前构建）。
+      `sync-assets.ps1` 现在会比较 bundle 内的 `product_version` 与 info.json，
+      不一致直接拒绝打包。设置页「当前版本」走的是另一条链（exe → VERSIONINFO）。
     - 验证：`(Get-Item exe).VersionInfo` 看版本资源、资源管理器「详细信息」看用户
-      实际看到的两个版本号、`grep -a -o -E 'assemblyIdentity[^>]*' exe` 看清单。
+      实际看到的两个版本号、`grep -a -o -E 'assemblyIdentity[^>]*' exe` 看清单、
+      `grep -a -o 'product_version:"[^"]*"' exe` 看前端包内嵌值。
 
 15. **Codex `state_5.sqlite` 自带 5 个维护 trigger**（`created_at_ms` /
     `updated_at_ms` / `recency_at` 的 `AFTER INSERT` 与 `AFTER UPDATE OF`），
