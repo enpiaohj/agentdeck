@@ -182,7 +182,9 @@ var wholeCallReaders = map[string]func(file) (*callFile, bool){
 	"zcode":     readZCodeCalls,
 	"dsh":       readDshCalls,
 	"workbuddy": readWorkBuddyCalls,
-	"codebuddy": readWorkBuddyCalls, // #1779
+	// AgentDeck: WorkBuddy AI, the international edition
+	"workbuddy-ai": readWorkBuddyCalls,
+	"codebuddy":    readWorkBuddyCalls, // #1779
 	// #1605
 	"minimax-code": readMiniMaxCalls,
 	"kimi":         readKimiCalls, // #1607

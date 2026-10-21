@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/enpiaohj/agentdeck/internal/sessions"
@@ -14,7 +15,7 @@ const conversationPage = 80
 // Latest windows are filled backwards and clip long prose at its beginning,
 // ensuring the actual last words are visible without rendering an entire log.
 func conversationWindow(full sessions.Transcript, at int, before bool) *TranscriptView {
-	out := &TranscriptView{Parts: []TranscriptPart{}, Total: len(full.Parts), Cut: full.Cut}
+	out := &TranscriptView{Parts: []TranscriptPart{}, Total: len(full.Parts), Cut: full.Cut, Prompts: promptMarks(full.Parts)}
 	if out.Total == 0 {
 		return out
 	}
@@ -63,6 +64,35 @@ func conversationWindow(full sessions.Transcript, at int, before bool) *Transcri
 		}
 	}
 	out.Start, out.HasBefore, out.HasAfter = start, start > 0, end < out.Total
+	return out
+}
+
+// promptMarkRunes 是提问摘要的长度上限：导航条悬停只需认出是哪一问。
+const promptMarkRunes = 80
+
+// promptMarks 列出用户的每一次提问：用户的正文段，空白段不算；摘要取第一行
+// 非空文字，过长截断。
+func promptMarks(parts []sessions.Part) []PromptMark {
+	out := []PromptMark{}
+	for i, p := range parts {
+		if p.Role != "user" || p.Kind != "text" {
+			continue
+		}
+		text := ""
+		for _, line := range strings.Split(p.Text, "\n") {
+			if line = strings.TrimSpace(line); line != "" {
+				text = line
+				break
+			}
+		}
+		if text == "" {
+			continue
+		}
+		if r := []rune(text); len(r) > promptMarkRunes {
+			text = string(r[:promptMarkRunes]) + "…"
+		}
+		out = append(out, PromptMark{Index: i, Text: text})
+	}
 	return out
 }
 

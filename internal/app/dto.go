@@ -7,32 +7,34 @@ package app
 // SessionView 是列表与会话卡片的一行。Resume 非空 = 可原生命令恢复；
 // 空 = 仅可查看历史。Source 区分本机/WSL/网关来源。
 type SessionView struct {
-	Role          string   `json:"role"`       // confirmed main | subagent | unknown
-	ParentKey     string   `json:"parent_key"` // original parent, when known
-	GroupKey      string   `json:"group_key"`  // present main in the current list
-	Account       string   `json:"account"`    // imported cloud-chat account label
-	Key           string   `json:"key"`        // agent:id
-	Agent         string   `json:"agent"`
-	ID            string   `json:"id"`
-	Cwd           string   `json:"cwd"`
-	Project       string   `json:"project"` // 归一化后的项目展示名
-	Title         string   `json:"title"`
-	OriginalTitle string   `json:"original_title"`
-	Last          string   `json:"last"`        // RFC3339
-	Created       string   `json:"created"`     // RFC3339;零值空串
-	SourcePath    string   `json:"source_path"` // 会话源文件路径(详情「源路径」,只读展示)
-	Messages      int      `json:"messages"`
-	Resume        string   `json:"resume"`
-	Transcript    bool     `json:"transcript"`
-	Tokens        int      `json:"tokens"`
-	Cost          float64  `json:"cost"`
-	Source        string   `json:"source"` // local | wsl | gateway
-	ReadOnly      bool     `json:"read_only"`
-	Favorite      bool     `json:"favorite"`
-	Archived      bool     `json:"archived"`
-	Tags          []string `json:"tags"`
-	HasNote       bool     `json:"has_note"`
-	Note          string   `json:"note"`
+	Role          string  `json:"role"`       // confirmed main | subagent | unknown
+	ParentKey     string  `json:"parent_key"` // original parent, when known
+	GroupKey      string  `json:"group_key"`  // present main in the current list
+	Account       string  `json:"account"`    // imported cloud-chat account label
+	Key           string  `json:"key"`        // agent:id
+	Agent         string  `json:"agent"`
+	ID            string  `json:"id"`
+	Cwd           string  `json:"cwd"`
+	Project       string  `json:"project"` // 归一化后的项目展示名
+	Title         string  `json:"title"`
+	OriginalTitle string  `json:"original_title"`
+	Last          string  `json:"last"`        // RFC3339
+	Created       string  `json:"created"`     // RFC3339;零值空串
+	SourcePath    string  `json:"source_path"` // 会话源文件路径(详情「源路径」,只读展示)
+	Messages      int     `json:"messages"`
+	Resume        string  `json:"resume"`
+	Transcript    bool    `json:"transcript"`
+	Tokens        int     `json:"tokens"`
+	Cost          float64 `json:"cost"`
+	Source        string  `json:"source"` // local | wsl | gateway | import | cache | retained
+	ReadOnly      bool    `json:"read_only"`
+	// UpstreamDeleted：原 Agent 已删除该会话，但本机文件仍在，照常可读。
+	UpstreamDeleted bool     `json:"upstream_deleted"`
+	Favorite        bool     `json:"favorite"`
+	Archived        bool     `json:"archived"`
+	Tags            []string `json:"tags"`
+	HasNote         bool     `json:"has_note"`
+	Note            string   `json:"note"`
 }
 
 type ClaudeImportReport struct {
@@ -53,6 +55,15 @@ type TranscriptView struct {
 	Key            string           `json:"key"`
 	Parts          []TranscriptPart `json:"parts"`
 	Cut            bool             `json:"cut"`
+	// Prompts 是整个会话里用户的每一次提问（不只当前窗口），供阅读区的提问导航条
+	// 定位与跳转；同一次读取里算出，不额外读文件。
+	Prompts []PromptMark `json:"prompts"`
+}
+
+// PromptMark 是一次提问：Index 是它在全文中的段序号，Text 是首行摘要。
+type PromptMark struct {
+	Index int    `json:"index"`
+	Text  string `json:"text"`
 }
 
 // TranscriptPart 是一句：Role user/assistant/tool，Kind text/thinking/

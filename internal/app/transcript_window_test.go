@@ -85,3 +85,30 @@ func TestRetainedTranscriptWindowKeepsLastWords(t *testing.T) {
 		t.Fatal("无效位置未拒绝")
 	}
 }
+
+// 提问导航：每个窗口都带整段会话的全部提问，按全文段序号；只算用户的正文段，
+// 空白段跳过，摘要取第一行非空文字并截断。
+func TestWindowsCarryEveryPromptOfTheConversation(t *testing.T) {
+	long := strings.Repeat("长", promptMarkRunes+5)
+	full := sessions.Transcript{Parts: []sessions.Part{
+		{Role: "user", Kind: "text", Text: "\n  第一问\n第二行"},
+		{Role: "assistant", Kind: "text", Text: "回答"},
+		{Role: "user", Kind: "context", Text: "上下文不算"},
+		{Role: "user", Kind: "text", Text: "   "},
+		{Role: "tool", Kind: "tool_result", Text: "结果"},
+		{Role: "user", Kind: "text", Text: long},
+	}}
+	for i := 0; i < 200; i++ {
+		full.Parts = append(full.Parts, sessions.Part{Role: "assistant", Kind: "text", Text: "填充"})
+	}
+	full.Parts = append(full.Parts, sessions.Part{Role: "user", Kind: "text", Text: "最后一问"})
+	want := []PromptMark{{0, "第一问"}, {5, string([]rune(long)[:promptMarkRunes]) + "…"}, {206, "最后一问"}}
+	for _, view := range []*TranscriptView{conversationWindow(full, -1, false), conversationWindow(full, 0, false)} {
+		if fmt.Sprint(view.Prompts) != fmt.Sprint(want) {
+			t.Fatalf("prompts = %v, want %v", view.Prompts, want)
+		}
+	}
+	if empty := conversationWindow(sessions.Transcript{}, -1, false); empty.Prompts == nil || len(empty.Prompts) != 0 {
+		t.Fatalf("empty transcript prompts = %#v, want empty list", empty.Prompts)
+	}
+}

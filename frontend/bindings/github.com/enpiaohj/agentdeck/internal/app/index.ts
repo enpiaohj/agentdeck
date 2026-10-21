@@ -39,6 +39,7 @@ export {
     MigrateReport,
     NavCounts,
     ProjectView,
+    PromptMark,
     RestoreReport,
     ScanProgress,
     SearchHitView,

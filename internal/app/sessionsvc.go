@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -17,12 +18,14 @@ import (
 // Filter 是列表过滤条件。归档语义：Archived=false 看未归档（默认视图），
 // true 只看归档；归档只是标注过滤，源文件零改动。
 type Filter struct {
-	Agent     string `json:"agent,omitempty"`
-	Project   string `json:"project,omitempty"` // 归一化路径
-	Tag       string `json:"tag,omitempty"`
-	Favorites bool   `json:"favorites,omitempty"`
-	Archived  bool   `json:"archived,omitempty"`
-	Search    string `json:"search,omitempty"` // 标题子串（大小写折叠）
+	Agent string `json:"agent,omitempty"`
+	// Agents 多选智能体（侧栏 Ctrl+单击叠加）；非空时只看这些，Agent 一并计入
+	Agents    []string `json:"agents,omitempty"`
+	Project   string   `json:"project,omitempty"` // 归一化路径
+	Tag       string   `json:"tag,omitempty"`
+	Favorites bool     `json:"favorites,omitempty"`
+	Archived  bool     `json:"archived,omitempty"`
+	Search    string   `json:"search,omitempty"` // 标题子串（大小写折叠）
 }
 
 // SessionService 是会话列表/详情服务。
@@ -71,11 +74,17 @@ func (s *SessionService) List(f Filter) []SessionView {
 
 	searchKey := foldTitle(f.Search)
 	names := s.declaredNames()
+	agents := map[string]bool{}
+	for _, ag := range append(slices.Clone(f.Agents), f.Agent) {
+		if ag != "" {
+			agents[ag] = true
+		}
+	}
 	out := make([]SessionView, 0, 64)
 	for _, sess := range list {
 		key := sess.Agent + ":" + sess.ID
 		m := ms[sessionMarkKey(sess, key, ms)]
-		if f.Agent != "" && sess.Agent != f.Agent {
+		if len(agents) > 0 && !agents[sess.Agent] {
 			continue
 		}
 		if f.Archived != m.Archived { // 归档视图只看归档，默认视图只看未归档
@@ -369,6 +378,8 @@ func view(s sessions.Session, key string, m marks.Mark, msgs map[string]int, msg
 		source = "retained"
 	} else if s.Gateway {
 		source = "gateway"
+	} else if s.Cached {
+		source = "cache"
 	} else if s.Imported {
 		source = "import"
 	} else if s.WSL != "" {
@@ -402,17 +413,18 @@ func view(s sessions.Session, key string, m marks.Mark, msgs map[string]int, msg
 			}
 			return 0 // 补齐前降级显示 0
 		}(),
-		Resume:     s.Resume,
-		Transcript: sessions.HasTranscript(s.Agent),
-		Tokens:     s.Tokens.Input + s.Tokens.Output + s.Tokens.CacheRead + s.Tokens.CacheWrite,
-		Cost:       s.Cost,
-		Source:     source,
-		ReadOnly:   s.ReadOnly,
-		Favorite:   m.Favorite,
-		Archived:   m.Archived,
-		Tags:       m.Tags,
-		HasNote:    m.Note != "",
-		Note:       m.Note,
+		Resume:          s.Resume,
+		Transcript:      sessions.HasTranscript(s.Agent),
+		Tokens:          s.Tokens.Input + s.Tokens.Output + s.Tokens.CacheRead + s.Tokens.CacheWrite,
+		Cost:            s.Cost,
+		Source:          source,
+		ReadOnly:        s.ReadOnly,
+		UpstreamDeleted: s.UpstreamDeleted,
+		Favorite:        m.Favorite,
+		Archived:        m.Archived,
+		Tags:            m.Tags,
+		HasNote:         m.Note != "",
+		Note:            m.Note,
 	}
 }
 

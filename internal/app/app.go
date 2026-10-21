@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/enpiaohj/agentdeck/internal/appconfig"
+	"github.com/enpiaohj/agentdeck/internal/claudecache"
 	"github.com/enpiaohj/agentdeck/internal/claudehistory"
 	"github.com/enpiaohj/agentdeck/internal/history"
 	"github.com/enpiaohj/agentdeck/internal/marks"
@@ -100,6 +101,7 @@ type App struct {
 	loaded      bool
 	crashed     bool // 上次进程未正常退出(启动时检测残留 lock)
 	importError string
+	cacheError  string // Claude Desktop 本机聊天缓存读取失败的原因
 
 	warmMu     sync.Mutex // serialize message scans across refreshed generations
 	generation uint64
@@ -260,6 +262,10 @@ func (a *App) emit(event string, data any) {
 	}
 }
 
+// desktopDataDirs 是读取 Claude Desktop 聊天缓存的 userData 目录；测试替换它，
+// 免得扫到本机真实的 Desktop。
+var desktopDataDirs = sessions.DesktopDataDirs
+
 // ensure 装配列表缓存。首次调用承担 sessions 层的全量扫描（它自己的
 // 缓存让这次扫描只发生一次），之后只是取快照。sessions.List 必须显式
 // 传 sessions.All——List(0) 只是最新 200 条（陷阱 #1）。
@@ -277,6 +283,14 @@ func (a *App) ensure() {
 	} else {
 		list = append(list, imported...)
 	}
+	// Claude Desktop 缓存的 claude.ai 聊天：只读上游 IndexedDB，副本写在
+	// 导入目录旁的自有目录里。读失败不影响其他来源。
+	cached, cacheErr := claudecache.Sync(desktopDataDirs(), filepath.Join(filepath.Dir(a.cfg.ImportDir), "claude-desktop-cache"))
+	a.cacheError = ""
+	if cacheErr != nil {
+		a.cacheError = cacheErr.Error()
+	}
+	list = append(list, cached...)
 	// Retained-only rows keep the original key and marks but cannot advertise
 	// native resume: a local transcript is not an upstream executable session.
 	saved, historyErr := a.history.List()

@@ -40,6 +40,25 @@ func WorkBuddyDir() string {
 // a session's own <id>.jsonl, and a subagent's under <id>/subagents/.
 func workbuddyFiles() []file { return buddyFiles("workbuddy", WorkBuddyDir()) }
 
+// AgentDeck: WorkBuddy AI, WorkBuddy's international edition, is the same app
+// under its own account and folder, ~/.workbuddy-ai, kept the same way; it is
+// listed as its own agent, as qoder and qoder-cn are.
+
+// WorkBuddyAIDir is WorkBuddy AI's folder: $WORKBUDDY_AI_CONFIG_DIR, else
+// ~/.workbuddy-ai.
+func WorkBuddyAIDir() string {
+	if d := strings.TrimSpace(appdir.Getenv("WORKBUDDY_AI_CONFIG_DIR")); d != "" {
+		return expandHome(d)
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".workbuddy-ai")
+}
+
+func workbuddyAIFiles() []file { return buddyFiles("workbuddy-ai", WorkBuddyAIDir()) }
+
+// isWorkBuddy is whether an agent's files are WorkBuddy's, either edition.
+func isWorkBuddy(agent string) bool { return agent == "workbuddy" || agent == "workbuddy-ai" }
+
 // buddyFiles are the sessions under projects/ in dir, as agent's: WorkBuddy's,
 // or CodeBuddy Code's, which keeps them the same way.
 func buddyFiles(agent, dir string) []file {
@@ -112,18 +131,21 @@ type wbLine struct {
 }
 
 var (
-	wbUsage = []byte(`"usage"`)
-	wbTitle = []byte(`-title"`)
-	wbUser  = []byte(`"role":"user"`)
-	wbCwd   = []byte(`"cwd":"`)
-	wbScene = regexp.MustCompile(`^@[\w-]+:\S*$`)
+	wbUsage   = []byte(`"usage"`)
+	wbTitle   = []byte(`-title"`)
+	wbMessage = []byte(`"type":"message"`)
+	wbCwd     = []byte(`"cwd":"`)
+	wbScene   = regexp.MustCompile(`^@[\w-]+:\S*$`)
 )
 
 func workbuddyLine(s *state, b []byte, main bool) {
 	at := numTS(b)
 	s.saw(at, main)
+	// AgentDeck: every message line of the main file is read, to count the
+	// prompts and replies a day (the message count); before, only the first
+	// prompt was, and WorkBuddy's sessions all said 0 messages.
 	want := bytes.Contains(b, wbUsage) ||
-		main && (bytes.Contains(b, wbTitle) || s.First == "" && bytes.Contains(b, wbUser)) ||
+		main && (bytes.Contains(b, wbTitle) || bytes.Contains(b, wbMessage)) ||
 		s.Cwd == "" && bytes.Contains(b, wbCwd)
 	if !want {
 		return
@@ -153,8 +175,17 @@ func workbuddyLine(s *state, b []byte, main bool) {
 			s.Named = title(l.AITitle)
 		}
 	case "message":
-		if main && l.Role == "user" && s.First == "" {
-			s.First = wbPrompt(l.Content)
+		if main && l.Role == "user" {
+			// a prompt is words the user typed, not what WorkBuddy put in alone
+			if prompt := wbPrompt(l.Content); prompt != "" {
+				if s.First == "" {
+					s.First = prompt
+				}
+				s.day(dateOf(at)).Prompts++
+			}
+		}
+		if main && l.Role == "assistant" && wbHasText(l.Content) {
+			s.day(dateOf(at)).Replies++
 		}
 	}
 	u := p.Usage
@@ -176,11 +207,30 @@ func workbuddyLine(s *state, b []byte, main bool) {
 	s.use(date, model, t)
 }
 
+// wbHasText is whether an assistant message says something: an output_text
+// block with words in it, not only a step between tool calls.
+func wbHasText(content json.RawMessage) bool {
+	var blocks []struct{ Type, Text string }
+	if json.Unmarshal(content, &blocks) != nil {
+		var text string
+		return json.Unmarshal(content, &text) == nil && strings.TrimSpace(text) != ""
+	}
+	for _, b := range blocks {
+		if b.Type == "output_text" && strings.TrimSpace(b.Text) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // wbPrompt is the words typed in a user message: its input_text blocks,
 // less what WorkBuddy put in beside them (<system-reminder>…, @scene:…).
 func wbPrompt(content json.RawMessage) string {
 	var text string
 	if json.Unmarshal(content, &text) == nil {
+		if q := wbQuery(text); q != "" {
+			return title(q)
+		}
 		if strings.HasPrefix(strings.TrimSpace(text), "<") {
 			return ""
 		}
@@ -193,11 +243,32 @@ func wbPrompt(content json.RawMessage) string {
 	var parts []string
 	for _, b := range blocks {
 		t := strings.TrimSpace(b.Text)
-		if (b.Type == "input_text" || b.Type == "text") && t != "" && !strings.HasPrefix(t, "<") && !wbScene.MatchString(t) {
+		if b.Type != "input_text" && b.Type != "text" {
+			continue
+		}
+		if q := wbQuery(t); q != "" {
+			parts = append(parts, q)
+		} else if t != "" && !strings.HasPrefix(t, "<") && !wbScene.MatchString(t) {
 			parts = append(parts, t)
 		}
 	}
 	return title(strings.Join(parts, " "))
+}
+
+// AgentDeck: newer WorkBuddy builds put the typed words in the same block as
+// its <system-reminder>, wrapped in <user_query>; the block starts with "<"
+// and was dropped whole, so the prompt went uncounted and untitled.
+var wbUserQuery = regexp.MustCompile(`(?s)<user_query>(.*?)</user_query>`)
+
+// wbQuery is the words in a block's <user_query> tags, "" without them.
+func wbQuery(text string) string {
+	var parts []string
+	for _, m := range wbUserQuery.FindAllStringSubmatch(text, -1) {
+		if q := strings.TrimSpace(m[1]); q != "" {
+			parts = append(parts, q)
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // workbuddyMeta fills in a session's cwd from its meta file, for the lines

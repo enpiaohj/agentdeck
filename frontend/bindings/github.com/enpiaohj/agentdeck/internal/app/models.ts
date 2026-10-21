@@ -567,6 +567,11 @@ export class Filter {
     "agent"?: string;
 
     /**
+     * Agents 多选智能体（侧栏 Ctrl+单击叠加）；非空时只看这些，Agent 一并计入
+     */
+    "agents"?: string[];
+
+    /**
      * 归一化路径
      */
     "project"?: string;
@@ -589,7 +594,11 @@ export class Filter {
      * Creates a new Filter instance from a string or object.
      */
     static createFrom($$source: any = {}): Filter {
+        const $$createField1_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("agents" in $$parsedSource) {
+            $$parsedSource["agents"] = $$createField1_0($$parsedSource["agents"]);
+        }
         return new Filter($$parsedSource as Partial<Filter>);
     }
 }
@@ -912,6 +921,34 @@ export class ProjectView {
     }
 }
 
+/**
+ * PromptMark 是一次提问：Index 是它在全文中的段序号，Text 是首行摘要。
+ */
+export class PromptMark {
+    "index": number;
+    "text": string;
+
+    /** Creates a new PromptMark instance. */
+    constructor($$source: Partial<PromptMark> = {}) {
+        if (!("index" in $$source)) {
+            this["index"] = 0;
+        }
+        if (!("text" in $$source)) {
+            this["text"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new PromptMark instance from a string or object.
+     */
+    static createFrom($$source: any = {}): PromptMark {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new PromptMark($$parsedSource as Partial<PromptMark>);
+    }
+}
+
 export class RestoreReport {
     "rollback_path": string;
     "preferences": string;
@@ -1133,10 +1170,15 @@ export class SessionView {
     "cost": number;
 
     /**
-     * local | wsl | gateway
+     * local | wsl | gateway | import | cache | retained
      */
     "source": string;
     "read_only": boolean;
+
+    /**
+     * UpstreamDeleted：原 Agent 已删除该会话，但本机文件仍在，照常可读。
+     */
+    "upstream_deleted": boolean;
     "favorite": boolean;
     "archived": boolean;
     "tags": string[];
@@ -1208,6 +1250,9 @@ export class SessionView {
         if (!("read_only" in $$source)) {
             this["read_only"] = false;
         }
+        if (!("upstream_deleted" in $$source)) {
+            this["upstream_deleted"] = false;
+        }
         if (!("favorite" in $$source)) {
             this["favorite"] = false;
         }
@@ -1231,10 +1276,10 @@ export class SessionView {
      * Creates a new SessionView instance from a string or object.
      */
     static createFrom($$source: any = {}): SessionView {
-        const $$createField23_0 = $$createType0;
+        const $$createField24_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tags" in $$parsedSource) {
-            $$parsedSource["tags"] = $$createField23_0($$parsedSource["tags"]);
+            $$parsedSource["tags"] = $$createField24_0($$parsedSource["tags"]);
         }
         return new SessionView($$parsedSource as Partial<SessionView>);
     }
@@ -1594,6 +1639,12 @@ export class TranscriptView {
     "parts": TranscriptPart[];
     "cut": boolean;
 
+    /**
+     * Prompts 是整个会话里用户的每一次提问（不只当前窗口），供阅读区的提问导航条
+     * 定位与跳转；同一次读取里算出，不额外读文件。
+     */
+    "prompts": PromptMark[];
+
     /** Creates a new TranscriptView instance. */
     constructor($$source: Partial<TranscriptView> = {}) {
         if (!("start" in $$source)) {
@@ -1623,6 +1674,9 @@ export class TranscriptView {
         if (!("cut" in $$source)) {
             this["cut"] = false;
         }
+        if (!("prompts" in $$source)) {
+            this["prompts"] = [];
+        }
 
         Object.assign(this, $$source);
     }
@@ -1632,9 +1686,13 @@ export class TranscriptView {
      */
     static createFrom($$source: any = {}): TranscriptView {
         const $$createField7_0 = $$createType8;
+        const $$createField9_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("parts" in $$parsedSource) {
             $$parsedSource["parts"] = $$createField7_0($$parsedSource["parts"]);
+        }
+        if ("prompts" in $$parsedSource) {
+            $$parsedSource["prompts"] = $$createField9_0($$parsedSource["prompts"]);
         }
         return new TranscriptView($$parsedSource as Partial<TranscriptView>);
     }
@@ -1800,3 +1858,5 @@ const $$createType5 = TerminalShellOption.createFrom;
 const $$createType6 = $Create.Array($$createType5);
 const $$createType7 = TranscriptPart.createFrom;
 const $$createType8 = $Create.Array($$createType7);
+const $$createType9 = PromptMark.createFrom;
+const $$createType10 = $Create.Array($$createType9);

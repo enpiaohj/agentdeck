@@ -141,6 +141,13 @@ func TestListFilters(t *testing.T) {
 	if n := len(svc.List(Filter{Agent: "claude"})); n != 1 {
 		t.Fatalf("agent 过滤 = %d 条", n)
 	}
+	// 多选智能体：并集；旧的 Agent 字段一并计入
+	if n := len(svc.List(Filter{Agents: []string{"claude", "codex"}})); n != 2 {
+		t.Fatalf("多选 agent 过滤 = %d 条, want 2", n)
+	}
+	if n := len(svc.List(Filter{Agent: "zcode", Agents: []string{"codex"}})); n != 2 {
+		t.Fatalf("Agent 与 Agents 合并 = %d 条, want 2", n)
+	}
 	// 收藏
 	if err := mk.SetFavorite("claude:11111111-2222-3333-4444-555555555555", true); err != nil {
 		t.Fatal(err)

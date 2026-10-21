@@ -118,13 +118,19 @@ type Session struct {
 	Retained bool `json:"retained,omitempty"`
 	ReadOnly bool `json:"read_only,omitempty"`
 	// AgentDeck-owned copies of cloud chat exports, separate from native files.
-	Imported     bool   `json:"imported,omitempty"`
-	Account      string `json:"account,omitempty"`
-	MessageCount int    `json:"message_count,omitempty"`
+	Imported bool `json:"imported,omitempty"`
+	// AgentDeck: an Imported copy read from Claude Desktop's own claude.ai
+	// cache (internal/claudecache) rather than from an export file.
+	Cached bool `json:"cached,omitempty"`
+	// AgentDeck: its agent deleted it, but its file is still here to read
+	// (workbuddy_deleted.go).
+	UpstreamDeleted bool   `json:"upstream_deleted,omitempty"`
+	Account         string `json:"account,omitempty"`
+	MessageCount    int    `json:"message_count,omitempty"`
 	// Gateway: seen only through magpie's gateway, with no file of the
 	// agent's on this computer (external.go)
 	Gateway       bool          `json:"gateway,omitempty"`
-	Agent         string        `json:"agent"` // magpie agent id: claude, codex, opencode, pi, omp, zcode, dsh, cline, qoder, qoder-cn, grok, workbuddy, droid, cursor, hermes, alma, kimi
+	Agent         string        `json:"agent"` // magpie agent id: claude, codex, opencode, pi, omp, zcode, dsh, cline, qoder, qoder-cn, grok, workbuddy, workbuddy-ai, droid, cursor, hermes, alma, kimi
 	ID            string        `json:"id"`
 	Cwd           string        `json:"cwd"`
 	Title         string        `json:"title"` // the name it was given, else the agent's own title, else the first prompt
@@ -479,7 +485,7 @@ func allFiles() []file {
 	var out []file
 	for _, fs := range [][]file{callFiles(), openCodeFiles(), piFiles(),
 		wslFiles("pi", "omp", "kimi"), zcodeFiles(), dshFiles(), clineFiles(), ccFiles("qoder", QoderDir("qoder")), ccFiles("qoder-cn", QoderDir("qoder-cn")),
-		grokFiles(), workbuddyFiles(), droidFiles(), ompFiles(), cursorFiles(), hermesFiles(), almaFiles(), kimiFiles()} {
+		grokFiles(), workbuddyFiles(), workbuddyAIFiles(), droidFiles(), ompFiles(), cursorFiles(), hermesFiles(), almaFiles(), kimiFiles()} {
 		out = append(out, fs...)
 	}
 	return out
@@ -499,6 +505,7 @@ func Dirs() []string {
 		{QoderDir("qoder-cn"), filepath.Join(QoderDir("qoder-cn"), "projects")},
 		{GrokDir(), filepath.Join(GrokDir(), "sessions")},
 		{WorkBuddyDir(), filepath.Join(WorkBuddyDir(), "projects")},
+		{WorkBuddyAIDir(), filepath.Join(WorkBuddyAIDir(), "projects")},
 		{OmpDir(), filepath.Join(OmpDir(), "sessions")},
 		{FactoryDir(), filepath.Join(FactoryDir(), "sessions")},
 		{CursorDir(), filepath.Join(CursorDir(), "chats")},
@@ -631,7 +638,9 @@ func CachePath() string { return filepath.Join(filepath.Dir(catalog.CachePath())
 // 19: the names the user gave Claude Code's and WorkBuddy's (custom-title).
 // 20: Codex's source and direct parent thread identity.
 // 21: Codex subagent nicknames and parent spawn task names.
-const cacheVersion = 21
+// 22: AgentDeck: WorkBuddy's prompts and replies a day (its message count).
+// 23: AgentDeck: WorkBuddy prompts inside <user_query>, as newer builds write them.
+const cacheVersion = 23
 
 type cacheFile struct {
 	Version int               `json:"version"`
@@ -1041,6 +1050,7 @@ func List(limit int) []Session {
 			}
 		}
 	}
+	markUpstreamDeleted(out)
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Last.After(out[j].Last) })
 	return out
 }
@@ -1181,7 +1191,7 @@ func parserFor(agent string) sessionParser {
 		return sessionParser{line: codexBody}
 	case "pi", "omp":
 		return sessionParser{line: piParse}
-	case "workbuddy":
+	case "workbuddy", "workbuddy-ai":
 		return sessionParser{line: workbuddyLine}
 	default:
 		return sessionParser{line: claudeLine, claude: true}
@@ -1225,7 +1235,7 @@ func parse(f file, old *state) *state {
 	if err == nil {
 		s.Off = off
 	}
-	if f.agent == "workbuddy" && s.Cwd == "" {
+	if isWorkBuddy(f.agent) && s.Cwd == "" {
 		workbuddyMeta(s, f.path)
 	}
 	return s

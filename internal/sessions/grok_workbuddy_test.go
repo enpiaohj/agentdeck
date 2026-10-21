@@ -116,10 +116,58 @@ func TestWorkBuddy(t *testing.T) {
 	find(t, List(0), "workbuddy", wbID)
 }
 
+// AgentDeck: WorkBuddy AI, the international edition, keeps the same files in
+// ~/.workbuddy-ai (or $WORKBUDDY_AI_CONFIG_DIR); its sessions are its own
+// agent's, read, titled and counted as WorkBuddy's are, beside WorkBuddy's.
+func TestWorkBuddyAI(t *testing.T) {
+	inZone(t, 0)
+	home := setupAgents(t)
+	copyTree(t, "testdata/workbuddy", filepath.Join(home, ".workbuddy-ai"))
+	Reset()
+	ss := List(0)
+	if n, m := count(ss, "workbuddy-ai"), count(ss, "workbuddy"); n != 3 || m != 3 {
+		t.Fatalf("want 3 sessions of each edition, got %d WorkBuddy AI, %d WorkBuddy", n, m)
+	}
+	w := find(t, ss, "workbuddy-ai", wbID)
+	if w.Cwd != "/work/wb" || w.Title != "Launch notes draft" || w.Resume != "" || !w.Transcript && !HasTranscript(w.Agent) {
+		t.Fatalf("workbuddy-ai: %+v", w)
+	}
+	if m := model(w, "hy3"); m.Tokens != (Tokens{2422, 968, 8777, 0, 0}) {
+		t.Fatalf("hy3: %+v", m)
+	}
+	if o := find(t, ss, "workbuddy-ai", wbOldID); o.Cwd != "/work/wb-old" {
+		t.Fatalf("old: %+v", o)
+	}
+	tr, err := TranscriptOf(w)
+	if err != nil || len(tr.Parts) == 0 {
+		t.Fatalf("transcript: %v %+v", err, tr)
+	}
+	// one prompt (what WorkBuddy put in beside it left out) and two replies;
+	// both editions count them, as the message count shows
+	for _, ag := range []string{"workbuddy", "workbuddy-ai"} {
+		for _, m := range ListAgent(ag) {
+			if m.ID == wbID && m.Messages != 3 {
+				t.Errorf("%s messages = %d, want 3", ag, m.Messages)
+			}
+		}
+	}
+
+	moved := filepath.Join(filepath.Dir(home), "wb-ai")
+	if err := os.Rename(filepath.Join(home, ".workbuddy-ai"), moved); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("WORKBUDDY_AI_CONFIG_DIR", moved)
+	Reset()
+	find(t, List(0), "workbuddy-ai", wbID)
+}
+
 func TestWorkBuddyPrompt(t *testing.T) {
 	for in, want := range map[string]string{
 		`[{"type":"input_text","text":"<system-reminder>x</system-reminder>"},{"type":"input_text","text":"@scene:4"},{"type":"input_text","text":"Fix   it"}]`: "Fix it",
-		`"plain words"`:                                "plain words",
+		`"plain words"`: "plain words",
+		// AgentDeck: the typed words inside the reminder's block, as newer builds write it
+		`[{"type":"input_text","text":"<system-reminder>x</system-reminder>\n<user_query>今天几号？ 第几周？</user_query>"}]`: "今天几号？ 第几周？",
+		`"<system-reminder>x</system-reminder><user_query>hi there</user_query>"`:                                    "hi there",
 		`"<command>x</command>"`:                       "",
 		`[{"type":"input_image","image_url":"data:"}]`: "",
 	} {

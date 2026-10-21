@@ -79,7 +79,11 @@ func (s *SessionService) Diagnostics() []DiagRow {
 	}
 	s.a.mu.Lock()
 	importError := s.a.importError
+	cacheError := s.a.cacheError
 	s.a.mu.Unlock()
+	if cacheError != "" {
+		out = append(out, DiagRow{Agent: "claude-desktop", ResumeNote: "Desktop 聊天缓存读取失败: " + cacheError, Source: "cache"})
+	}
 	if importError != "" {
 		found := false
 		for i := range out {

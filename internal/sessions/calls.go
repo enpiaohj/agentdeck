@@ -337,6 +337,7 @@ func callSources() []file {
 	out = append(out, piCallFiles()...)
 	out = append(out, codebuddyCallFiles()...)
 	out = append(out, agyCallFiles()...) // #2097
+	out = append(out, workbuddyAIFiles()...)
 	return append(out, workbuddyCallFiles()...)
 }
 

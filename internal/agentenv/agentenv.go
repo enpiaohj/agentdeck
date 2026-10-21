@@ -69,6 +69,8 @@ var Vars = []string{
 	// MiMo Code, MiniMax Code, OpenHanako, Hermes, dsh, WorkBuddy, CodeBuddy Code
 	"MIMOCODE_HOME", "MINIMAX_DATA_DIR", "HANA_HOME", "HERMES_HOME", "DSH_HOME",
 	"WORKBUDDY_CONFIG_DIR", "CODEBUDDY_CONFIG_DIR",
+	// WorkBuddy AI (WorkBuddy's international edition), ~/.workbuddy-ai without it
+	"WORKBUDDY_AI_CONFIG_DIR",
 	// DevEco Code's extra config folder, read after ~/.config/deveco
 	"DEVECO_CONFIG_DIR",
 	// alma-server's data folder (Alma without a desktop, on Linux)
