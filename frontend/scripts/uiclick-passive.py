@@ -6,12 +6,13 @@ uishot.py clicks the title bar to dismiss the IME bar, which closes any dialog.
 """
 import ctypes
 import ctypes.wintypes as wt
+import os
 import subprocess
 import sys
 import time
 
 x, y = int(sys.argv[1]), int(sys.argv[2])
-out = sys.argv[3] if len(sys.argv) > 3 else "D:/Temp/ui-click.png"
+out = sys.argv[3] if len(sys.argv) > 3 else os.path.join(os.environ.get("TEMP", "."), "ui-click.png")
 button = sys.argv[4] if len(sys.argv) > 4 else "left"
 
 u32 = ctypes.windll.user32
@@ -48,4 +49,4 @@ else:
 time.sleep(1.2)
 
 subprocess.run(["python", "-I", "frontend/scripts/uishot-passive.py", out],
-               cwd=r"D:\Work\AgentDeck")
+               cwd=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))

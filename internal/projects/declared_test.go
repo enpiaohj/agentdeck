@@ -32,7 +32,7 @@ func TestDeclaredStoreRoundTrip(t *testing.T) {
 	}
 
 	// 同一路径再次声明只更新展示名，不重复出行。
-	if _, err := s.Add(`D:\Work\newthing`, "新项目"); err != nil {
+	if _, err := s.Add(`D:\work\newthing`, "新项目"); err != nil {
 		t.Fatal(err)
 	}
 	all, _ = s.All()

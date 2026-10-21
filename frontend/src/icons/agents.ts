@@ -11,10 +11,13 @@ export type AgentIdentity = {
 export const AGENT_LIST: AgentIdentity[] = [
   { key: 'claude', label: 'Claude Code', color: '#D97757', icon: '/agents/claude-color.svg', glyph: true },
   { key: 'claude-desktop', label: 'Claude Desktop', color: '#D97757', icon: '/agents/claude-color.svg', glyph: true },
-  { key: 'codex', label: 'Codex', color: '#3143FF', icon: '/agents/codex.png' },
-  { key: 'zcode', label: 'ZCode', color: '#4C7DF0', icon: '/agents/zcode.png' },
-  { key: 'hermes', label: 'Hermes', color: '#B08A2E', icon: '/agents/hermes.png' },
-  { key: 'workbuddy', label: 'WorkBuddy', color: '#0FA37F', icon: '/agents/workbuddy.png' },
+  // 品牌位图不再随包分发：它们提取自各产品的专有安装包，没有再分发授权。
+  // 有 Lobe Icons（MIT）SVG 的用 SVG，其余留 null，由 AgentMark 回退到
+  // Fluent 终端图标并保留可访问名称。
+  { key: 'codex', label: 'Codex', color: '#3143FF', icon: '/agents/codex-color.svg', glyph: true },
+  { key: 'zcode', label: 'ZCode', color: '#4C7DF0', icon: null },
+  { key: 'hermes', label: 'Hermes', color: '#B08A2E', icon: null },
+  { key: 'workbuddy', label: 'WorkBuddy', color: '#0FA37F', icon: null },
   { key: 'qoder-cn', label: 'Qoder CN', color: '#6E56CF', icon: '/agents/qoder-color.svg', glyph: true },
   { key: 'qoder', label: 'Qoder', color: '#6E56CF', icon: '/agents/qoder-color.svg', glyph: true },
   { key: 'opencode', label: 'OpenCode', color: '#363A43', icon: '/agents/opencode.svg', glyph: true },

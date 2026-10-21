@@ -19,9 +19,9 @@ func TestGroupConvergesRepresentations(t *testing.T) {
 	}
 	list := []sessions.Session{
 		sess("codex", "c1", `\\?\D:\Work\ExampleApp`, at(5)),
-		sess("claude", "k1", `D:\Work\ExampleApp\`, at(10)),
+		sess("claude", "k1", `D:\work\exampleapp\`, at(10)),
 		sess("zcode", "z1", `D:\Work\ExampleApp`, at(1)),
-		sess("codex", "c2", `D:\Work\AgentDeck`, at(3)),
+		sess("codex", "c2", `D:\Work\Notes`, at(3)),
 		sess("claude", "k2", "", at(9)), // 无 cwd，不属于任何项目
 	}
 	ps := Group(list)
@@ -29,7 +29,7 @@ func TestGroupConvergesRepresentations(t *testing.T) {
 		t.Fatalf("聚出 %d 个项目, want 2: %+v", len(ps), ps)
 	}
 	// 最新活动的组在前
-	if ps[0].Path != `D:\Work\ExampleApp` && ps[0].Path != `D:\Work\ExampleApp` {
+	if ps[0].Path != `D:\work\exampleapp` && ps[0].Path != `D:\Work\ExampleApp` {
 		t.Errorf("代表路径 = %q", ps[0].Path)
 	}
 	if ps[0].Name != "ExampleApp" || ps[0].Drive != "D" {
@@ -45,7 +45,7 @@ func TestGroupConvergesRepresentations(t *testing.T) {
 	if !ps[0].Last.Equal(at(10)) {
 		t.Errorf("组最新活动 = %v, want %v", ps[0].Last, at(10))
 	}
-	if len(ps[1].Keys) != 1 || ps[1].Keys[0] != "codex:c2" || ps[1].Name != "AgentDeck" {
+	if len(ps[1].Keys) != 1 || ps[1].Keys[0] != "codex:c2" || ps[1].Name != "Notes" {
 		t.Fatalf("第二组: %+v", ps[1])
 	}
 }

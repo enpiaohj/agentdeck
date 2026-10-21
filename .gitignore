@@ -40,15 +40,35 @@ Thumbs.db
 desktop.ini
 .DS_Store
 
-# ---- 本地环境 ----
+# ---- 本地环境与凭据 ----
+# 凭据、私钥与本地账号配置一律不入库（公开仓库下误提交不可撤回）
 .env
-.env.local
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+*.jks
+*.keystore
+auth.json
+.credentials.json
+.npmrc
+.netrc
 *.local.json
 
+# ---- 本地数据库与日志 ----
+*.db
+*.sqlite
+*.sqlite3
+
 # ---- Claude Code 本地工作区 ----
-# 实施期笔记等本地文件:留在工作区,不随仓库分发。未跟踪文件会让
-# go build 判定 vcs.modified=true,正式构建要求干净工作区
-.claude/*.notes
+# 实施期笔记、权限白名单等本地文件:留在工作区,不随仓库分发。
+# 未跟踪文件会让 go build 判定 vcs.modified=true,正式构建要求干净工作区
+.claude/
+
+# ---- 公开前本地备份 ----
+# 备份含未脱敏的历史快照与产物，只留在本机
+/_Backup/
 
 # ---- 发布快照中的大文件 ----
 # releases/ 保留 source/ 与 CHANGELOG.md，二进制产物上传 GitHub Releases

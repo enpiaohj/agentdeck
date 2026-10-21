@@ -6,6 +6,7 @@ closes an open dialog. For dialog checks use this: same capture path, no input.
 """
 import ctypes
 import ctypes.wintypes as wt
+import os
 import struct
 import subprocess
 import sys
@@ -22,7 +23,7 @@ def find_hwnd():
 
 
 def main():
-    out = sys.argv[1] if len(sys.argv) > 1 else r"D:\Temp\ui-passive.png"
+    out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.environ.get("TEMP", "."), "ui-passive.png")
     u32 = ctypes.windll.user32
     g32 = ctypes.windll.gdi32
     u32.SetProcessDPIAware()

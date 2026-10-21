@@ -4,14 +4,14 @@ import { presentSessions, sessionDateGroup, sessionMonth } from '../src/sessionP
 
 const rows = [
   { title: '修复 Windows 打包', project: 'AgentDeck', agent: 'codex', tags: ['build'], last: '2026-10-16T12:00:00Z' },
-  { title: '远程连接功能', project: 'ExampleProject', agent: 'claude', tags: ['P2P'], last: '2026-10-17T12:00:00Z' },
+  { title: '示例功能', project: 'ExampleProject', agent: 'claude', tags: ['demo'], last: '2026-10-17T12:00:00Z' },
   { title: '历史导入', project: '', agent: 'kimi', tags: [], last: '' },
 ]
 
 test('标题、项目和标签可搜索，忽略大小写与全角字符', () => {
   assert.equal(presentSessions(rows, ' ＢＵＩＬＤ ', 'latest')[0].title, rows[0].title)
-  assert.equal(presentSessions(rows, '远程', 'latest')[0].title, rows[1].title)
-  assert.equal(presentSessions(rows, 'ExampleProject', 'latest')[0].title, rows[1].title)
+  assert.equal(presentSessions(rows, '示例', 'latest')[0].title, rows[1].title)
+  assert.equal(presentSessions(rows, 'exampleproject', 'latest')[0].title, rows[1].title)
   assert.deepEqual(presentSessions(rows, '不存在', 'latest'), [])
 })
 

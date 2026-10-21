@@ -23,23 +23,16 @@ wails3 generate syso -icon build/windows/icon.ico -info build/windows/info.json 
 `agents.ts` 是展示名与资源路径的唯一数据源，`AgentMark` 统一轮廓、尺寸和留白：
 
 - 新增或替换的 SVG 来自固定版本的 Lobe Icons，文件与许可证随应用分发，运行时无需联网。
-- SVG 使用白底和适量内边距，深色模式下也能辨识黑色品牌符号；本机提取的 PNG 保留品牌底色。
+- SVG 使用白底和适量内边距，深色模式下也能辨识黑色品牌符号。
 - 图片使用 `object-fit: contain`，避免裁切标志；故障状态按图片路径记录，切换 Agent 后可以恢复。
 - 容器统一细内边缘与轻微投影；品牌原始图形不重画，兜底底色跟随 Fluent 深浅色主题。
 - 没有确认品牌图标的产品，以及加载失败的资源，使用 Fluent 终端图标兜底并保留可访问名称。
   Pi Coding Agent 与 Inflection Pi 不是同一产品，不借用同名标志。
 
 品牌 SVG 的来源、固定提交与文件映射见 `frontend/public/agents/README.md`。
-仍使用的本机提取资源：
+ZCode、Hermes、WorkBuddy 没有可再分发的开源图标，使用通用兜底图标；此前从各产品
+安装包提取的 PNG 已移除。
 
-| key | 来源 |
-| --- | --- |
-| codex | 本机 `OpenAI.Codex_26.1013.3656.0` 包的 `Square44x44Logo.targetsize-256_altform-unplated.png`，按清单 `#3143FF` 合成底色 |
-| zcode | ZCode 安装目录的 `resources/icon_windows.png` |
-| hermes | hermes-agent 的 `apps/desktop/public/hermes.png` |
-| workbuddy | WorkBuddyAI 安装目录的 `resources/icon.png` |
-
-`tools/gen_agenticons.ps1` 仍可提取本机安装的产品 PNG；它不会覆盖新增的 SVG。
 新增 Agent 时登记 key / label / color / icon；使用透明品牌 SVG 时设置 `glyph: true`。
 
 ## 界面图标

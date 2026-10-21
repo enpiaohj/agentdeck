@@ -14,12 +14,25 @@ AgentDeck 是**历史检索与导航层**，不是又一个 Agent 客户端。�
 与 [magpie](https://github.com/yetone/magpie) 互补：magpie 解决「模型怎么选」，
 AgentDeck 解决「当时做了什么、怎么接着做」。
 
+## 下载与安装
+
+Windows x64 版本从 [Releases](https://github.com/enpiaohj/agentdeck/releases) 下载：
+
+- `AgentDeck-vX.Y.Z-win-x64.exe`：单文件绿色版，双击运行；需要系统已安装
+  Microsoft Edge WebView2 Runtime（Windows 11 默认自带）。
+- `AgentDeck-vX.Y.Z-win-x64.zip`：同一 EXE 加 CHANGELOG、`LICENSE`、`NOTICE.md`
+  与 `THIRD-PARTY-NOTICES.txt`。
+- `SHA256SUMS`：上述产物的校验值。
+
+当前发布产物未做代码签名，Windows SmartScreen 可能提示未知发布者；请用 `SHA256SUMS`
+校验后再运行。
+
 ## 当前状态
 
-**已发布 v0.8.0 — Windows 桌面工作台**（Wails v3 + React 18 + Fluent UI v9）。
-版本变化见 [CHANGELOG.md](CHANGELOG.md)，本地发布快照位于 `releases/v0.8.0/`。
-v0.8.0 新增开机启动与关闭到系统托盘（均默认关闭），重组设置分类，修复小窗口右键菜单
-裁切与自定义 PowerShell 路径编辑问题。
+**已发布 v0.9.0 — Windows 桌面工作台**（Wails v3 + React 18 + Fluent UI v9）。
+版本变化见 [CHANGELOG.md](CHANGELOG.md)，本机发布快照位于 `releases/v0.9.0/`。
+v0.9.0 移除从第三方安装包提取的品牌位图（改用开源图标与通用兜底图标），补齐
+第三方许可声明，构建改用 `-trimpath`，不再在产物中内嵌构建机路径。
 
 已实现：
 
@@ -114,8 +127,7 @@ internal/redact/     脱敏
 internal/settings/   设置
 internal/desktopdir/ Claude Desktop 目录发现（含 MSIX 打包路径）
 internal/provider/   最小 provider 替代（只读打开 + 基础定价）
-tools/recon/         侦察与验证脚本
-docs/                设计文档与实测报告
+tools/               图标与第三方许可声明生成脚本
 ```
 
 会话层不依赖任何桌面框架，可独立编译与测试。
@@ -146,7 +158,7 @@ Set-Location frontend
 npm run build
 Set-Location ..
 pwsh -NoProfile -File frontend/scripts/sync-assets.ps1
-go build -tags production -ldflags "-H windowsgui -s -w" -o bin/agentdeck-desktop.exe ./cmd/agentdeck-desktop
+go build -trimpath -tags production -ldflags "-H windowsgui -s -w" -o bin/agentdeck-desktop.exe ./cmd/agentdeck-desktop
 ```
 
 资源同步会删除可重新生成的旧 JS / CSS bundle，再复制 `frontend/dist`；
@@ -154,7 +166,7 @@ go build -tags production -ldflags "-H windowsgui -s -w" -o bin/agentdeck-deskto
 
 验证命令：
 
-前端定向测试：在 `frontend/` 运行 `npm test`（本机使用 Node.js 22.23.1 验证）。
+前端定向测试：在 `frontend/` 运行 `npm test`（使用 Node.js 22 验证）。
 
 ```powershell
 gofmt -l cmd internal
@@ -176,6 +188,15 @@ AgentDeck 默认只读访问各 Agent 的本地存储。唯一例外是**用户�
 | OpenCode | `~/.local/share/opencode/opencode.db` |
 | ZCode | `~/.zcode/cli/db/db.sqlite` |
 | DeepSeek Harness (dsh) | `~/.dsh/sessions/<编码目录>/<会话>/session.v<N>.jsonl[.zstd]` |
+
+## 隐私与网络访问
+
+- 会话正文、索引、标注与偏好全部保存在本机，不上传、不遥测、不需要账号。
+- 不读取账号凭据文件（`~/.claude/.credentials.json`、`~/.codex/auth.json` 等），
+  也不读写各 Agent 的 Cookie 或登录态。
+- 获取模型目录与定价时可能向 `https://models.dev/api.json`、`https://aihubmix.com/api/v1/models`
+  发起只读 GET 请求；请求不包含会话内容、本机路径或账号信息，离线时使用内置目录。
+- 日志与诊断包经过脱敏，不包含凭据内容。
 
 ## 删除会话
 
@@ -209,4 +230,7 @@ Codex 的标题与子会话关系存在 `~/.codex/state_5.sqlite`，删除时在
 ## 许可
 
 MIT。包含移植自 [magpie](https://github.com/yetone/magpie) 的代码
-（MIT, Copyright (c) 2026 yetone），详见 [NOTICE.md](NOTICE.md)。
+（MIT, Copyright (c) 2026 yetone）与 [Lobe Icons](https://github.com/lobehub/lobe-icons)
+的图标（MIT, Copyright (c) 2023 LobeHub）。依赖许可文本见
+[NOTICE.md](NOTICE.md) 与 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。
+品牌名称与标识归各自权利人所有，本项目与这些产品没有隶属或赞助关系。

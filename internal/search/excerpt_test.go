@@ -7,7 +7,7 @@ import (
 
 // 锚定按词元：查询词里的标点只是分隔符，原文用不同的标点也落得到。
 func TestExcerptAnchorsByToken(t *testing.T) {
-	text := "前面垫一句话。配置文件在 D:\\Work\\AgentDeck 里，后面再垫几句凑长度，让两侧都能截断出省略号来。"
+	text := "前面垫一句话。配置文件在 D:\\Work\\Notes 里，后面再垫几句凑长度，让两侧都能截断出省略号来。"
 	got := Excerpt(text, "D:/Work", 10, 20)
 	if !strings.Contains(got, "Work") {
 		t.Fatalf("片段没落到命中处: %q", got)

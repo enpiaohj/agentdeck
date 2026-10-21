@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """模拟鼠标点击(物理像素坐标)+ 截图,验证详情渲染。"""
-import ctypes, time, subprocess, sys
+import ctypes, os, time, subprocess, sys
 
 x, y = int(sys.argv[1]), int(sys.argv[2])
-out = sys.argv[3] if len(sys.argv) > 3 else r"D:\Temp\ui-click.png"
+out = sys.argv[3] if len(sys.argv) > 3 else os.path.join(os.environ.get("TEMP", "."), "ui-click.png")
 
 u32 = ctypes.windll.user32
 u32.SetProcessDPIAware()
@@ -36,4 +36,5 @@ u32.mouse_event(2, 0, 0, 0, 0)   # LEFTDOWN
 u32.mouse_event(4, 0, 0, 0, 0)   # LEFTUP
 time.sleep(2.0)
 
-subprocess.run(["python", "-I", "frontend/scripts/uishot.py", out], cwd=r"D:\Work\AgentDeck")
+subprocess.run(["python", "-I", "frontend/scripts/uishot.py", out],
+               cwd=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))

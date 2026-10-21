@@ -12,6 +12,19 @@ AgentDeck 的版本索引。
 - 发布产物（exe）不入 Git History（`.gitignore` 的 `releases/**/*.exe`），按规则
   上传 GitHub Releases；本地快照同时保留 exe 与分发归档。
 
+## v0.9.0 — 2026-10-21
+
+公开仓库前的整理：移除内部设计资料与第三方品牌位图，补齐第三方许可声明，构建不再内嵌本机路径。
+
+- 仓库不再包含产品设计、评审、侦察与实测报告，这些资料只保留在本地；历史中的同名文件一并移除。
+- 移除从第三方产品安装包提取的 7 个品牌 PNG：Codex 改用 Lobe Icons 的 SVG，ZCode / Hermes / WorkBuddy 回退到通用图标；图标库许可与自绘边界写在 `frontend/public/agents/README.md`。
+- 新增 `THIRD-PARTY-NOTICES.txt`（21 个 Go 模块与 191 个前端生产依赖的许可全文）；发布 ZIP 随附 `LICENSE`、`NOTICE.md` 与 `SHA256SUMS`。
+- `LICENSE` 去掉附加段，恢复为标准 MIT 文本；第三方归属统一放在 `NOTICE.md`。
+- 构建加入 `-trimpath`：exe 不再包含构建机绝对路径（v0.8.0 实测有 403 处 `C:/Users/user`）。
+- 清理测试、脚本与配置里的本机路径、真实会话标识与私有项目名。
+- GitHub Release 从 v0.9.0 重新开始；v0.1.0–v0.8.0 的发布资产不再提供。
+- 完整变更、升级说明与验证结果见 [本版 CHANGELOG](releases/v0.9.0/CHANGELOG.md)。
+
 ## v0.8.0 — 2026-10-21
 
 新增开机启动与关闭到托盘，统一设置分类与布局，并修复菜单和终端设置交互。

@@ -115,7 +115,7 @@ func decodeLaunched(t *testing.T, cmdline string) string {
 // 新建会话：命令就是 agent 自己的名字，落在项目目录，不带 resume 参数。
 func TestNewSessionLaunchesAgentInProjectDir(t *testing.T) {
 	a, _, _, ran := newTestApp(t)
-	a.setList([]sessions.Session{{Agent: "codex", ID: "c1", Cwd: `D:\Work\AgentDeck`, Last: time.Unix(5, 0)}})
+	a.setList([]sessions.Session{{Agent: "codex", ID: "c1", Cwd: `D:\Work\Notes`, Last: time.Unix(5, 0)}})
 	dir := t.TempDir()
 	r := a.NewResumeService()
 	if err := r.NewSession(dir, "claude"); err != nil {
@@ -140,7 +140,7 @@ func TestNewSessionLaunchesAgentInProjectDir(t *testing.T) {
 func TestDefaultPathForNewProject(t *testing.T) {
 	a, _, _, _ := newTestApp(t)
 	ps := a.NewProjectService()
-	got := ps.DefaultPathFor(`D:\Work\AgentDeck`, "")
+	got := ps.DefaultPathFor(`D:\Work\Notes`, "")
 	if got != filepath.Join(`D:\Work`, "新项目") {
 		t.Fatalf("有当前项目时 = %q", got)
 	}

@@ -2,14 +2,14 @@
 """UI 自检截图:PrintWindow 抓 agentdeck-desktop 主窗口(高 DPI 感知)。
 用法: python uishot.py <输出png> [宽] [高]
 """
-import ctypes, ctypes.wintypes as wt, sys
+import ctypes, ctypes.wintypes as wt, os, sys
 import xml.etree.ElementTree as ET  # noqa: F401 (占位,避免误 import 项目模块)
 
 import struct
 
 
 def main():
-    out = sys.argv[1] if len(sys.argv) > 1 else r"D:\Temp\ui.png"
+    out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.environ.get("TEMP", "."), "ui.png")
     rw = int(sys.argv[2]) if len(sys.argv) > 2 else 0
     rh = int(sys.argv[3]) if len(sys.argv) > 3 else 0
 

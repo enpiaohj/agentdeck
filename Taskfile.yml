@@ -26,7 +26,8 @@ tasks:
       # 清理旧 bundle 后平铺拷入 embed 目录，与 rebuild.ps1 共用入口
       - pwsh -NoProfile -File frontend/scripts/sync-assets.ps1
       # -H windowsgui:GUI 子系统,双击不弹控制台;-s -w 去符号表
-      - go build -tags production -ldflags "-H windowsgui -s -w" -o {{.BIN_DIR}}/{{.APP_NAME}}.exe ./cmd/agentdeck-desktop
+      # -trimpath:去掉构建机的绝对路径,发布产物里不留本机目录
+      - go build -trimpath -tags production -ldflags "-H windowsgui -s -w" -o {{.BIN_DIR}}/{{.APP_NAME}}.exe ./cmd/agentdeck-desktop
 
   dev:
     desc: 开发模式(前端热载)

@@ -9,9 +9,9 @@
 | --- | --- |
 | 产品名 | AgentDeck |
 | 仓库名 | `agentdeck`（lowercase-kebab-case） |
-| 本地目录 | `D:\Work\AgentDeck` |
+| 本地目录 | 仓库根目录（本机路径不作约定） |
 | 默认分支 | `main` |
-| 可见性 | Private |
+| 可见性 | Public |
 | 版本规范 | Semantic Versioning |
 | Tag 规范 | `vMAJOR.MINOR.PATCH` |
 | Commit 规范 | Conventional Commits |
@@ -27,7 +27,7 @@
 | JSON | `tidwall/gjson` + `encoding/json` |
 
 **不使用 Tauri / Rust。** 原产品设计文档 §7.1 的 Tauri 选型已被替代，
-原因是复用 magpie 的会话层实现（见 `docs/` 下的可行性分析）。
+原因是复用 magpie 的会话层实现。
 
 ## 代码来源约定
 
@@ -45,31 +45,22 @@
 ```
 cmd/          程序入口，一个子目录一个可执行文件
 internal/     内部包，不对外暴露
-tools/        开发与侦察脚本（Python，不属于产品代码）
-docs/         设计文档、实测报告、决策记录
+tools/        开发与构建辅助脚本（Python / PowerShell，不属于产品代码）
 testdata/     测试夹具
 releases/     正式发布快照（vX.Y.Z/）
 ```
 
-## 文档命名
+## 文档与设计资料
 
 遵循全局规则：`YYYY-MM-DD-内容-v<文档版本>.<ext>`
 
-已归档文档：
+产品设计、评审、侦察与实测报告**不随仓库分发**，只保留在本地工作区
+（`.gitignore` 之外的本机目录）。仓库里只放对外可公开的说明：
+`README.md`、`CHANGELOG.md`、`releases/vX.Y.Z/CHANGELOG.md`、`NOTICE.md`
+与 `THIRD-PARTY-NOTICES.txt`。
 
-| 文件 | 内容 |
-| --- | --- |
-| `docs/2026-10-16-AgentDeck设计评审报告-v1.0.html` | 对 v1.0 产品设计文档的评审 |
-| `docs/2026-10-16-Magpie复用可行性分析-v1.0.md` | 复用 magpie 的依赖闭包分析 |
-| `docs/2026-10-16-四目标存储与恢复实测-v1.0.md` | 四个目标的存储真相实测 |
-| `docs/2026-10-16-移植可行性实验报告-v1.0.md` | 移植实验的完整记录 |
-| `docs/2026-10-16-Claude与Codex适配器实现规格-v1.0.md` | 适配器实现规格（⚠️ 类型草案是 Rust，存储真相有效） |
-| `docs/2026-10-16-侦察结论复核与41条修正-v1.0.md` | 两族侦察结论的对抗性复核，41 条修正 |
-
-前四份是 Phase 0 的决策依据，后两份是 Phase 1 的输入。**读取后两份时注意**：
-它们是 Rust/Tauri 选型时期的产物，存储结构与数值已经复核过并可信，但
-类型草案（§2.2.5 / §3.2.8 / §4）需按 Go 重写；§1.1 的存储根判定与本机
-MSIX 实测不符，见前四份中的实测报告。
+提交前检查：新文档若含本机路径、真实会话标识、私有项目名或用户账号，
+一律留在本地，不 `git add`。
 
 ## 测试与验证
 
@@ -111,7 +102,7 @@ MSIX 实测不符，见前四份中的实测报告。
 4. **项目路径有三种表示**，不可从目录名反解，必须读会话文件内的 `cwd` 字段：
    - Claude：`D--Work-ExampleApp`（有损编码）
    - Codex：`\\?\D:\Work\ExampleApp`（扩展长度前缀）
-   - ZCode：`D:\Work\ExampleProject`（普通路径）
+   - ZCode：`D:\Work\ExampleApp`（普通路径）
 
 5. **中文 FTS5 检索**：`unicode61` 与 `trigram` 对 2 字中文词均失效。
    已按 **bigram 预分词** 落地于 `internal/search`：索引侧与查询侧共用

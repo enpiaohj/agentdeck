@@ -11,7 +11,7 @@
 # NOTE: keep this file ASCII-only; Windows PowerShell 5.1 mangles CJK here.
 param([switch]$NoShot)
 $ErrorActionPreference = 'Stop'
-Set-Location D:\Work\AgentDeck
+Set-Location (Resolve-Path (Join-Path $PSScriptRoot '..\..'))
 
 $go = "C:\Program Files\Go\bin\go.exe"
 
@@ -25,7 +25,7 @@ Write-Host "[2/5] sync assets (wipe first)..." -ForegroundColor Cyan
 & "$PSScriptRoot\sync-assets.ps1"
 
 Write-Host "[3/5] go build..." -ForegroundColor Cyan
-& $go build -tags production -ldflags "-H windowsgui -s -w" -o bin\agentdeck-desktop.exe ./cmd/agentdeck-desktop
+& $go build -trimpath -tags production -ldflags "-H windowsgui -s -w" -o bin\agentdeck-desktop.exe ./cmd/agentdeck-desktop
 if ($LASTEXITCODE -ne 0) { throw "go build failed" }
 
 Write-Host "[4/5] restart app..." -ForegroundColor Cyan
