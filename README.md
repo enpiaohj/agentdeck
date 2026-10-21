@@ -38,13 +38,14 @@ v0.9.0 移除从第三方安装包提取的品牌位图（改用开源图标与�
 
 - 会话发现与索引（Claude Code / Claude Desktop / Codex / OpenCode / ZCode 等）
 - 会话列表、筛选、原生标题与正文预览
-- 侧栏「全部会话」清除全部筛选与搜索关键词，回到完整列表；智能体 / 项目 / 收藏 / 归档默认单选（单击替换整个筛选），Ctrl+单击把该维度并入或移出当前筛选，列表标题如实写出组合条件
+- 侧栏「全部会话」清除全部筛选与搜索关键词，回到完整列表；智能体 / 项目 / 收藏 / 归档默认单选（单击替换整个筛选），Ctrl+单击把该维度并入或移出当前筛选；智能体可 Ctrl+单击多选、Shift+单击按侧栏顺序连选、Ctrl+Shift+单击把一段并入已选（列表取并集，顶部每个智能体一个可移除的标签），列表标题如实写出组合条件
 - 当前列表支持标题 / 项目 / 标签 / 导入账号与月份筛选、最近 / 最早活动排序，历史记录按具体年月分组
 - Claude 普通聊天历史导入（官方 JSON / ZIP 导出），支持多账号区分、重复导入去重、正文预览和全文检索
 - 顶栏直接输入全文搜索，结果与正文并排展示；Ctrl+K 聚焦、方向键选择、Enter 预览、Esc 返回列表
 - 中文全文检索（SQLite FTS5 + bigram 预分词）与正文定位
 - 思考、工具调用 / 结果、上下文及大段 JSON 默认折叠；长代码按需展开，搜索命中自动展开对应内容
 - Markdown 标题、列表、引用、表格和行内代码排版；备注支持 Ctrl+Enter 保存
+- 阅读区右侧的提问导航条：每根刻度是一次提问，悬停看摘要、点击跳转，顶部显示「第 k / n 问」并可跳到上一问 / 下一问；可在阅读导航栏收起
 - 会话默认定位最新一轮问答，提供开头 / 最新消息及前后翻页；长会话从真实末尾读取，不受开头预览上限遮挡
 - 设置使用常规、外观、会话、终端、数据管理、备份与恢复、诊断、更新、快捷键九个分类；支持多关键词搜索、正文预览、本机保存和恢复偏好确认，Ctrl+, 打开，Ctrl+K 返回会话搜索
 - 开机启动和关闭时最小化到托盘均默认关闭；启用开机启动后登录 Windows 时在托盘运行，手动启动仍显示主窗口；托盘菜单可打开窗口或退出应用
@@ -60,8 +61,11 @@ v0.9.0 移除从第三方安装包提取的品牌位图（改用开源图标与�
 - 默认持久化成功读取的会话，内容变化保留版本、相同正文去重，不自动清理；上游原记录删除后仍可查看、检索及导出
 - 紧凑四栏工作台、两行会话列表、浅色 / 深色主题、底部索引状态栏；默认四栏与会话详情展开，左右面板可独立折叠
 
-顶部「刷新」会重新扫描磁盘并更新列表、项目统计与全文索引。Claude Desktop
-读取本地 Code / Cowork 记录（含 MSIX 目录）。普通聊天与新版聊天任务请使用顶部
+会话列表顶部的刷新按钮（或 F5）会重新扫描磁盘并更新列表、项目统计与全文索引。Claude Desktop
+读取本地 Code / Cowork 记录（含 MSIX 目录），以及 Desktop 本机缓存的普通聊天与
+项目会话（来源显示「Desktop 聊天缓存」）：Desktop 不为云端聊天写本地记录，只有在
+Desktop 里打开过的会话才缓存了正文，AgentDeck 只读这份缓存，副本存在导入目录旁的
+`claude-desktop-cache/`。没打开过的会话与更早的聊天请使用顶部
 「导入」：从各 Claude 账号的「设置 → 隐私 → 导出数据」下载 ZIP，或选择其中的
 `conversations.json`。同一账号沿用同一名称；不同账号使用不同名称。导入副本保存
 在索引库旁的 `imports/claude/`，原始文件不变，云端不会自动同步。当前导入文本与
@@ -127,6 +131,7 @@ internal/catalog/    模型目录与定价数据
 internal/redact/     脱敏
 internal/settings/   设置
 internal/desktopdir/ Claude Desktop 目录发现（含 MSIX 打包路径）
+internal/claudecache/ Claude Desktop 本机聊天缓存（IndexedDB）只读解析
 internal/provider/   最小 provider 替代（只读打开 + 基础定价）
 tools/               图标与第三方许可声明生成脚本
 ```
@@ -184,10 +189,11 @@ AgentDeck 默认只读访问各 Agent 的本地存储。唯一例外是**用户�
 | Agent | 存储位置 |
 | --- | --- |
 | Claude Code CLI | `~/.claude/projects/<编码目录>/*.jsonl` |
-| Claude Desktop | `%LOCALAPPDATA%\Packages\Claude_<pub>\LocalCache\Roaming\Claude\local-agent-mode-sessions\...\.claude\projects\` |
+| Claude Desktop | `%LOCALAPPDATA%\Claude-Data\claude_<pub>\{local-agent-mode-sessions,claude-code-sessions}\...\.claude\projects\`（3.x；2.x 在 `Packages\Claude_<pub>\LocalCache\Roaming\Claude`）；聊天缓存 `...\IndexedDB\https_claude.ai_0.indexeddb.{leveldb,blob}` |
 | Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` + `state_5.sqlite` |
 | OpenCode | `~/.local/share/opencode/opencode.db` |
 | ZCode | `~/.zcode/cli/db/db.sqlite` |
+| WorkBuddy / WorkBuddy AI（国际版） | `~/.workbuddy/projects/`、`~/.workbuddy-ai/projects/` 下的 `*.jsonl` |
 | DeepSeek Harness (dsh) | `~/.dsh/sessions/<编码目录>/<会话>/session.v<N>.jsonl[.zstd]` |
 
 ## 隐私与网络访问

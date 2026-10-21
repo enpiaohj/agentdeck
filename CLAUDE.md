@@ -96,6 +96,21 @@ releases/     正式发布快照（vX.Y.Z/）
 
 2. **Claude Desktop 是 MSIX 包**，会话在包内 `LocalCache\Roaming\Claude`
    而非 `%APPDATA%\Claude`。`desktopdir` 包同时返回包内与包外路径，两者都要查。
+   **Desktop 3.x 起又搬了一次**：整个 userData 移到
+   `%LOCALAPPDATA%\Claude-Data\claude_<publisher>`（本机 2026-10-20 迁移），
+   旧包目录只剩一个 `.user-data-left.<package>` 标记文件，Desktop 自己的日志
+   （`%LOCALAPPDATA%\Claude\logs\main.log`）也写的是 `Claude-Data` 路径。
+   `desktopdir.Dirs.Shared` 就是这个目录；新增读取路径时必须让
+   `Everywhere()` 带上它，否则 Claude Desktop 会话会一条都读不到（实施前实测
+   CLI 返回 0 条）。
+   **普通聊天 / 项目会话不落 jsonl**：本机只有内嵌 claude.ai 页面的 IndexedDB
+   缓存（`<userData>\IndexedDB\https_claude.ai_0.indexeddb.{leveldb,blob}`），
+   打开过的会话整棵消息树（`hub_transcript`）与会话列表查询缓存在里面。值是
+   snappy 包装 + V8 序列化，中文是 **UTF-16LE**——按 UTF-8 字节搜标题会得出
+   「本机没有」的错误结论（本项目就这样误判过一次）。读取在
+   `internal/claudecache`：只读扫 `.log/.ldb` 与 blob 文件，不用 LevelDB 库打开
+   （比较器是 `idb_cmp1`，且打开会改写文件），副本写到导入目录旁的
+   `claude-desktop-cache/`。没打开过的会话本机没有正文，读不到。
 
 3. **Codex Desktop 与 CLI 共用 `~/.codex`**（与 Claude 的情况相反）。
 
@@ -128,6 +143,11 @@ releases/     正式发布快照（vX.Y.Z/）
     新增/删除前端文件后必须**先清空 `cmd/agentdeck-desktop/assets/assets`
     再复制 `frontend/dist`**，已固化在 `frontend/scripts/sync-assets.ps1`，
     `Taskfile.yml` 与 `frontend/scripts/rebuild.ps1` 共用此入口。
+    **整个 `cmd/agentdeck-desktop/assets/` 都会被 `//go:embed all:assets` 打进 exe**，
+    只清 `assets/assets` 不够：从 `frontend/public` 删掉的文件会留在 `assets/agents`
+    里继续被打包。v0.9.0 发布产物因此仍内嵌 7 张从安装包提取的品牌 PNG（与其
+    CHANGELOG 所述相反，按字节比对确认）。现在脚本清空除 `.gitkeep` 外的全部生成
+    内容，复制后校验与 `frontend/dist` 文件清单完全一致，不一致直接失败。
 
 11. **UI 自检截图必须满足两个条件**，否则看到的是假象：
     - **DPI 感知**（`SetProcessDPIAware()`）：否则 `GetWindowRect` 返回虚拟化
