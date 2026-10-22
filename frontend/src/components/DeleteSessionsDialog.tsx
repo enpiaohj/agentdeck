@@ -27,13 +27,19 @@ export function DeleteSessionsDialog({ deletion: d }: { deletion: SessionDeletio
             {d.preview.paths.length ? <ul className="ad-delete-paths">{d.preview.paths.map((path, index) => <li key={index}>{path}</li>)}</ul> : <p>没有仍存在的原始文件，将清理 AgentDeck 中的保留记录。</p>}
           </details>
           <Checkbox checked={d.confirmedEnded} disabled={d.busy} onChange={(_, data) => d.setConfirmedEnded(data.checked === true)} label="我确认以上原始会话均已结束，并了解原始记录和全部保留版本将被删除" />
+          <details className="ad-delete-permanent">
+            <summary>不保留备份，直接删除</summary>
+            <p className="ad-delete-hint">流程与校验同上，中途失败仍会自动回滚；全部删除成功后立即丢弃恢复备份，磁盘上不再留有这些会话的副本，<strong>之后无法撤销或恢复</strong>。</p>
+            <Checkbox checked={d.confirmedPermanent} disabled={d.busy} onChange={(_, data) => d.setConfirmedPermanent(data.checked === true)} label="我了解不保留备份，删除后无法恢复" />
+            <Button className="ad-delete-confirm" icon={<DeleteRegular />} disabled={d.busy || d.loading || !d.preview?.token || !d.confirmedEnded || !d.confirmedPermanent} onClick={() => void d.remove(true)}>直接删除（无法恢复）</Button>
+          </details>
         </> : null}
         {d.error ? <Text block role="alert" className="ad-delete-error">{d.error}</Text> : null}
       </DialogContent>
       <DialogActions>
         {!d.preview && !d.loading && !d.busy ? <Button onClick={d.retryPreview}>重新预览</Button> : null}
         <Button disabled={d.busy} onClick={d.close}>取消</Button>
-        <Button appearance="primary" className="ad-delete-confirm" icon={d.busy ? <Spinner size="extra-tiny" /> : <DeleteRegular />} disabled={d.busy || d.loading || !d.preview?.token || !d.confirmedEnded} onClick={() => void d.remove()}>{d.busy ? '正在备份并删除…' : '备份并删除'}</Button>
+        <Button appearance="primary" className="ad-delete-confirm" icon={d.busy ? <Spinner size="extra-tiny" /> : <DeleteRegular />} disabled={d.busy || d.loading || !d.preview?.token || !d.confirmedEnded} onClick={() => void d.remove(false)}>{d.busy ? '正在删除…' : '备份并删除'}</Button>
       </DialogActions>
     </DialogBody></DialogSurface>
   </Dialog>
@@ -44,7 +50,7 @@ export function DeletedSessionsNotice({ deletion: d }: { deletion: SessionDeleti
   return <div className="ad-deletion-notice" role="status" style={{ backgroundColor: tokens.colorBrandBackground2, color: tokens.colorNeutralForeground1 }}>
     <div>
       <span>{d.result ? d.result.message || `已删除 ${d.result.deleted_keys.length} 个会话。` : d.restoredMessage}</span>
-      {d.result ? <><div className="ad-delete-backup">恢复备份：{d.result.backup_path}</div><div className="ad-delete-hint">撤销仅在本次运行期间可用；备份保留在磁盘。再次删除前请保存备份位置。</div></> : null}
+      {d.result?.backup_path ? <><div className="ad-delete-backup">恢复备份：{d.result.backup_path}</div><div className="ad-delete-hint">撤销仅在本次运行期间可用；备份保留在磁盘。再次删除前请保存备份位置。</div></> : null}
       {d.undoError ? <div role="alert" className="ad-delete-error">{d.undoError}</div> : null}
     </div>
     {d.result?.undo_token ? <Button size="small" icon={d.undoBusy ? <Spinner size="extra-tiny" /> : <ArrowUndoRegular />} disabled={d.undoBusy || d.busy || !!d.targets.length} onClick={() => void d.undo()}>{d.undoBusy ? '正在恢复…' : '撤销删除'}</Button> : null}

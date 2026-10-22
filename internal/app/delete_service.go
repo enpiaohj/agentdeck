@@ -237,7 +237,20 @@ func (s *SessionService) refreshAfterDelete() {
 	s.a.NewSearchService().Rebuild()
 }
 
+// DeleteSessions 先写恢复备份再删除，成功后可在本次运行内撤销。
 func (s *SessionService) DeleteSessions(token string) (DeleteReport, error) {
+	return s.deleteSessions(token, true)
+}
+
+// DeleteSessionsPermanently 是「直接删除」：流程、校验与失败回滚都与
+// DeleteSessions 完全相同——恢复备份仍会先写、先验，因为失败时自动回滚
+// 全靠它——区别只在删除全部成功之后：丢弃这份备份，不提供撤销。
+// 要换来的是磁盘上不再留有被删会话的私密副本。
+func (s *SessionService) DeleteSessionsPermanently(token string) (DeleteReport, error) {
+	return s.deleteSessions(token, false)
+}
+
+func (s *SessionService) deleteSessions(token string, keepBackup bool) (DeleteReport, error) {
 	a := s.a
 	a.dataMu.Lock()
 	defer a.dataMu.Unlock()
@@ -344,6 +357,9 @@ func (s *SessionService) DeleteSessions(token string) (DeleteReport, error) {
 	if err = job.saveState("deleted"); err != nil {
 		return rollback(err)
 	}
+	if !keepBackup {
+		return s.finishPermanent(job), nil
+	}
 	undo := deleteToken()
 	if a.deleteUndos == nil {
 		a.deleteUndos = map[string]*deleteJob{}
@@ -352,6 +368,30 @@ func (s *SessionService) DeleteSessions(token string) (DeleteReport, error) {
 	s.refreshAfterDelete()
 	a.emit("sessions:deleted", append([]string(nil), job.keys...))
 	return DeleteReport{append([]string(nil), job.keys...), dir, undo, fmt.Sprintf("已删除 %d 个会话，原始记录与本地副本已移除。", len(job.keys))}, nil
+}
+
+// finishPermanent 收尾「直接删除」：丢弃恢复备份，只留下 operation.json
+// （仅含会话 key，不含内容），让已删会话不会被其他来源重新收录。
+// 丢弃失败不影响删除结果——此时数据已删净，只是备份文件没清干净，如实告知。
+func (s *SessionService) finishPermanent(job *deleteJob) DeleteReport {
+	var errs []error
+	for _, plan := range job.native {
+		errs = append(errs, plan.DiscardBackup())
+	}
+	for _, name := range []string{"history.db", "marks.db"} {
+		if err := os.Remove(filepath.Join(job.dir, name)); err != nil && !os.IsNotExist(err) {
+			errs = append(errs, err)
+		}
+	}
+	s.refreshAfterDelete()
+	s.a.emit("sessions:deleted", append([]string(nil), job.keys...))
+	message := fmt.Sprintf("已直接删除 %d 个会话，未保留恢复备份，无法撤销。", len(job.keys))
+	backupPath := ""
+	if err := errors.Join(errs...); err != nil {
+		message += fmt.Sprintf("但部分临时备份文件未能清理，可手动删除目录：%s（%v）", job.dir, err)
+		backupPath = job.dir
+	}
+	return DeleteReport{append([]string(nil), job.keys...), backupPath, "", message}
 }
 
 // Undo takes an opaque token, never a caller-supplied filesystem path.

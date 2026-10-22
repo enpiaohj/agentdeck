@@ -48,8 +48,23 @@ export function Counts(): $CancellablePromise<$models.NavCounts> {
     });
 }
 
+/**
+ * DeleteSessions 先写恢复备份再删除，成功后可在本次运行内撤销。
+ */
 export function DeleteSessions(token: string): $CancellablePromise<$models.DeleteReport> {
     return $Call.ByID(3531059678, token).then(($result: any) => {
+        return $$createType4($result);
+    });
+}
+
+/**
+ * DeleteSessionsPermanently 是「直接删除」：流程、校验与失败回滚都与
+ * DeleteSessions 完全相同——恢复备份仍会先写、先验，因为失败时自动回滚
+ * 全靠它——区别只在删除全部成功之后：丢弃这份备份，不提供撤销。
+ * 要换来的是磁盘上不再留有被删会话的私密副本。
+ */
+export function DeleteSessionsPermanently(token: string): $CancellablePromise<$models.DeleteReport> {
+    return $Call.ByID(1445449219, token).then(($result: any) => {
         return $$createType4($result);
     });
 }

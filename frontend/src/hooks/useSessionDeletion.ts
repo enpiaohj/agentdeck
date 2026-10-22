@@ -7,6 +7,7 @@ export function useSessionDeletion(onDeleted: (keys: string[]) => void, onRestor
   const [targets, setTargets] = useState<SessionView[]>([])
   const [includeChildren, setIncludeChildren] = useState(false)
   const [confirmedEnded, setConfirmedEnded] = useState(false)
+  const [confirmedPermanent, setConfirmedPermanent] = useState(false)
   const [preview, setPreview] = useState<DeletePreview | null>(null)
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -21,7 +22,7 @@ export function useSessionDeletion(onDeleted: (keys: string[]) => void, onRestor
 
   const loadPreview = useCallback(async (items: SessionView[], children: boolean) => {
     const version = ++request.current
-    setPreview(null); setLoading(true); setConfirmedEnded(false)
+    setPreview(null); setLoading(true); setConfirmedEnded(false); setConfirmedPermanent(false)
     try {
       const next = await sessionService.PreviewDeleteSessions(items.map(item => item.key), children)
       if (request.current === version) setPreview(next)
@@ -37,12 +38,12 @@ export function useSessionDeletion(onDeleted: (keys: string[]) => void, onRestor
     const reason = deletionUnavailableReason(items)
     if (reason) return
     const unique = [...new Map(items.map(item => [item.key, item])).values()]
-    setTargets(unique); setIncludeChildren(false); setError(''); setConfirmedEnded(false)
+    setTargets(unique); setIncludeChildren(false); setError(''); setConfirmedEnded(false); setConfirmedPermanent(false)
     void loadPreview(unique, false)
   }
   const close = () => {
     if (operation.current) return
-    request.current++; setTargets([]); setPreview(null); setLoading(false); setError(''); setConfirmedEnded(false)
+    request.current++; setTargets([]); setPreview(null); setLoading(false); setError(''); setConfirmedEnded(false); setConfirmedPermanent(false)
   }
   const changeChildren = (value: boolean) => {
     if (operation.current) return
@@ -53,12 +54,14 @@ export function useSessionDeletion(onDeleted: (keys: string[]) => void, onRestor
     if (operation.current) return
     setError(''); void loadPreview(targets, includeChildren)
   }
-  const remove = async () => {
+  // permanent=true 是「直接删除」：不保留恢复备份、无法撤销，需要额外确认。
+  const remove = async (permanent = false) => {
     if (operation.current || loading || !preview?.token || !confirmedEnded) return
+    if (permanent && !confirmedPermanent) return
     const token = preview.token
-    operation.current = true; setBusy(true); setPreview(null); setError(''); setConfirmedEnded(false)
+    operation.current = true; setBusy(true); setPreview(null); setError(''); setConfirmedEnded(false); setConfirmedPermanent(false)
     try {
-      const report = await sessionService.DeleteSessions(token)
+      const report = await (permanent ? sessionService.DeleteSessionsPermanently(token) : sessionService.DeleteSessions(token))
       setResult(report); setUndoError(''); setRestoredMessage(''); setTargets([])
       onDeleted(report.deleted_keys)
     } catch (reason) {
@@ -76,7 +79,7 @@ export function useSessionDeletion(onDeleted: (keys: string[]) => void, onRestor
     } catch (reason) { setUndoError(`撤销失败：${String(reason)}。备份仍保存在：${result.backup_path}`) }
     finally { undoOperation.current = false; setUndoBusy(false) }
   }
-  return { targets, includeChildren, confirmedEnded, setConfirmedEnded, preview, loading, busy, error, result, undoBusy, undoError, restoredMessage,
+  return { targets, includeChildren, confirmedEnded, setConfirmedEnded, confirmedPermanent, setConfirmedPermanent, preview, loading, busy, error, result, undoBusy, undoError, restoredMessage,
     open, close, changeChildren, retryPreview, remove, undo, dismissNotice: () => { if (!undoOperation.current) { setResult(null); setUndoError(''); setRestoredMessage('') } } }
 }
 

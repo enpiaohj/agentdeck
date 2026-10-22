@@ -90,6 +90,56 @@ func TestManualDeleteBacksUpOriginalAndSavedDataAndCanUndo(t *testing.T) {
 	}
 }
 
+// 「直接删除」与普通删除走同一套预览、校验与回滚，成功后不留备份、不给撤销，
+// 但已删会话仍不能被重新收录。
+func TestPermanentDeleteLeavesNoBackupAndNoUndo(t *testing.T) {
+	a, _, _, _ := newTestApp(t)
+	sess := deletionFixture(t, a)
+	key := "claude:" + sess.ID
+	svc := a.NewSessionService()
+	preview, err := svc.PreviewDeleteSessions([]string{key}, false)
+	if err != nil || preview.Token == "" {
+		t.Fatalf("preview: %+v %v", preview, err)
+	}
+	if _, err := svc.DeleteSessionsPermanently("invalid-token"); err == nil {
+		t.Fatal("没有有效预览的直接删除必须被拒绝")
+	}
+	report, err := svc.DeleteSessionsPermanently(preview.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.DeletedKeys) != 1 || report.UndoToken != "" || report.BackupPath != "" {
+		t.Fatalf("直接删除不应返回撤销令牌或备份路径: %+v", report)
+	}
+	if _, err := os.Stat(sess.Path); !os.IsNotExist(err) {
+		t.Fatal("原始记录必须被删除")
+	}
+	if _, _, found, err := a.history.Get(key); found || err != nil {
+		t.Fatal("保留版本必须被删除")
+	}
+	if _, _, _, err := a.readConversation(sess); err == nil {
+		t.Fatal("旧索引快照不能把已直接删除的会话重新收录")
+	}
+	if rows := svc.List(Filter{}); containsSession(rows, key) {
+		t.Fatal("刷新后已删会话重新出现")
+	}
+	// 除 operation.json（只含会话 key）外，删除目录里不应残留任何会话内容。
+	var leftovers []string
+	root := deletionDir(a.cfg.LibraryPath)
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && d.Name() != "operation.json" {
+			leftovers = append(leftovers, path)
+		}
+		return nil
+	})
+	if len(leftovers) != 0 {
+		t.Fatalf("直接删除后残留备份文件: %v", leftovers)
+	}
+	if _, err := svc.DeleteSessionsPermanently(preview.Token); err == nil {
+		t.Fatal("删除令牌只能使用一次")
+	}
+}
+
 func TestManualDeleteBackupContainsOnlySelectedSessions(t *testing.T) {
 	a, _, _, _ := newTestApp(t)
 	sess := deletionFixture(t, a)

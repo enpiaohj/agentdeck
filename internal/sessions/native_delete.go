@@ -500,6 +500,33 @@ func (p *NativeDeletePlan) Delete() error {
 	return nil
 }
 
+// DiscardBackup 在删除已全部完成后清掉本计划写下的恢复副本，用于「直接删除」。
+// 只删本计划自己创建的文件（逐个 .source 与 manifest.json），再用非递归的
+// os.Remove 收掉目录——目录里若还有别的东西，目录会保留，绝不 RemoveAll。
+// 未完成删除的计划拒绝丢弃，备份是它回滚的唯一依据。
+func (p *NativeDeletePlan) DiscardBackup() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.deleted || p.backup == "" {
+		return errors.New("删除尚未完成，不能丢弃恢复备份")
+	}
+	var errs []error
+	for i := range p.files {
+		if b := p.files[i].Backup; b != "" {
+			if err := os.Remove(b); err != nil && !os.IsNotExist(err) {
+				errs = append(errs, err)
+			}
+		}
+	}
+	if err := os.Remove(filepath.Join(p.backup, "manifest.json")); err != nil && !os.IsNotExist(err) {
+		errs = append(errs, err)
+	}
+	if err := os.Remove(p.backup); err != nil && !os.IsNotExist(err) {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
+}
+
 // Restore never overwrites a rewritten native file or a new metadata row.
 // Intact sources and plans which did not mutate anything are safe no-ops.
 func (p *NativeDeletePlan) Restore() error {
