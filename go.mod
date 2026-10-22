@@ -2,8 +2,10 @@ module github.com/enpiaohj/agentdeck
 
 go 1.26.8
 
+toolchain go1.27.3
+
 require (
-	github.com/klauspost/compress v1.18.3
+	github.com/klauspost/compress v1.18.7
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/tidwall/gjson v1.19.0
 	github.com/tidwall/jsonc v0.3.3
