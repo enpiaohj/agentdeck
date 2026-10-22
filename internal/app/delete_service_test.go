@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/enpiaohj/agentdeck/internal/history"
 	"github.com/enpiaohj/agentdeck/internal/sessions"
 )
 
@@ -86,6 +87,55 @@ func TestManualDeleteBacksUpOriginalAndSavedDataAndCanUndo(t *testing.T) {
 	}
 	if _, err := svc.DeleteSessions(preview.Token); err == nil {
 		t.Fatal("Deletion tokens must be one-use")
+	}
+}
+
+func TestManualDeleteBackupContainsOnlySelectedSessions(t *testing.T) {
+	a, _, _, _ := newTestApp(t)
+	sess := deletionFixture(t, a)
+	key := "claude:" + sess.ID
+	// 另外塞进 40 条与本次删除无关的保留会话：整库备份会把它们一起拷走，
+	// 按会话备份不该碰它们。这同时是不再整库 VACUUM INTO 的回归断言。
+	for i := 0; i < 40; i++ {
+		other := sessions.Session{Agent: "claude", ID: fmt.Sprintf("other-%03d", i), Title: "无关会话"}
+		if err := a.history.Save(other, sessions.Transcript{Parts: []sessions.Part{{Role: "user", Kind: "text", Text: "无关正文"}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	svc := a.NewSessionService()
+	preview, err := svc.PreviewDeleteSessions([]string{key}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := svc.DeleteSessions(preview.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backup := filepath.Join(report.BackupPath, "history.db")
+	stats, err := history.ValidateBackup(backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Sessions != 1 || stats.Versions != 1 {
+		t.Fatalf("恢复备份应只含被删会话: %+v", stats)
+	}
+	db, err := sql.Open("sqlite", backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var stray int
+	if err := db.QueryRow(`SELECT count(*) FROM history_sessions WHERE key LIKE 'claude:other-%'`).Scan(&stray); err != nil || stray != 0 {
+		t.Fatalf("恢复备份混入了未选中的会话: %d %v", stray, err)
+	}
+	if _, err := svc.RestoreDeletedSessions(report.UndoToken); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, found, err := a.history.Get(key); !found || err != nil {
+		t.Fatal("按会话备份撤销后未恢复保留内容")
+	}
+	if _, _, found, err := a.history.Get("claude:other-000"); !found || err != nil {
+		t.Fatal("撤销不应影响未选中的会话")
 	}
 }
 
