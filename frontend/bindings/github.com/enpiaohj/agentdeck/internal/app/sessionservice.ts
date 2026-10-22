@@ -158,6 +158,27 @@ export function Projects(): $CancellablePromise<$models.ProjectView[]> {
 }
 
 /**
+ * PruneLibrary 清掉每个会话超出最新 keep 个的旧版本并回收空间。永久库默认
+ * 不自动清理，这是唯一会删版本的入口，必须由用户在预览后显式确认；每个会话
+ * 当前指向的版本永远保留。与会话删除互斥（同一把 dataMu），避免两者交错。
+ */
+export function PruneLibrary(keep: number): $CancellablePromise<$models.LibraryPrune> {
+    return $Call.ByID(731057567, keep).then(($result: any) => {
+        return $$createType16($result);
+    });
+}
+
+/**
+ * PruneLibraryPreview 预览「每个会话只保留最新 keep 个版本」会清掉什么，
+ * 不改动任何数据。
+ */
+export function PruneLibraryPreview(keep: number): $CancellablePromise<$models.LibraryPrune> {
+    return $Call.ByID(3671978761, keep).then(($result: any) => {
+        return $$createType16($result);
+    });
+}
+
+/**
  * Refresh rereads sources without touching transcripts or user marks.
  * Old background message counts cannot overwrite the new generation.
  */
@@ -167,7 +188,7 @@ export function Refresh(): $CancellablePromise<void> {
 
 export function RestoreData(src: string, currentPreferences: string): $CancellablePromise<$models.RestoreReport> {
     return $Call.ByID(2278399566, src, currentPreferences).then(($result: any) => {
-        return $$createType16($result);
+        return $$createType17($result);
     });
 }
 
@@ -183,7 +204,7 @@ export function RestoreDeletedSessions(token: string): $CancellablePromise<strin
  */
 export function ScanProgress(): $CancellablePromise<$models.ScanProgress> {
     return $Call.ByID(2378428406).then(($result: any) => {
-        return $$createType17($result);
+        return $$createType18($result);
     });
 }
 
@@ -192,7 +213,7 @@ export function ScanProgress(): $CancellablePromise<$models.ScanProgress> {
  */
 export function SearchIn(key: string, needle: string): $CancellablePromise<$models.SearchHitView | null> {
     return $Call.ByID(2754701431, key, needle).then(($result: any) => {
-        return $$createType19($result);
+        return $$createType20($result);
     });
 }
 
@@ -202,7 +223,7 @@ export function SearchIn(key: string, needle: string): $CancellablePromise<$mode
  */
 export function SearchInAll(key: string, needle: string): $CancellablePromise<$models.SearchHitView[]> {
     return $Call.ByID(2145851954, key, needle).then(($result: any) => {
-        return $$createType20($result);
+        return $$createType21($result);
     });
 }
 
@@ -211,7 +232,7 @@ export function SearchInAll(key: string, needle: string): $CancellablePromise<$m
  */
 export function Transcript(key: string): $CancellablePromise<$models.TranscriptView | null> {
     return $Call.ByID(4281957278, key).then(($result: any) => {
-        return $$createType22($result);
+        return $$createType23($result);
     });
 }
 
@@ -222,7 +243,7 @@ export function Transcript(key: string): $CancellablePromise<$models.TranscriptV
  */
 export function TranscriptWindow(key: string, at: number, before: boolean): $CancellablePromise<$models.TranscriptView | null> {
     return $Call.ByID(3007435842, key, at, before).then(($result: any) => {
-        return $$createType22($result);
+        return $$createType23($result);
     });
 }
 
@@ -243,10 +264,11 @@ const $$createType12 = $Create.Array($$createType7);
 const $$createType13 = $models.DeletePreview.createFrom;
 const $$createType14 = $models.ProjectView.createFrom;
 const $$createType15 = $Create.Array($$createType14);
-const $$createType16 = $models.RestoreReport.createFrom;
-const $$createType17 = $models.ScanProgress.createFrom;
-const $$createType18 = $models.SearchHitView.createFrom;
-const $$createType19 = $Create.Nullable($$createType18);
-const $$createType20 = $Create.Array($$createType18);
-const $$createType21 = $models.TranscriptView.createFrom;
-const $$createType22 = $Create.Nullable($$createType21);
+const $$createType16 = $models.LibraryPrune.createFrom;
+const $$createType17 = $models.RestoreReport.createFrom;
+const $$createType18 = $models.ScanProgress.createFrom;
+const $$createType19 = $models.SearchHitView.createFrom;
+const $$createType20 = $Create.Nullable($$createType19);
+const $$createType21 = $Create.Array($$createType19);
+const $$createType22 = $models.TranscriptView.createFrom;
+const $$createType23 = $Create.Nullable($$createType22);

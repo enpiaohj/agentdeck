@@ -293,7 +293,7 @@ func (s *ResumeService) OpenInTerminal(key string) error {
 	// 但错误必须如实报出去:改了名却仍是旧名,比直接报错更难排查。
 	var nameErr error
 	renamed := false
-	if title := ms[s.a.markKey(key)].Title; needsCodexName(sess, title) {
+	if title := ms[s.a.markKey(key)].Title; needsCodexName(sess, title) && !codexNameCurrent(sess.ID, title) {
 		nameErr = s.a.codexName(sess.ID, title)
 		renamed = nameErr == nil
 	}

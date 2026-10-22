@@ -267,6 +267,22 @@ README 截图用隔离的演示用户目录生成（见陷阱 #21），不得截
       Python `json.dumps` 默认的 `": "` 会让整批会话一条都识别不到。
     「开机启动」开关读写的是真实的 Windows 启动注册表，隔离不了，截图时不要碰。
 
+23. **标注写（收藏 / 归档 / 标签 / 备注 / 改名）不走整表重载**。后端每次写完发
+    `sessions:changed` 并带 key；`App.tsx` 把 60ms 内的 key 合并成一轮 `Get(key)`，
+    经 `markPatch.ts` 的 `applyMarkPatch` 只把这五个字段并进已有的行（`GroupKey`、
+    项目名、消息数原样保留）；只有“有行新进入当前范围而列表里没有它”才退回整表
+    `List()`。不带 key 的 `sessions:changed` 仍是整表加数据源重载；新建项目发
+    `projects:changed`，只刷新侧栏。实测后端一次 List+Get+Agents+Projects+Counts 在
+    700 条下约 3.5ms，真正的开销是约 375KB 的列表载荷跨桥序列化和 React 重渲染，
+    所以优化放在前端；不要为了“省后端计算”再加缓存。
+    Codex 原生改名：恢复前若 Codex 自己的 `session_index.jsonl` 里已经是同名
+    （`codexNameCurrent`），就不再冷启动 app-server（秒级，最长 20 秒）。
+    永久库（`history.db`）会因会话持续进行而累积大量完整快照——本机 1.8 GB 里
+    1.2 GB 来自同一个活跃会话的 285 个版本。唯一删版本的入口是用户显式触发的
+    `PruneLibrary`（预览→确认；每个会话当前版本与最新 N 个永远保留）。
+    `cache/sessions.json` 已持久化会话解析结果，暖启动实测约 0.5～1s；
+    首次或缓存失效时的十几秒是一次性重建，不要为此再做列表快照。
+
 ## 安全约定
 
 - **默认只读访问上游存储**：发现、读取、索引、导出全链路不写入上游。

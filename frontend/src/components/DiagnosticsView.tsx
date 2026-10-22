@@ -6,6 +6,8 @@ import {
   tokens,
   Text,
   Button,
+  Checkbox,
+  Input,
   Spinner,
 } from '@fluentui/react-components'
 import { ArrowClockwiseRegular } from '@fluentui/react-icons'
@@ -13,7 +15,7 @@ import { Events } from '@wailsio/runtime'
 import { useCallback, useEffect, useState } from 'react'
 import { DataBackup } from './DataBackup'
 import { DataLocation } from './DataLocation'
-import type { DiagRow, IndexStatus, LibraryStatus } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
+import type { DiagRow, IndexStatus, LibraryPrune, LibraryStatus } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import * as searchService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/searchservice'
 import { storageProgressFromEvent, type StorageProgress } from '../eventPayload'
@@ -62,6 +64,13 @@ export function DiagnosticsView({ revision = 0, embedded = false, sections = all
   const [compactBusy, setCompactBusy] = useState('')
   const [compactDone, setCompactDone] = useState('')
   const [compactProgress, setCompactProgress] = useState<StorageProgress | null>(null)
+  // 清理旧版本：先预览再确认；永久库默认不自动清理，这是唯一删版本的入口。
+  const [pruneOpen, setPruneOpen] = useState(false)
+  const [pruneKeep, setPruneKeep] = useState('5')
+  const [prunePreview, setPrunePreview] = useState<LibraryPrune | null>(null)
+  const [pruneSure, setPruneSure] = useState(false)
+  const [pruneBusy, setPruneBusy] = useState(false)
+  const [pruneDone, setPruneDone] = useState('')
 
   const load = useCallback(() => {
     if (showAgents) sessionService.Diagnostics().then(setRows).catch((e) => setErr(String(e)))
@@ -105,6 +114,26 @@ export function DiagnosticsView({ revision = 0, embedded = false, sections = all
       .finally(() => setCompactBusy(''))
   }
 
+  const keepNumber = Number.parseInt(pruneKeep, 10)
+  const keepValid = Number.isInteger(keepNumber) && keepNumber >= 1 && keepNumber <= 1000
+  const previewPrune = () => {
+    setLibraryError(''); setPruneDone(''); setPruneSure(false); setPrunePreview(null)
+    if (!keepValid) { setLibraryError('保留的版本数需要是 1 到 1000 之间的整数。'); return }
+    sessionService.PruneLibraryPreview(keepNumber).then(setPrunePreview).catch(reason => setLibraryError(`预览失败：${String(reason)}`))
+  }
+  const runPrune = () => {
+    if (!prunePreview || !pruneSure || pruneBusy || !keepValid) return
+    setLibraryError(''); setPruneBusy(true)
+    sessionService.PruneLibrary(keepNumber)
+      .then(report => {
+        setPruneDone(`已清理 ${report.versions} 个旧版本（涉及 ${report.sessions} 个会话），释放约 ${formatBytes(report.bytes)}。`)
+        setPrunePreview(null); setPruneSure(false)
+        load()
+      })
+      .catch(reason => setLibraryError(`清理失败：${String(reason)}`))
+      .finally(() => setPruneBusy(false))
+  }
+
   return (
     <div className={styles.wrap} style={embedded ? { height:'auto',overflow:'visible',padding:0,background:'transparent' } : undefined}><div className={styles.content}>
       {!embedded ? <><Heading style={{ fontSize: 20, margin: '0 0 8px' }}>设置</Heading>
@@ -116,7 +145,8 @@ export function DiagnosticsView({ revision = 0, embedded = false, sections = all
         <div className={styles.row}>
           <Text size={300}>默认开启 · 不自动清理</Text>
           <Button size="small" appearance="subtle" icon={<ArrowClockwiseRegular />} onClick={load}>更新统计</Button>
-          <Button size="small" appearance="subtle" onClick={compact} disabled={!!compactBusy}>压缩会话库</Button>
+          <Button size="small" appearance="subtle" onClick={compact} disabled={!!compactBusy || pruneBusy}>压缩会话库</Button>
+          <Button size="small" appearance="subtle" onClick={() => { setPruneOpen(open => !open); setPrunePreview(null); setPruneSure(false) }} disabled={!!compactBusy || pruneBusy}>清理旧版本…</Button>
         </div>
         {library ? <>
           <Text block size={300}>{library.sessions} 个会话 · {library.versions} 个内容版本 · 正文约 {formatBytes(library.bytes)}</Text>
@@ -129,6 +159,23 @@ export function DiagnosticsView({ revision = 0, embedded = false, sections = all
           {compactProgress ? ` · 已用 ${fmtElapsed(compactProgress.elapsed)}` : ''}
         </Text> : null}
         {compactDone ? <Text block role="status" className={styles.ok} style={{ marginTop: 8 }}>{compactDone}</Text> : null}
+        {pruneOpen ? <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${tokens.colorNeutralStroke2}` }}>
+          <div className={styles.row}>
+            <Text size={300}>每个会话保留最新</Text>
+            <Input size="small" style={{ width: 72 }} value={pruneKeep} inputMode="numeric" aria-label="每个会话保留的版本数" disabled={pruneBusy} onChange={(_, data) => { setPruneKeep(data.value); setPrunePreview(null); setPruneSure(false) }} />
+            <Text size={300}>个版本</Text>
+            <Button size="small" onClick={previewPrune} disabled={pruneBusy || !keepValid}>预览</Button>
+          </div>
+          {prunePreview ? <>
+            <Text block size={300} role="status" style={{ marginTop: 8 }}>{prunePreview.versions === 0 ? '没有可清理的旧版本。' : `将清理 ${prunePreview.versions} 个旧版本（涉及 ${prunePreview.sessions} 个会话），释放约 ${formatBytes(prunePreview.bytes)}。`}</Text>
+            {prunePreview.versions > 0 ? <>
+              <Checkbox checked={pruneSure} disabled={pruneBusy} onChange={(_, data) => setPruneSure(data.checked === true)} label="我了解被清理的旧版本无法恢复（每个会话当前的版本始终保留）" />
+              <div style={{ marginTop: 8 }}><Button size="small" appearance="primary" disabled={!pruneSure || pruneBusy} icon={pruneBusy ? <Spinner size="extra-tiny" /> : undefined} onClick={runPrune}>{pruneBusy ? '正在清理并回收空间…' : '确认清理'}</Button></div>
+            </> : null}
+          </> : null}
+          <Text block className={styles.msg} style={{ marginTop: 8 }}>旧版本是同一会话在不同时间保存的完整快照；会话持续进行时会累积很多份。清理后仍保留最新几份和当前版本，不影响阅读、搜索与导出。需要保险可先在上方「完整数据备份」做一次备份。</Text>
+        </div> : null}
+        {pruneDone ? <Text block role="status" className={styles.ok} style={{ marginTop: 8 }}>{pruneDone}</Text> : null}
         <Text block className={styles.msg} style={{ marginTop: 8 }}>启动、刷新后的索引构建及打开正文时自动保存成功读取的内容。相同正文去重，变化保留版本；上游清理后仍可阅读、搜索和导出。重建索引不删除本地会话库。</Text>
         <Text block className={styles.msg} style={{ marginTop: 8 }}>压缩会话库只重新编码正文（原始内容不变，逐行校验过），并回收文件空间；可以随时重复执行。</Text>
       </div> : null}

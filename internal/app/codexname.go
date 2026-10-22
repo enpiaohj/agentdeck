@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/enpiaohj/agentdeck/internal/proc"
@@ -134,6 +135,16 @@ func (c *codexRPC) call(id int, method string, params any) error {
 		return fmt.Errorf("codex %s 无答复：%w", method, err)
 	}
 	return fmt.Errorf("codex %s 无答复：app-server 提前退出", method)
+}
+
+// codexNameCurrent 报告 Codex 自己的名称索引里这个线程是不是已经叫这个名字。
+// 起 app-server 要冷启动一个 node 进程（秒级，最长 20 秒），名字没变就不必
+// 再来一次——恢复同一个已改过名的会话是最常见的情形。读的是 Codex 自己的
+// 追加式索引（只读），比较时忽略空白差异，与 CodexTitleDigest 同口径。
+// 变量而非函数，便于测试替换。
+var codexNameCurrent = func(threadID, title string) bool {
+	current := sessions.CodexTitles([]string{threadID})[threadID]
+	return current != "" && strings.Join(strings.Fields(current), " ") == strings.Join(strings.Fields(title), " ")
 }
 
 // needsCodexName 判断恢复前是否要为该会话写一次 Codex 原生名。

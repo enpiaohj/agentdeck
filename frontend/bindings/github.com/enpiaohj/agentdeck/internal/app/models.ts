@@ -681,6 +681,38 @@ export class LibraryCompact {
 }
 
 /**
+ * LibraryPrune 描述清理旧版本涉及的范围（预览与实际执行同形）。
+ */
+export class LibraryPrune {
+    "sessions": number;
+    "versions": number;
+    "bytes": number;
+
+    /** Creates a new LibraryPrune instance. */
+    constructor($$source: Partial<LibraryPrune> = {}) {
+        if (!("sessions" in $$source)) {
+            this["sessions"] = 0;
+        }
+        if (!("versions" in $$source)) {
+            this["versions"] = 0;
+        }
+        if (!("bytes" in $$source)) {
+            this["bytes"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new LibraryPrune instance from a string or object.
+     */
+    static createFrom($$source: any = {}): LibraryPrune {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new LibraryPrune($$parsedSource as Partial<LibraryPrune>);
+    }
+}
+
+/**
  * LibraryStatus reports permanent storage, not the rebuildable FTS cache.
  */
 export class LibraryStatus {

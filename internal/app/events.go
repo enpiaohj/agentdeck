@@ -14,6 +14,9 @@ const (
 	// EventSessionsChanged 标注（收藏/归档/标签/备注）发生变化，
 	// data 是变化的会话 key（string）。
 	EventSessionsChanged = "sessions:changed"
+	// EventProjectsChanged 只有项目清单变了（新建 / 声明项目），会话行本身
+	// 没有变化；前端只需刷新侧栏，不必重载会话列表。
+	EventProjectsChanged = "projects:changed"
 	// EventMessagesReady 后台消息数补齐完成，data 为 nil；前端收到后
 	// 重拉一次列表即可显示真实消息数（补齐前列表一律 0）。
 	EventMessagesReady = "sessions:messages"

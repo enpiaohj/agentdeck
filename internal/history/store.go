@@ -149,7 +149,8 @@ func (s *Store) Close() error { return s.db.Close() }
 
 // Save atomically commits both the content-addressed immutable revision and its
 // list entry. Empty reads never replace saved conversations. Identical content
-// creates no extra revision; earlier versions are never overwritten or deleted.
+// creates no extra revision; earlier versions are never overwritten, and only
+// the user-triggered Prune (prune.go) ever deletes them.
 func (s *Store) Save(sess sessions.Session, tr sessions.Transcript) error {
 	if sess.Agent == "" || sess.ID == "" {
 		return fmt.Errorf("会话标识为空")

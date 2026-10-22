@@ -751,3 +751,37 @@ func TestCrashMarker(t *testing.T) {
 	}
 	a1.Close()
 }
+
+// Codex 自己的索引里已经是这个名字时，不再冷启动 app-server 重写一遍；
+// 名字不同才写。
+func TestOpenInTerminalSkipsCodexNameWhenAlreadyCurrent(t *testing.T) {
+	a, _, _, ran := newTestApp(t)
+	dir := t.TempDir()
+	const thread = "01a152e7-bee6-79d1-8b11-5aa8530fb63f"
+	a.setList([]sessions.Session{{Agent: "codex", ID: thread, Cwd: dir, Resume: "codex resume " + thread, Path: filepath.Join(dir, "r.jsonl")}})
+	calls := 0
+	a.codexName = func(string, string) error { calls++; return nil }
+	old := codexNameCurrent
+	t.Cleanup(func() { codexNameCurrent = old })
+	current := "已同步的名字"
+	codexNameCurrent = func(id, title string) bool { return id == thread && title == current }
+	if err := (&MarkService{a: a}).SetTitle("codex:"+thread, current); err != nil {
+		t.Fatal(err)
+	}
+	r := &ResumeService{a: a}
+	if err := r.OpenInTerminal("codex:" + thread); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 0 || len(*ran) != 1 {
+		t.Fatalf("名字已一致却仍写了原生名: calls=%d ran=%v", calls, *ran)
+	}
+	if err := (&MarkService{a: a}).SetTitle("codex:"+thread, "改了之后的名字"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.OpenInTerminal("codex:" + thread); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("名字不同应当写入: calls=%d", calls)
+	}
+}

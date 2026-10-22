@@ -68,7 +68,8 @@ func (s *ProjectService) create(path, name, agent string, setAgent bool) (string
 	if err != nil {
 		return "", err
 	}
-	s.a.emit(EventSessionsChanged, "")
+	// 新建只多出一个还没有会话的项目，会话行不变：只通知侧栏刷新。
+	s.a.emit(EventProjectsChanged, "")
 	return p, nil
 }
 

@@ -34,6 +34,7 @@ export {
     Filter,
     IndexStatus,
     LibraryCompact,
+    LibraryPrune,
     LibraryStatus,
     Mark,
     MigrateReport,

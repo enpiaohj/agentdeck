@@ -47,6 +47,7 @@ import { platformLabel } from './agentOptions'
 import type { SessionView, ClaudeImportReport } from '../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as searchService from '../bindings/github.com/enpiaohj/agentdeck/internal/app/searchservice'
 import * as sessionService from '../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
+import { eventKey } from './markPatch'
 import * as resumeService from '../bindings/github.com/enpiaohj/agentdeck/internal/app/resumeservice'
 
 const useStyles = makeStyles({
@@ -198,6 +199,14 @@ export function App() {
   // listReset 只由侧栏「全部会话」自增，作为会话列表清空自身筛选的信号。
   const [listReset, setListReset] = useState(0)
   const [sourceVersion, setSourceVersion] = useState(0)
+  // 标注写操作（收藏 / 归档 / 标签 / 备注 / 改名）不走整表重载：只重取变化的
+  // 那几个 key，把标注字段并进已有的行（见 markPatch.ts）。markVersion 只驱动
+  // 侧栏计数与项目这几处小请求。
+  const [markVersion, setMarkVersion] = useState(0)
+  const [markPatch, setMarkPatch] = useState<{ seq: number; views: SessionView[] } | null>(null)
+  const pendingMarkKeys = useRef(new Set<string>())
+  const markTimer = useRef<number | null>(null)
+  const markSeq = useRef(0)
   const selectionRequest = useRef(0)
   const [searchQuery, setSearchQuery] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
@@ -259,16 +268,41 @@ export function App() {
 
   useEffect(() => { refreshSelected() }, [refreshSelected, listVersion])
 
+  // 把一个时间窗内的标注变化合并成一次取数：批量收藏 N 个会话只产生一轮请求。
+  const queueMarkRefresh = useCallback((key: string) => {
+    pendingMarkKeys.current.add(key)
+    if (markTimer.current !== null) return
+    markTimer.current = window.setTimeout(() => {
+      markTimer.current = null
+      const keys = [...pendingMarkKeys.current]
+      pendingMarkKeys.current.clear()
+      void Promise.all(keys.map(k => sessionService.Get(k).catch(() => null))).then(results => {
+        const views = results.filter((v): v is SessionView => !!v)
+        // 取不到的 key（已被删除等）说明列表结构变了，退回整表重载。
+        if (views.length !== keys.length) { setListVersion(value => value + 1); return }
+        const current = selectedRef.current
+        const fresh = views.find(v => v.key === current)
+        if (fresh) setSelected(fresh)
+        setMarkPatch({ seq: ++markSeq.current, views })
+        setMarkVersion(value => value + 1)
+      })
+    }, 60)
+  }, [])
+  useEffect(() => () => { if (markTimer.current !== null) window.clearTimeout(markTimer.current) }, [])
+
   useEffect(() => {
     const off = Events.On('sessions:messages', () => refreshSelected())
     const offChanged = Events.On('sessions:changed', event => {
+      const key = eventKey(event.data)
+      if (key) { queueMarkRefresh(key); return }
       setListVersion(value => value + 1)
-      const key = Array.isArray(event.data) ? event.data[0] : event.data
-      if (!key) setSourceVersion(value => value + 1)
+      setSourceVersion(value => value + 1)
     })
+    // 只改变项目清单（新建 / 声明），会话行本身没变：只刷新侧栏。
+    const offProjects = Events.On('projects:changed', () => setMarkVersion(value => value + 1))
     const offDeleted = Events.On('sessions:deleted', event => onSessionsDeleted(deletedSessionKeys(event.data)))
-    return () => { off(); offChanged(); offDeleted() }
-  }, [refreshSelected, onSessionsDeleted])
+    return () => { off(); offChanged(); offProjects(); offDeleted() }
+  }, [refreshSelected, onSessionsDeleted, queueMarkRefresh])
 
   // 无边框窗口:跟踪最大化状态以切换按钮图标
   useEffect(() => {
@@ -496,7 +530,7 @@ export function App() {
               filter={filter}
               onFilter={(f) => { setFilter(f); setSearchQuery(''); setView('sessions') }}
               onSelectAll={selectAllSessions}
-              listVersion={listVersion}
+              listVersion={listVersion + markVersion}
               onOpenDiagnostics={() => setView('diagnostics')}
               onRefresh={() => setListVersion(value => value + 1)}
               onNewSession={openNewSession}
@@ -507,7 +541,7 @@ export function App() {
           </div> : null}
           {view === 'diagnostics' || view === 'imports' ? (
             <div style={{ gridColumn: view === 'diagnostics' ? '1 / -1' : 'span 3', minWidth: 0, overflow: 'hidden' }}>
-              {view === 'imports' ? <ClaudeHistoryImport onImported={onImported} /> : <SettingsView revision={listVersion} onBack={() => setView('sessions')} />}
+              {view === 'imports' ? <ClaudeHistoryImport onImported={onImported} /> : <SettingsView revision={listVersion + markVersion} onBack={() => setView('sessions')} />}
             </div>
           ) : (
             <>
@@ -520,16 +554,17 @@ export function App() {
                 onOpenDetails={session => { onSelect(session); setInfoOpen(true) }}
                 onDeleteSessions={deletion.open}
                 listVersion={listVersion}
+                markPatch={markPatch}
                 refreshing={refreshing}
                 onRefresh={() => void refresh()}
                 resizer={list}
               /></div>
-              {searchQuery.trim() ? <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}><Button size="small" onClick={() => setSearchQuery('')}>返回会话列表 · 保留筛选与位置</Button><SearchResults query={searchQuery} revision={listVersion} selectedKey={selected?.key ?? null} onFocusSearch={() => searchRef.current?.focus()} onJump={onJump} /></div> : null}
+              {searchQuery.trim() ? <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}><Button size="small" onClick={() => setSearchQuery('')}>返回会话列表 · 保留筛选与位置</Button><SearchResults query={searchQuery} revision={listVersion + markVersion} selectedKey={selected?.key ?? null} onFocusSearch={() => searchRef.current?.focus()} onJump={onJump} /></div> : null}
               <MessagePane session={selected} sourceVersion={sourceVersion} jumpPart={jumpPart} jumpToken={jumpToken} infoOpen={infoOpen} onToggleInfo={() => setInfoOpen(value => !value)} onOpenInfo={() => setInfoOpen(true)} />
               {infoOpen ? (
                 <InfoPane
                   session={selected}
-                  onChanged={() => setListVersion((v) => v + 1)}
+                  onChanged={() => { if (selected) queueMarkRefresh(selected.key) }}
                   onClose={() => setInfoOpen(false)}
                   onDeleteSessions={deletion.open}
                   resizer={info}

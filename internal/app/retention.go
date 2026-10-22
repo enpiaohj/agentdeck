@@ -66,6 +66,49 @@ func (s *SessionService) CompactLibrary() (LibraryCompact, error) {
 	return LibraryCompact{Before: before.Bytes, After: after.Bytes, Versions: after.Versions, Elapsed: int64(time.Since(start).Seconds())}, nil
 }
 
+// LibraryPrune 描述清理旧版本涉及的范围（预览与实际执行同形）。
+type LibraryPrune struct {
+	Sessions int   `json:"sessions"`
+	Versions int   `json:"versions"`
+	Bytes    int64 `json:"bytes"`
+}
+
+// PruneLibraryPreview 预览「每个会话只保留最新 keep 个版本」会清掉什么，
+// 不改动任何数据。
+func (s *SessionService) PruneLibraryPreview(keep int) (LibraryPrune, error) {
+	stats, err := s.a.history.PrunePreview(keep)
+	if err != nil {
+		return LibraryPrune{}, err
+	}
+	return LibraryPrune{stats.Sessions, stats.Versions, stats.Bytes}, nil
+}
+
+// PruneLibrary 清掉每个会话超出最新 keep 个的旧版本并回收空间。永久库默认
+// 不自动清理，这是唯一会删版本的入口，必须由用户在预览后显式确认；每个会话
+// 当前指向的版本永远保留。与会话删除互斥（同一把 dataMu），避免两者交错。
+func (s *SessionService) PruneLibrary(keep int) (LibraryPrune, error) {
+	a := s.a
+	a.dataMu.Lock()
+	defer a.dataMu.Unlock()
+	a.captureMu.Lock()
+	closing := a.closing
+	a.captureMu.Unlock()
+	if closing {
+		return LibraryPrune{}, fmt.Errorf("程序正在关闭，未开始清理")
+	}
+	start := time.Now()
+	a.emit(EventStorageProgress, StorageProgress{Stage: "compact", Done: 0, Total: 1, Message: "正在清理旧版本并回收空间"})
+	stats, err := a.history.Prune(keep)
+	if err != nil {
+		return LibraryPrune{}, fmt.Errorf("清理旧版本失败: %w", err)
+	}
+	a.emit(EventStorageProgress, StorageProgress{
+		Stage: "compact", Done: 1, Total: 1,
+		Message: "旧版本清理完成", Elapsed: int64(time.Since(start).Seconds()),
+	})
+	return LibraryPrune{stats.Sessions, stats.Versions, stats.Bytes}, nil
+}
+
 func (s *SessionService) LibraryStatus() LibraryStatus {
 	stats, err := s.a.history.Stats()
 	s.a.mu.Lock()

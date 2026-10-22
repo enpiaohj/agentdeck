@@ -406,3 +406,36 @@ func containsSession(rows []SessionView, key string) bool {
 	}
 	return false
 }
+
+// 清理旧版本：预览不改数据，执行后每个会话只剩最新几版，且仍能读到正文。
+func TestPruneLibraryKeepsNewestVersions(t *testing.T) {
+	a, _, _, _ := newTestApp(t)
+	svc := a.NewSessionService()
+	sess := sessions.Session{Agent: "claude", ID: "prune-me", Title: "t"}
+	for i := 1; i <= 5; i++ {
+		tr := sessions.Transcript{Parts: []sessions.Part{{Role: "user", Kind: "text", Text: fmt.Sprintf("第 %d 版", i)}}}
+		if err := a.history.Save(sess, tr); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := svc.PruneLibraryPreview(0); err == nil {
+		t.Fatal("keep=0 必须被拒绝")
+	}
+	preview, err := svc.PruneLibraryPreview(2)
+	if err != nil || preview.Versions != 3 || preview.Sessions != 1 {
+		t.Fatalf("预览 = %+v %v", preview, err)
+	}
+	if st := svc.LibraryStatus(); st.Versions != 5 {
+		t.Fatalf("预览改动了数据: %+v", st)
+	}
+	done, err := svc.PruneLibrary(2)
+	if err != nil || done != preview {
+		t.Fatalf("清理 = %+v 预览 = %+v %v", done, preview, err)
+	}
+	if st := svc.LibraryStatus(); st.Versions != 2 || st.Sessions != 1 {
+		t.Fatalf("清理后 = %+v", st)
+	}
+	if _, tr, found, err := a.history.Get("claude:prune-me"); err != nil || !found || tr.Parts[0].Text != "第 5 版" {
+		t.Fatalf("清理后读不到最新正文: %v %v %+v", err, found, tr)
+	}
+}

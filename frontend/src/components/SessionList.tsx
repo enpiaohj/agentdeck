@@ -40,6 +40,7 @@ import { AgentMark } from '../icons/AgentMark'
 import type { SidebarFilter } from './Sidebar'
 import { usePreferences } from '../hooks/usePreferences'
 import { presentSessions, sessionDateGroup, sessionMonth, UPSTREAM_DELETED_HINT, type SessionOrder } from '../sessionPresentation'
+import { applyMarkPatch } from '../markPatch'
 import { selectSession, selectContextSession, pruneSelection, type SessionSelection, type SelectionModifiers } from '../sessionSelection'
 import { SessionContextMenu, type SessionAction } from './SessionContextMenu'
 import { groupSessionRows } from '../sessionHierarchy'
@@ -162,6 +163,8 @@ type Props = {
   onOpenDetails: (s: SessionView) => void
   onDeleteSessions: (items: SessionView[]) => void
   listVersion?: number
+  /** 标注写操作后的局部更新（见 markPatch.ts）；seq 递增表示有新的一批。 */
+  markPatch?: { seq: number; views: SessionView[] } | null
   onFilter: (filter: SidebarFilter) => void
   /** 递增即清空列表自身的筛选（关键词、月份、账号、排序）；侧栏「全部会话」用它回到全集。 */
   resetToken?: number
@@ -172,9 +175,9 @@ type Props = {
   resizer?: ReturnType<typeof usePaneResizer>
 }
 
-export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDeleteSessions, listVersion, onFilter, resetToken, onRefresh, refreshing = false, resizer }: Props) {
+export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDeleteSessions, listVersion, markPatch, onFilter, resetToken, onRefresh, refreshing = false, resizer }: Props) {
   const styles = useStyles()
-  const { rows, loading, error, reload } = useRows(filter, listVersion)
+  const { rows, loading, error } = useRows(filter, listVersion, markPatch)
   const [selection, setSelection] = useState<SessionSelection>(() => ({ keys: new Set(selectedKey ? [selectedKey] : []), anchor: selectedKey, focus: selectedKey }))
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
   const gridRef = useRef<HTMLDivElement>(null)
@@ -281,12 +284,12 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
 
   const toggleStar = (s: SessionView) => (e: React.MouseEvent) => {
     e.stopPropagation()
-    markService.SetFavorite(s.key, !s.favorite).then(reload).catch(() => {})
+    markService.SetFavorite(s.key, !s.favorite).catch(() => {})
   }
 
   const unarchive = (s: SessionView) => (e: React.MouseEvent) => {
     e.stopPropagation()
-    markService.SetArchived(s.key, false).then(reload).catch(() => {})
+    markService.SetArchived(s.key, false).catch(() => {})
   }
 
   const bulk = (op: (key: string) => Promise<unknown>, targets: ReadonlySet<string> = checked) => async () => {
@@ -304,7 +307,6 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
     } finally {
       setBusy(false)
       setSelection(previous => ({ ...previous, keys: new Set([...previous.keys].filter(key => !succeeded.has(key))) }))
-      reload()
     }
   }
 
@@ -329,7 +331,6 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
     try {
       await markService.SetTitle(key, title)
       setRenamingKey(null)
-      reload()
     } catch (reason) { setBulkError(`重命名失败：${String(reason).slice(0, 240)}`) }
     finally { renamePending.current = false; setRenameSaving(false) }
   }
@@ -625,7 +626,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
 
 type RowsState = { rows: SessionView[]; loading: boolean; error: string; reload: () => void }
 
-function useRows(filter: SidebarFilter, listVersion?: number): RowsState {
+function useRows(filter: SidebarFilter, listVersion?: number, markPatch?: { seq: number; views: SessionView[] } | null): RowsState {
   const scope = JSON.stringify([filter.agents ?? [], filter.project ?? '', !!filter.favorites, !!filter.archived])
   const [state, setState] = useState({ rows: [] as SessionView[], loading: true, error: '', scope })
 
@@ -653,6 +654,19 @@ function useRows(filter: SidebarFilter, listVersion?: number): RowsState {
     const off = Events.On('sessions:messages', () => load())
     return () => { off() }
   }, [load])
+
+  // 标注变化：只把收藏 / 归档 / 标签 / 备注 / 标题并进已有的行；判断不了
+  // （有行新进入当前范围）才退回整表重载。
+  const rowsRef = useRef(state.rows)
+  rowsRef.current = state.rows
+  const appliedPatch = useRef(0)
+  useEffect(() => {
+    if (!markPatch || markPatch.seq === appliedPatch.current) return
+    appliedPatch.current = markPatch.seq
+    const next = applyMarkPatch(rowsRef.current, markPatch.views, { favorites: filter.favorites, archived: filter.archived })
+    if (next === null) load()
+    else setState((s) => ({ ...s, rows: next }))
+  }, [markPatch, filter, load])
 
   // A new sidebar scope must never expose the previous scope's actionable
   // rows, including the render before the request-start effect runs.

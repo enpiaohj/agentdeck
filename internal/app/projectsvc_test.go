@@ -374,3 +374,16 @@ func TestNewSessionAgentFallbackAndWhitelist(t *testing.T) {
 		t.Error("接受了不存在的项目目录")
 	}
 }
+
+// 新建项目只改变项目清单：发 projects:changed，不发会触发会话整表重载的
+// sessions:changed。
+func TestCreateProjectEmitsProjectsChangedOnly(t *testing.T) {
+	a, rec, _, _ := newTestApp(t)
+	svc := a.NewProjectService()
+	if _, err := svc.Create(filepath.Join(t.TempDir(), "新项目"), ""); err != nil {
+		t.Fatal(err)
+	}
+	if !rec.has(EventProjectsChanged) || rec.has(EventSessionsChanged) {
+		t.Fatalf("事件不符: projects=%v sessions=%v", rec.has(EventProjectsChanged), rec.has(EventSessionsChanged))
+	}
+}
