@@ -68,10 +68,11 @@ releases/     正式发布快照（vX.Y.Z/）
 - 编译：`go build ./...`
 - 测试：`go test ./... -count=1`
 - 格式化：`gofmt -l cmd internal` 应为空
+- 漏洞：`go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...` 与 `frontend/` 下 `npm audit`，发布前都应为 0 项
 
-当前基线（v0.12.1）：27 个包全部通过（`sessions` 约 18s，`settings` 约 15s，
+当前基线（v0.13.0）：27 个包全部通过（`sessions` 约 18s，`settings` 约 15s，
 `search` 约 11s）。`internal/filememo` 的 `TestReadWhileReplaced` 曾在 Windows 上偶发失败；
-遇到时保留失败输出并调查，不通过删除测试或降低断言规避。前端 `npm test` 74 项。
+遇到时保留失败输出并调查，不通过删除测试或降低断言规避。前端 `npm test` 79 项。
 README 截图用隔离的演示用户目录生成（见陷阱 #21），不得截真实会话。
 运行验证：`go run ./cmd/agentdeck -all` 应读出本机 600+ 条会话；
 `-search "查询"`（可配 `-agent`/`-all`）对所选会话正文建 FTS5 索引并
@@ -287,6 +288,15 @@ README 截图用隔离的演示用户目录生成（见陷阱 #21），不得截
     `PruneLibrary`（预览→确认；每个会话当前版本与最新 N 个永远保留）。
     `cache/sessions.json` 已持久化会话解析结果，暖启动实测约 0.5～1s；
     首次或缓存失效时的十几秒是一次性重建，不要为此再做列表快照。
+
+24. **WebView2 数据目录必须固定**。Wails 默认用 `%APPDATA%\<exe 文件名>\`，而发布产物的文件名
+    带版本号，于是每次升级都换一个目录、localStorage 里的界面偏好全部回到默认值（本机实测
+    积累了 20 多个这样的目录，每个约 70 MB）。现在由 `cmd/agentdeck-desktop/webviewdata.go`
+    固定为 `%LOCALAPPDATA%\AgentDeckWebView`，并在首次使用时从最近修改过的旧目录复制
+    `EBWebView\Default\Local Storage\leveldb`（只读旧目录，先复制到临时目录再改名）。这个目录
+    放在数据根之外，数据位置迁移与「清理旧位置」不会碰它。迁移必须在取得单实例所有权之后做。
+    测试时注意：单实例互斥锁全机共享，用户的 AgentDeck 开着时演示实例会直接退出，驱动脚本就会
+    操作到用户的真实窗口；隔离测试要临时换互斥锁名并用不同的 exe 名构建，且不要提交该改动。
 
 ## 安全约定
 

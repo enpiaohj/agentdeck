@@ -12,6 +12,20 @@ AgentDeck 的版本索引。
 - 发布产物（exe）不入 Git History（`.gitignore` 的 `releases/**/*.exe`），按规则
   上传 GitHub Releases；本地快照同时保留 exe 与分发归档。
 
+## v0.13.0 — 2026-10-22
+
+新增会话、智能体、项目置顶；修复升级后界面偏好丢失与右键菜单出现滚动条。
+
+- 置顶：会话可在右键菜单（支持多选）或详情栏中置顶，集中在列表最上方的「置顶」分组；智能体与项目在侧栏右键菜单中置顶，排在各自分区最前面；均以图钉标出。置顶保存在界面偏好中，删除会话时同步移除。
+- 修复升级后界面偏好丢失：WebView2 数据目录此前按 exe 文件名区分（`%APPDATA%\AgentDeck-vX.Y.Z-win-x64.exe\`），每次升级都换新目录。现在固定为 `%LOCALAPPDATA%\AgentDeckWebView`，首次启动时从最近使用过的旧版本目录复制界面偏好（只读旧目录，旧目录保留）。
+- 修复右键菜单出现滚动条：点击点上下两侧都放不下完整菜单时，菜单竖直平移以完整显示，不再截短。
+- `github.com/tidwall/gjson` 1.19.0 → 1.20.0。
+- 同批评估的 `github.com/pelletier/go-toml/v2` 2.4.3 未升级：它改变了 TOML 解析错误的提示文字与列号，`TestTOMLParseErrorLocation` 四个子用例失败，留待单独评估。
+- 新增 `tools/dismiss_snapshot_alerts.py`：只驳回 `releases/` 快照清单上重复报告的 Dependabot 告警（默认预览，`--apply` 执行）。
+- README 新增「安全与依赖维护」一节，SECURITY.md 补充依赖与构建的处理方式，验证命令加入 `govulncheck` 与 `npm audit`。
+- 快照：`releases/v0.13.0/`；产物：Windows x64 EXE、分发 ZIP、源码 ZIP 与 SHA256SUMS。
+- 完整变更、升级说明与验证结果见 [本版 CHANGELOG](releases/v0.13.0/CHANGELOG.md)。
+
 ## v0.12.1 — 2026-10-22
 
 安全补丁，功能与 v0.12.0 相同。
