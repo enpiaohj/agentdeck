@@ -63,6 +63,9 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
       { key: 'start', title: '默认阅读位置', description: '没有已保存的阅读位置时，打开会话后定位到此处。', control: id => <select id={id} value={p.readingStart} onChange={e => update({ readingStart: e.target.value as typeof p.readingStart })}><option value="latest">最新一轮问答</option><option value="start">会话开头</option></select> },
       { key: 'fold', title: '默认折叠过程记录', description: '收起思考、工具调用与结构化输出；需要时可逐项展开。', control: id => <input id={id} aria-describedby={`${id}-description`} type="checkbox" role="switch" checked={p.foldProcesses} onChange={e => update({ foldProcesses: e.target.checked })} /> },
     ] },
+    { id: 'delete', category: 'sessions', title: '删除会话', rows: [
+      { key: 'deleteBackup', title: '删除前创建恢复备份', description: p.deleteBackup ? '删除会话前自动备份所选会话，可在本次运行期间撤销。备份文件保留在本地磁盘。' : '已停用。删除会话时不创建备份，删除后无法恢复。', control: id => <input id={id} aria-describedby={`${id}-description`} type="checkbox" role="switch" checked={p.deleteBackup} onChange={e => update({ deleteBackup: e.target.checked })} /> },
+    ] },
     { id: 'shell', category: 'terminal', title: '终端环境', rows: [
       { key: 'terminalShell', title: '终端 PowerShell', description: '新建或继续会话时使用的终端。更改后对新打开的终端生效。', control: id => <TerminalShellControl id={id} /> },
     ] },
@@ -71,7 +74,7 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
   const desktop = q ? matchesDesktopSettings(q) : category === 'general'
   const dataSections: SettingsDataSection[] = []
   if (matches('data', '数据管理 存储位置 数据目录 迁移 磁盘 空间 清理旧位置')) dataSections.push('storage')
-  if (matches('data', '数据管理 本地会话库 永久会话库 历史库 持久保存 压缩 版本 统计')) dataSections.push('library')
+  if (matches('data', '数据管理 本地会话库 永久会话库 历史库 持久保存 压缩 版本 统计 清理旧版本 旧版本 回收空间')) dataSections.push('library')
   if (matches('backup', '备份与恢复 完整数据备份 ZIP 文件 导入历史 收藏 标签 备注 偏好设置')) dataSections.push('backup')
   if (matches('diagnostics', '诊断 智能体检测 能力 状态 发现 原生恢复 会话来源')) dataSections.push('agents')
   if (matches('diagnostics', '诊断 搜索索引 全文索引 重建 检索')) dataSections.push('index')

@@ -11,10 +11,10 @@ test('提示文案', () => {
   assert.equal(markDoneMessage('archive', 3), '已归档 3 个会话')
   assert.equal(markDoneMessage('unarchive', 1), '已取消归档 1 个会话')
   assert.equal(markDoneMessage('favorite', 2), '已收藏 2 个会话')
-  assert.equal(markPartialMessage('archive', 2, 1), '已归档 2 个会话，另有 1 个未完成')
+  assert.equal(markPartialMessage('archive', 2, 1), '已归档 2 个会话，1 个会话操作失败')
 })
 
 test('撤销全部成功时不再提示', () => {
   assert.equal(undoFailureMessage(0), '')
-  assert.match(undoFailureMessage(2), /2 个会话没有恢复/)
+  assert.match(undoFailureMessage(2), /2 个会话未能恢复/)
 })

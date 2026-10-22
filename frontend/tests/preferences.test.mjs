@@ -90,3 +90,11 @@ test('工作台偏好：缺省值、合法值保留、非法值回退', () => {
   assert.equal(parsePreferences(JSON.stringify({promptRail:false})).promptRail, false)
   assert.equal(parsePreferences(JSON.stringify({promptRail:'off'})).promptRail, true)
 })
+
+test('删除前备份默认开启，只有显式 false 才关闭', async () => {
+  const { parsePreferences, defaultPreferences } = await import('../src/preferences.ts')
+  assert.equal(defaultPreferences.deleteBackup, true)
+  assert.equal(parsePreferences('{}').deleteBackup, true)
+  assert.equal(parsePreferences(JSON.stringify({ deleteBackup: 'no' })).deleteBackup, true)
+  assert.equal(parsePreferences(JSON.stringify({ deleteBackup: false })).deleteBackup, false)
+})

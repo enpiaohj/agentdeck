@@ -385,10 +385,10 @@ func (s *SessionService) finishPermanent(job *deleteJob) DeleteReport {
 	}
 	s.refreshAfterDelete()
 	s.a.emit("sessions:deleted", append([]string(nil), job.keys...))
-	message := fmt.Sprintf("已直接删除 %d 个会话，未保留恢复备份，无法撤销。", len(job.keys))
+	message := fmt.Sprintf("已删除 %d 个会话（未创建备份）。", len(job.keys))
 	backupPath := ""
 	if err := errors.Join(errs...); err != nil {
-		message += fmt.Sprintf("但部分临时备份文件未能清理，可手动删除目录：%s（%v）", job.dir, err)
+		message += fmt.Sprintf("部分临时备份文件未能清理，可手动删除：%s（%v）", job.dir, err)
 		backupPath = job.dir
 	}
 	return DeleteReport{append([]string(nil), job.keys...), backupPath, "", message}

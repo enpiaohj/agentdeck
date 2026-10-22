@@ -126,7 +126,7 @@ export function DiagnosticsView({ revision = 0, embedded = false, sections = all
     setLibraryError(''); setPruneBusy(true)
     sessionService.PruneLibrary(keepNumber)
       .then(report => {
-        setPruneDone(`已清理 ${report.versions} 个旧版本（涉及 ${report.sessions} 个会话），释放约 ${formatBytes(report.bytes)}。`)
+        setPruneDone(`已清理 ${report.sessions} 个会话的 ${report.versions} 个历史版本，释放 ${formatBytes(report.bytes)}。`)
         setPrunePreview(null); setPruneSure(false)
         load()
       })
@@ -167,13 +167,13 @@ export function DiagnosticsView({ revision = 0, embedded = false, sections = all
             <Button size="small" onClick={previewPrune} disabled={pruneBusy || !keepValid}>预览</Button>
           </div>
           {prunePreview ? <>
-            <Text block size={300} role="status" style={{ marginTop: 8 }}>{prunePreview.versions === 0 ? '没有可清理的旧版本。' : `将清理 ${prunePreview.versions} 个旧版本（涉及 ${prunePreview.sessions} 个会话），释放约 ${formatBytes(prunePreview.bytes)}。`}</Text>
+            <Text block size={300} role="status" style={{ marginTop: 8 }}>{prunePreview.versions === 0 ? '没有可清理的历史版本。' : `将清理 ${prunePreview.sessions} 个会话的 ${prunePreview.versions} 个历史版本，预计释放 ${formatBytes(prunePreview.bytes)}。`}</Text>
             {prunePreview.versions > 0 ? <>
-              <Checkbox checked={pruneSure} disabled={pruneBusy} onChange={(_, data) => setPruneSure(data.checked === true)} label="我了解被清理的旧版本无法恢复（每个会话当前的版本始终保留）" />
+              <Checkbox checked={pruneSure} disabled={pruneBusy} onChange={(_, data) => setPruneSure(data.checked === true)} label="我了解清理后的版本无法恢复" />
               <div style={{ marginTop: 8 }}><Button size="small" appearance="primary" disabled={!pruneSure || pruneBusy} icon={pruneBusy ? <Spinner size="extra-tiny" /> : undefined} onClick={runPrune}>{pruneBusy ? '正在清理并回收空间…' : '确认清理'}</Button></div>
             </> : null}
           </> : null}
-          <Text block className={styles.msg} style={{ marginTop: 8 }}>旧版本是同一会话在不同时间保存的完整快照；会话持续进行时会累积很多份。清理后仍保留最新几份和当前版本，不影响阅读、搜索与导出。需要保险可先在上方「完整数据备份」做一次备份。</Text>
+          <Text block className={styles.msg} style={{ marginTop: 8 }}>历史版本是同一会话在不同时间保存的完整快照，持续进行的会话会累积较多版本。清理后将保留每个会话的当前版本和最新的若干版本，不影响阅读、搜索和导出。建议先在“备份与恢复”中创建完整备份。</Text>
         </div> : null}
         {pruneDone ? <Text block role="status" className={styles.ok} style={{ marginTop: 8 }}>{pruneDone}</Text> : null}
         <Text block className={styles.msg} style={{ marginTop: 8 }}>启动、刷新后的索引构建及打开正文时自动保存成功读取的内容。相同正文去重，变化保留版本；上游清理后仍可阅读、搜索和导出。重建索引不删除本地会话库。</Text>

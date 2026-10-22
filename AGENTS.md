@@ -74,7 +74,7 @@ releases/     正式发布快照（vX.Y.Z/）
 
 当前基线（v0.12.0）：27 个包全部通过（`sessions` 约 18s，`settings` 约 15s，
 `search` 约 11s）。`internal/filememo` 的 `TestReadWhileReplaced` 曾在 Windows 上偶发失败；
-遇到时保留失败输出并调查，不通过删除测试或降低断言规避。前端 `npm test` 72 项。
+遇到时保留失败输出并调查，不通过删除测试或降低断言规避。前端 `npm test` 74 项。
 README 截图用隔离的演示用户目录生成（见陷阱 #21），不得截真实会话。
 运行验证：`go run ./cmd/agentdeck -all` 应读出本机 600+ 条会话；
 `-search "查询"`（可配 `-agent`/`-all`）对所选会话正文建 FTS5 索引并
@@ -301,10 +301,11 @@ README 截图用隔离的演示用户目录生成（见陷阱 #21），不得截
     `marks.BackupKeysTo`），**不再整库 `VACUUM INTO`**——整库备份只为留那几行，
     库越大越慢（本机 1.7 GB 的库实测 43 秒，按行备份 41 毫秒）。备份库的结构与
     主库一致，所以 `RestoreKeysFrom` / `ValidateBackup` 两条路径都不用改
-  - 「直接删除」（`DeleteSessionsPermanently`）不是跳过备份：备份仍先写先验，失败回滚
-    全靠它；只在全部删除成功后丢弃（`NativeDeletePlan.DiscardBackup`，逐文件删、
+  - 不保留备份的删除（`DeleteSessionsPermanently`）不是跳过备份：备份仍先写先验，失败
+    回滚全靠它；只在全部删除成功后丢弃（`NativeDeletePlan.DiscardBackup`，逐文件删、
     非递归收目录），不给撤销令牌，`operation.json`（仅 key）保留以防重新收录。
-    界面上是独立入口，需单独确认
+    入口是前端偏好 `deleteBackup`（设置 → 会话 → 删除前创建恢复备份，默认开启）；
+    关闭时对话框必须勾选「我了解此操作无法撤销」才能删除
   - 绝不 `RemoveAll` 目录，只删确认过的文件与索引条目
   - 未知数据库 schema 直接拒绝，不猜测着改。唯一例外是 Codex 库自带的维护型
     trigger：仅当 DDL 明确是 `AFTER/BEFORE INSERT` 或 `UPDATE`（不响应 DELETE）、

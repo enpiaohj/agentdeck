@@ -24,3 +24,14 @@ test('删除事件接受直接 key 数组和 Wails 参数包装，拒绝无效 p
   assert.deepEqual(deletedSessionKeys({keys:['a']}),[])
   assert.deepEqual(deletedSessionKeys([null,2]),[])
 })
+
+test('删除确认文案：问句标题，后果随「删除前备份」设置变化', async () => {
+  const { deleteTitle, deleteSummary, deletionTitles, irreversibleAck } = await import('../src/sessionDeletion.ts')
+  assert.equal(deleteTitle(1), '要删除此会话吗？')
+  assert.equal(deleteTitle(3), '要删除这 3 个会话吗？')
+  assert.match(deleteSummary(true), /可在本次运行期间撤销/)
+  assert.match(deleteSummary(false), /删除后无法恢复/)
+  assert.ok(irreversibleAck.includes('无法撤销'))
+  assert.deepEqual(deletionTitles(['a', '', 'c'], 5), { shown: ['a', '未命名会话', 'c'], more: 0 })
+  assert.deepEqual(deletionTitles(['1', '2', '3', '4', '5', '6', '7'], 5), { shown: ['1', '2', '3', '4', '5'], more: 2 })
+})

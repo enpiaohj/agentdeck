@@ -12,6 +12,7 @@ export const settingSearchKeywords: Record<string, string> = {
   hideEmptyProjects: '隐藏没有会话的项目 空项目',
   start: '最新一轮问答 会话开头 默认阅读位置',
   spacing: '舒适 紧凑 正文行距',
+  deleteBackup: '删除会话 备份 恢复备份 撤销 直接删除 不保留备份',
   terminalShell: 'Windows PowerShell 5.1 PowerShell 7+ 自动 自定义 可执行文件 pwsh.exe powershell.exe',
 }
 
