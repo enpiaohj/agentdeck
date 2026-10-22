@@ -1,13 +1,13 @@
 import { Menu, MenuPopover, MenuList, MenuItem, MenuDivider } from '@fluentui/react-components'
-import { OpenRegular, PanelRightRegular, EditRegular, StarRegular, ArchiveRegular, ArchiveArrowBackRegular, CopyRegular, ArrowDownloadRegular, CodeRegular, DeleteRegular } from '@fluentui/react-icons'
+import { OpenRegular, PanelRightRegular, EditRegular, StarRegular, ArchiveRegular, ArchiveArrowBackRegular, CopyRegular, ArrowDownloadRegular, CodeRegular, DeleteRegular, PinRegular, PinOffRegular } from '@fluentui/react-icons'
 import { useMemo } from 'react'
 import type { SessionView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import { deletionUnavailableReason } from '../sessionDeletion'
 
-export type SessionAction = 'open' | 'details' | 'rename' | 'resume' | 'copyResume' | 'copyTitle' | 'copyCwd' | 'export' | 'favorite' | 'archive' | 'delete'
+export type SessionAction = 'open' | 'details' | 'rename' | 'resume' | 'copyResume' | 'copyTitle' | 'copyCwd' | 'export' | 'pin' | 'favorite' | 'archive' | 'delete'
 
-export function SessionContextMenu({ items, point, onClose, onAction }: {
-  items: SessionView[]; point: { x: number; y: number }; onClose: () => void; onAction: (action: SessionAction) => void
+export function SessionContextMenu({ items, point, pinned = false, onClose, onAction }: {
+  items: SessionView[]; point: { x: number; y: number }; pinned?: boolean; onClose: () => void; onAction: (action: SessionAction) => void
 }) {
   const target = useMemo(() => ({ getBoundingClientRect: () => DOMRect.fromRect({ x: point.x, y: point.y, width: 0, height: 0 }) }), [point.x, point.y])
   const single = items.length === 1
@@ -15,7 +15,9 @@ export function SessionContextMenu({ items, point, onClose, onAction }: {
   const archived = items.every(item => item.archived)
   const canResume = single && !!items[0].resume
   const deleteReason = deletionUnavailableReason(items)
-  return <Menu open positioning={{ target, position: 'below', align: 'start', offset: 2, strategy: 'fixed', autoSize: 'height', flipBoundary: 'window', overflowBoundary: 'window', overflowBoundaryPadding: 8 }} closeOnScroll onOpenChange={(_, data) => { if (!data.open) onClose() }}>
+  // shiftToCoverTarget：点击点上下两侧都放不下整份菜单时，让菜单竖直平移、盖住点击点
+  // （系统右键菜单的做法），而不是截短出滚动条；只有窗口本身都放不下时 autoSize 才会滚动。
+  return <Menu open positioning={{ target, position: 'below', align: 'start', offset: 2, strategy: 'fixed', autoSize: 'height', flipBoundary: 'window', overflowBoundary: 'window', overflowBoundaryPadding: 8, shiftToCoverTarget: true }} closeOnScroll onOpenChange={(_, data) => { if (!data.open) onClose() }}>
     <MenuPopover className="ad-context-menu" style={{ overflowY: 'hidden' }} onKeyDown={event => event.stopPropagation()}>
       <MenuList className="ad-context-menu-list" aria-label="会话操作菜单" onFocus={event => {
         if (event.target instanceof HTMLElement && event.target.getAttribute('role') === 'menuitem') event.target.scrollIntoView({ block: 'nearest', inline: 'nearest' })
@@ -29,6 +31,7 @@ export function SessionContextMenu({ items, point, onClose, onAction }: {
           <MenuItem icon={<CopyRegular />} disabled={!canResume} title={!canResume ? '该来源的会话没有可用的恢复命令' : undefined} onClick={() => onAction('copyResume')}>复制恢复命令</MenuItem>
           <MenuDivider />
         </> : null}
+        <MenuItem icon={pinned ? <PinOffRegular /> : <PinRegular />} onClick={() => onAction('pin')}>{pinned ? '取消置顶' : '置顶'}</MenuItem>
         <MenuItem icon={<StarRegular />} onClick={() => onAction('favorite')}>{favorite ? '取消收藏' : '收藏'}</MenuItem>
         <MenuItem icon={archived ? <ArchiveArrowBackRegular /> : <ArchiveRegular />} onClick={() => onAction('archive')}>{archived ? '取消归档' : '归档'}</MenuItem>
         <MenuDivider />

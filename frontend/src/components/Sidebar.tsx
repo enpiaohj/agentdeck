@@ -27,11 +27,15 @@ import {
   OpenRegular,
   EditRegular,
   DeleteRegular,
+  PinRegular,
+  PinOffRegular,
+  PinFilled,
 } from '@fluentui/react-icons'
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import type { AgentView, NavCounts, ProjectView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import { usePreferences } from '../hooks/usePreferences'
 import { agentRange } from '../sidebarSelection'
+import { isPinned, pinnedFirst, togglePins } from '../pins'
 import * as projectService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/projectservice'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import { agentMeta } from '../util'
@@ -222,11 +226,16 @@ function pointTarget(point: { x: number; y: number }) {
 
 export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, onSelectAll, onOpenDiagnostics, onNewSession, onNewProject, notify, onRefresh }: Props) {
   const styles = useStyles()
-  const agents = useAgents(listVersion)
-  const allProjects = useProjects(listVersion)
+  const agentList = useAgents(listVersion)
+  const projectList = useProjects(listVersion)
   // 声明过却还没有会话的项目（计数 0）可收起：偏好在「设置 → 工作台」里也可改，默认不收，免得刚建好的项目消失。
   // 正被用作筛选的项目始终显示。
   const { preferences, update } = usePreferences()
+  // 置顶的智能体与项目排在各自分区最前面（项目路径大小写不敏感）
+  const agents = pinnedFirst(agentList, a => a.agent, preferences.pinnedAgents)
+  const allProjects = pinnedFirst(projectList, p => p.path, preferences.pinnedProjects, true)
+  const agentPinned = (agent: string) => isPinned(preferences.pinnedAgents, agent)
+  const projectPinned = (path: string) => isPinned(preferences.pinnedProjects, path, true)
   const hideEmpty = preferences.hideEmptyProjects
   const toggleHideEmpty = () => update({ hideEmptyProjects: !hideEmpty })
   const emptyProjects = allProjects.filter(p => p.count === 0).length
@@ -315,11 +324,13 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
       <MenuPopover onKeyDown={event => event.stopPropagation()}><MenuList aria-label="新建与项目操作">
         {menu.target.kind === 'agent' ? <>
           <div className="ad-context-heading">{agentMeta(menu.target.agent).label}</div>
+          <MenuItem icon={agentPinned(menu.target.agent) ? <PinOffRegular /> : <PinRegular />} onClick={() => { if (menu.target.kind === 'agent') update({ pinnedAgents: togglePins(preferences.pinnedAgents, [menu.target.agent]) }); setMenu(null) }}>{agentPinned(menu.target.agent) ? '取消置顶' : '置顶'}</MenuItem>
           <MenuItem disabled={!isCliAgent(menu.target.agent) && menu.target.agent !== 'cursor-agent'} onClick={() => { if (menu.target.kind === 'agent') onNewSession(undefined, menu.target.agent); setMenu(null) }}>新建会话…</MenuItem>
           <MenuItem disabled={!isCliAgent(menu.target.agent) && menu.target.agent !== 'cursor-agent'} onClick={() => { if (menu.target.kind === 'agent') onNewProject(menu.target.agent); setMenu(null) }}>新建项目…</MenuItem>
           {!isCliAgent(menu.target.agent) && menu.target.agent !== 'cursor-agent' ? <div className="ad-context-heading">此来源暂不支持新建会话</div> : null}
         </> : <>
           <div className="ad-context-heading">{menu.target.project.name}</div>
+          <MenuItem icon={projectPinned(menu.target.project.path) ? <PinOffRegular /> : <PinRegular />} onClick={() => { if (menu.target.kind === 'project') update({ pinnedProjects: togglePins(preferences.pinnedProjects, [menu.target.project.path], true) }); setMenu(null) }}>{projectPinned(menu.target.project.path) ? '取消置顶' : '置顶'}</MenuItem>
           <MenuItem icon={<OpenRegular />} onClick={() => { if (menu.target.kind === 'project') onNewSession(menu.target.project.path, menu.target.project.agent || undefined); setMenu(null) }}>在此新建会话…</MenuItem>
           {menu.target.project.declared ? <>
             <MenuItem icon={<EditRegular />} onClick={() => { if (menu.target.kind === 'project') openAction('rename', menu.target.project) }}>修改显示名称…</MenuItem>
@@ -493,6 +504,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
         >
           <AgentMark agent={a.agent} size={18} />
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agentMeta(a.agent).label}</span>
+          {agentPinned(a.agent) ? <PinFilled fontSize={11} role="img" aria-label="已置顶" style={{ flexShrink: 0, color: tokens.colorBrandForeground1 }} /> : null}
           <span className={styles.count}>{a.count}</span>
         </button>
       ))}
@@ -524,6 +536,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
               >
                 <span aria-hidden="true" className={mergeClasses(styles.projectIcon, active && styles.projectIconActive)}>{active ? <FolderOpenRegular /> : <FolderRegular />}</span>
                 <span className={styles.projectName}>{p.name}</span>
+                {projectPinned(p.path) ? <PinFilled fontSize={11} role="img" aria-label="已置顶" style={{ flexShrink: 0, color: tokens.colorBrandForeground1 }} /> : null}
                 <span aria-hidden="true" className={mergeClasses(styles.projectCount, 'ad-project-count')}>{p.count}</span>
               </button>
               <button

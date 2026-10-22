@@ -13,6 +13,7 @@ import {
 } from '@fluentui/react-components'
 import {
   StarFilled,
+  PinFilled,
   StarRegular,
   ArchiveRegular,
   ArchiveArrowBackRegular,
@@ -41,6 +42,7 @@ import type { SidebarFilter } from './Sidebar'
 import { usePreferences } from '../hooks/usePreferences'
 import { presentSessions, sessionDateGroup, sessionMonth, UPSTREAM_DELETED_HINT, type SessionOrder } from '../sessionPresentation'
 import { applyMarkPatch } from '../markPatch'
+import { isPinned, togglePins } from '../pins'
 import { inverseAction, markDoneMessage, markPartialMessage, undoFailureMessage, type MarkAction } from '../markFeedback'
 import type { Notify } from '../hooks/useToasts'
 import { selectSession, selectContextSession, pruneSelection, type SessionSelection, type SelectionModifiers } from '../sessionSelection'
@@ -206,7 +208,8 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
   const [account, setAccount] = useState('')
   const accounts = useMemo(() => [...new Set(rows.map(row => row.account).filter(Boolean))].sort(), [rows])
   const months = useMemo(() => [...new Set(rows.map(row => sessionMonth(row.last)).filter(Boolean))].sort().reverse(), [rows])
-  const { preferences } = usePreferences()
+  const { preferences, update: updatePreferences } = usePreferences()
+  const pinnedSessions = preferences.pinnedSessions
   const [order, setOrder] = useState<SessionOrder>(preferences.listOrder)
   useEffect(() => { setOrder(preferences.listOrder) }, [preferences.listOrder])
   const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(() => new Set())
@@ -379,6 +382,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
     if (action === 'details') { onOpenDetails(item); return }
     if (action === 'rename') { onSelect(item); renameCancelled.current = false; setRenamingKey(item.key); setRenameDraft(item.title); return }
     if (action === 'delete') { onDeleteSessions(items); return }
+    if (action === 'pin') { updatePreferences({ pinnedSessions: togglePins(pinnedSessions, items.map(row => row.key)) }); return }
     if (action === 'favorite' || action === 'archive') {
       const value = !items.every(row => action === 'favorite' ? row.favorite : row.archived)
       const mark: MarkAction = action === 'favorite' ? (value ? 'favorite' : 'unfavorite') : (value ? 'archive' : 'unarchive')
@@ -416,16 +420,18 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
 
   const groups = useMemo(() => {
     const g = new Map<string, SessionView[]>()
+    // 置顶的会话（连同展开的子会话）集中在最上方的「置顶」分组，其余按日期分组。
     for (const s of hierarchy.roots) {
-      const d = sessionDateGroup(s.last)
+      const d = isPinned(pinnedSessions, s.key) ? '置顶' : sessionDateGroup(s.last)
       if (!g.has(d)) g.set(d, [])
       g.get(d)!.push(s)
       if (expandedFamilies.has(s.key)) g.get(d)!.push(...(hierarchy.children.get(s.key) ?? []))
     }
-    const keys = [...g.keys()].filter(key => key !== '时间未知')
+    const keys = [...g.keys()].filter(key => key !== '时间未知' && key !== '置顶')
+    if (g.has('置顶')) keys.unshift('置顶')
     if (g.has('时间未知')) keys.push('时间未知')
     return keys.map(key => [key, g.get(key)!] as const)
-  }, [hierarchy, expandedFamilies])
+  }, [hierarchy, expandedFamilies, pinnedSessions])
 
   const projectName = filter.project?.split(/[\\/]/).filter(Boolean).pop()
   // 侧栏允许 Ctrl+单击叠加维度，标题必须如实反映全部条件：单项沿用原措辞，
@@ -612,6 +618,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
                             if (event.key === 'Escape' && !renameSaving) { event.preventDefault(); renameCancelled.current = true; setRenamingKey(null) }
                           }}
                         /> : <Text title={s.title || '未命名会话'} className={mergeClasses(styles.title, selected && styles.titleOn)}>{s.title || '未命名会话'}</Text>}
+                        {isPinned(pinnedSessions, s.key) ? <PinFilled fontSize={12} role="img" aria-label="已置顶" style={{ flexShrink: 0, color: tokens.colorBrandForeground1 }} /> : null}
                         <span className={styles.time} title={fmtTime(s.last)}>{relTime(s.last)}</span>
                         <button
                           data-favorite={s.favorite}
@@ -645,7 +652,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
         </div>
       )}
 
-      {contextOpen && context ? <SessionContextMenu key={`${context.key}:${context.x}:${context.y}`} items={contextItems} point={context} onClose={closeContext} onAction={action => void contextAction(action)} /> : null}
+      {contextOpen && context ? <SessionContextMenu key={`${context.key}:${context.x}:${context.y}`} items={contextItems} point={context} pinned={contextItems.length > 0 && contextItems.every(row => isPinned(pinnedSessions, row.key))} onClose={closeContext} onAction={action => void contextAction(action)} /> : null}
       {actionMessage ? <Text size={200} role="status" style={{ padding: '0 12px 8px', color: tokens.colorNeutralForeground3 }}>{actionMessage}</Text> : null}
       {bulkError ? <Text size={200} role="alert" style={{ padding: '0 12px 8px', color: tokens.colorPaletteRedForeground1, overflowWrap: 'anywhere' }}>{bulkError}</Text> : null}
       {checked.size === 1 ? <Text size={200} style={{ padding: '6px 16px', color: tokens.colorNeutralForeground3 }}>正在阅读 · Ctrl / Shift 多选，右键查看单项操作</Text> : null}

@@ -23,6 +23,8 @@ import {
   ArrowResetRegular,
   DocumentDismissRegular,
   ChevronRightRegular,
+  PinRegular,
+  PinOffRegular,
 } from '@fluentui/react-icons'
 import { useEffect, useRef, useState } from 'react'
 import type { SessionView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
@@ -35,6 +37,8 @@ import { PaneResizer } from './PaneResizer'
 import type { usePaneResizer } from '../hooks/usePaneResizer'
 import type { Notify } from '../hooks/useToasts'
 import { markDoneMessage } from '../markFeedback'
+import { usePreferences } from '../hooks/usePreferences'
+import { isPinned, togglePins } from '../pins'
 
 const useStyles = makeStyles({
   wrap: {
@@ -137,6 +141,7 @@ type Props = {
 const noteDrafts = new Map<string, string>()
 
 export function InfoPane({ session, onChanged, notify, onClose, onDeleteSessions, resizer }: Props) {
+  const { preferences, update: updatePreferences } = usePreferences()
   const styles = useStyles()
   const [tagDraft, setTagDraft] = useState('')
   const [adding, setAdding] = useState(false)
@@ -211,6 +216,7 @@ export function InfoPane({ session, onChanged, notify, onClose, onDeleteSessions
   const toggleStar = () => {
     markService.SetFavorite(session.key, !session.favorite).then(onChanged).catch(e => setMsg(`收藏操作失败：${String(e).slice(0, 120)}`))
   }
+  const pinned = isPinned(preferences.pinnedSessions, session.key)
   const toggleArchive = () => {
     const key = session.key
     const archive = !session.archived
@@ -334,6 +340,9 @@ export function InfoPane({ session, onChanged, notify, onClose, onDeleteSessions
         <div className={styles.section}>
           <span className={styles.sectionTitle}>更多操作</span>
           <div className={styles.actions}>
+            <Button size="small" icon={pinned ? <PinOffRegular /> : <PinRegular />} style={{ width: '100%' }} onClick={() => updatePreferences({ pinnedSessions: togglePins(preferences.pinnedSessions, [session.key]) })}>
+              {pinned ? '取消置顶' : '置顶'}
+            </Button>
             <Button size="small" icon={<ArchiveRegular />} style={{ width: '100%' }} onClick={toggleArchive}>
               {session.archived ? '取消归档' : '归档'}
             </Button>

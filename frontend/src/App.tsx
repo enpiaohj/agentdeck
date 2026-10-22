@@ -48,6 +48,7 @@ import type { SessionView, ClaudeImportReport } from '../bindings/github.com/enp
 import * as searchService from '../bindings/github.com/enpiaohj/agentdeck/internal/app/searchservice'
 import * as sessionService from '../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import { eventKey } from './markPatch'
+import { removePins } from './pins'
 import * as resumeService from '../bindings/github.com/enpiaohj/agentdeck/internal/app/resumeservice'
 
 const useStyles = makeStyles({
@@ -187,6 +188,9 @@ const useStyles = makeStyles({
 // 四栏布局:顶栏(品牌/搜索/动作)+ 左导航 + 会话列表 + 消息流 + 会话信息。
 export function App() {
   const { preferences, update } = usePreferences()
+  // 删除回调是稳定引用，读置顶列表要走 ref，否则拿到的是旧值
+  const pinnedSessionsRef = useRef(preferences.pinnedSessions)
+  pinnedSessionsRef.current = preferences.pinnedSessions
   const themeName = useTheme()
   const styles = useStyles()
   const { toasts, notify, dismiss } = useToasts()
@@ -242,6 +246,7 @@ export function App() {
 
   const onSessionsDeleted = useCallback((keys: string[]) => {
     if (!keys.length) return
+    if (keys.some(key => pinnedSessionsRef.current.includes(key))) update({ pinnedSessions: removePins(pinnedSessionsRef.current, keys) })
     // Invalidate in-flight search jumps so a removed detail cannot reappear.
     selectionRequest.current++
     if (selectedRef.current && keys.includes(selectedRef.current)) {
