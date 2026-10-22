@@ -85,9 +85,21 @@ func main() {
 		time.Sleep(200 * time.Millisecond)
 	}
 
+	// 固定 WebView2 数据目录，并在首次使用时迁入上一版的界面偏好（见 webviewdata.go）。
+	// 必须在取得单实例所有权之后：此时不会有旧版本正在写它的 localStorage。
+	webviewDir := webviewDataDir()
+	if from, err := migrateLegacyLocalStorage(os.Getenv("APPDATA"), webviewDir); err != nil {
+		fmt.Fprintln(os.Stderr, "迁移界面偏好失败，将使用默认偏好:", err)
+	} else if from != "" {
+		fmt.Fprintln(os.Stderr, "已迁入上一版的界面偏好:", from)
+	}
+
 	wails := application.New(application.Options{
 		Name:        "AgentDeck",
 		Description: "跨 Agent 历史会话工作台",
+		Windows: application.WindowsOptions{
+			WebviewUserDataPath: webviewDir,
+		},
 		Assets: application.AssetOptions{
 			Handler: application.BundledAssetFileServer(assets),
 		},
