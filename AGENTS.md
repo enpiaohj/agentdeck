@@ -182,6 +182,11 @@ README 截图用隔离的演示用户目录生成（见陷阱 #21），不得截
       TestVarsAreRead` 在跳过 `releases/` 的当前代码上照样 PASS）。v0.1.1 的
       CHANGELOG 与提交 `19e64eb` 把这条也写成「副本让它恰好通过」，那是错的推断，
       已发布快照按不可变原则未改。新增这类全仓扫描测试时，跳过清单里要有 `releases`。
+    - **Dependabot 会把每个快照当成独立项目**：安全更新 PR 不受 `dependabot.yml` 的
+      `directory` 限制，每次发版后都会对新快照开 PR、并按快照数量重复报告同一批告警
+      （v0.12.0 时 180 条告警里 170 条来自 17 个快照）。这些 PR 一律关闭不合并；告警在
+      发版后用 `python -I tools/dismiss_snapshot_alerts.py --apply` 驳回（默认只预览，
+      只处理 `releases/vX.Y.Z/source/` 下的清单，当前代码的告警必须升级依赖解决）。
     - **导出快照时必须排除 `releases/`**，否则把上一版快照整个套进来：
       `git archive HEAD | tar -x -C <dst> --exclude=releases`
       （v0.1.1 用不带 `--exclude` 的写法导出是 1216 个文件 / 11 MB，排除后
