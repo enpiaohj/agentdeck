@@ -29,8 +29,12 @@ Windows x64 版本从 [Releases](https://github.com/enpiaohj/agentdeck/releases)
 
 ## 当前状态
 
-**已发布 v0.12.0 — Windows 桌面工作台**（Wails v3 + React 18 + Fluent UI v9）。
+**已发布 v0.12.1 — Windows 桌面工作台**（Wails v3 + React 18 + Fluent UI v9）。
 各版本变化见 [CHANGELOG.md](CHANGELOG.md)，本机发布快照位于 `releases/vX.Y.Z/`。
+
+v0.12.1 是安全补丁：升级 `klauspost/compress`（修复会编译进程序的 s2 解码漏洞），
+构建工具链固定为 Go 1.27.3（修复证书校验、TLS 与 HTTP/2 相关的标准库漏洞），开发依赖
+vite 升级到 6.x。功能与 v0.12.0 相同，建议所有用户升级。
 
 v0.12.0 的重点：
 
@@ -293,7 +297,8 @@ tools/                 图标与第三方许可声明生成脚本
 
 ## 构建
 
-要求 Go 1.26.8 或更高。桌面构建另需 Node.js / npm、Wails CLI
+要求 Go 1.26.8 或更高；`go.mod` 用 `toolchain go1.27.3` 固定构建工具链，本机版本较低时
+`go` 会自动下载该版本（需要网络，或预先安装）。桌面构建另需 Node.js / npm、Wails CLI
 `wails3`（与 `go.mod` 中的 `v3.0.0-beta.30` 对齐）、Task 和 PowerShell 7
 （`pwsh`），运行时需要 WebView2。
 

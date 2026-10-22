@@ -12,6 +12,16 @@ AgentDeck 的版本索引。
 - 发布产物（exe）不入 Git History（`.gitignore` 的 `releases/**/*.exe`），按规则
   上传 GitHub Releases；本地快照同时保留 exe 与分发归档。
 
+## v0.12.1 — 2026-10-22
+
+安全补丁，功能与 v0.12.0 相同。
+
+- `github.com/klauspost/compress` 1.18.3 → 1.18.7：修复 s2 包的整数溢出与越界写（高危）。s2 会编译进程序，用于解析 Claude Desktop 缓存中的 snappy 数据。
+- 构建工具链固定为 Go 1.27.3（`go.mod` 的 `toolchain`）：govulncheck 在 Go 1.27.0 上报告 10 项会被实际调用的标准库漏洞（crypto/x509、crypto/tls、net/http 与 HTTP/2），在线更新的 HTTPS 请求会走到这些路径；升级后报告 0 项。
+- 开发依赖 vite 5.4.21 → 6.4.5（esbuild 0.21.5 → 0.25.12）：修复开发服务器相关的 9 项告警，不影响发布的程序；`npm audit` 0 项。
+- 快照：`releases/v0.12.1/`；产物：Windows x64 EXE、分发 ZIP、源码 ZIP 与 SHA256SUMS。
+- 完整变更、升级说明与验证结果见 [本版 CHANGELOG](releases/v0.12.1/CHANGELOG.md)。
+
 ## v0.12.0 — 2026-10-22
 
 删除与整理的体验与性能：新增「直接删除」与「清理旧版本」，收藏 / 归档不再整表重载。

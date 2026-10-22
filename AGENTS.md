@@ -24,7 +24,7 @@
 
 | 项 | 选型 |
 | --- | --- |
-| 语言 | Go 1.26.8+ |
+| 语言 | Go 1.26.8+（`go.mod` 固定 `toolchain go1.27.3`） |
 | 桌面框架 | Wails v3（已接入，React 18 + Fluent UI v9） |
 | SQLite | `modernc.org/sqlite`（纯 Go，无 CGO） |
 | JSON | `tidwall/gjson` + `encoding/json` |
@@ -72,7 +72,7 @@ releases/     正式发布快照（vX.Y.Z/）
 - 测试：`go test ./... -count=1`
 - 格式化：`gofmt -l cmd internal` 应为空
 
-当前基线（v0.12.0）：27 个包全部通过（`sessions` 约 18s，`settings` 约 15s，
+当前基线（v0.12.1）：27 个包全部通过（`sessions` 约 18s，`settings` 约 15s，
 `search` 约 11s）。`internal/filememo` 的 `TestReadWhileReplaced` 曾在 Windows 上偶发失败；
 遇到时保留失败输出并调查，不通过删除测试或降低断言规避。前端 `npm test` 74 项。
 README 截图用隔离的演示用户目录生成（见陷阱 #21），不得截真实会话。
