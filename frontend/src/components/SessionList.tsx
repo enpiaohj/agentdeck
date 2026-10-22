@@ -41,6 +41,8 @@ import type { SidebarFilter } from './Sidebar'
 import { usePreferences } from '../hooks/usePreferences'
 import { presentSessions, sessionDateGroup, sessionMonth, UPSTREAM_DELETED_HINT, type SessionOrder } from '../sessionPresentation'
 import { applyMarkPatch } from '../markPatch'
+import { inverseAction, markDoneMessage, markPartialMessage, undoFailureMessage, type MarkAction } from '../markFeedback'
+import type { Notify } from '../hooks/useToasts'
 import { selectSession, selectContextSession, pruneSelection, type SessionSelection, type SelectionModifiers } from '../sessionSelection'
 import { SessionContextMenu, type SessionAction } from './SessionContextMenu'
 import { groupSessionRows } from '../sessionHierarchy'
@@ -100,6 +102,10 @@ const useStyles = makeStyles({
     gap: '8px',
     margin: '0 8px 3px',
     padding: '10px 8px',
+    // 屏幕外的行不参与布局与绘制：几百上千行的列表滚动与首屏更轻，焦点、
+    // 查找与 scrollIntoView 照常工作（行仍在 DOM 里，aria 结构不变）。
+    contentVisibility: 'auto',
+    containIntrinsicSize: 'auto 64px',
     ...shorthands.border('1px', 'solid', 'transparent'),
     ...shorthands.borderRadius('7px'),
     backgroundColor: tokens.colorNeutralBackground1,
@@ -163,6 +169,10 @@ type Props = {
   onOpenDetails: (s: SessionView) => void
   onDeleteSessions: (items: SessionView[]) => void
   listVersion?: number
+  /** 全局提示条：收藏 / 归档的结果与撤销都走它。未传时只做操作、不提示。 */
+  notify?: Notify
+  /** 空列表时的「新建会话」入口。 */
+  onNewSession?: () => void
   /** 标注写操作后的局部更新（见 markPatch.ts）；seq 递增表示有新的一批。 */
   markPatch?: { seq: number; views: SessionView[] } | null
   onFilter: (filter: SidebarFilter) => void
@@ -175,9 +185,9 @@ type Props = {
   resizer?: ReturnType<typeof usePaneResizer>
 }
 
-export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDeleteSessions, listVersion, markPatch, onFilter, resetToken, onRefresh, refreshing = false, resizer }: Props) {
+export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDeleteSessions, listVersion, markPatch, notify, onNewSession, onFilter, resetToken, onRefresh, refreshing = false, resizer }: Props) {
   const styles = useStyles()
-  const { rows, loading, error } = useRows(filter, listVersion, markPatch)
+  const { rows, loading, error, reload } = useRows(filter, listVersion, markPatch)
   const [selection, setSelection] = useState<SessionSelection>(() => ({ keys: new Set(selectedKey ? [selectedKey] : []), anchor: selectedKey, focus: selectedKey }))
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
   const gridRef = useRef<HTMLDivElement>(null)
@@ -282,17 +292,41 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
     gridRef.current?.focus({ preventScroll: true })
   }
 
+  // 一条标注操作的写入与反向写入（撤销用）。
+  const applyMark = (action: MarkAction, key: string) => {
+    if (action === 'favorite' || action === 'unfavorite') return markService.SetFavorite(key, action === 'favorite')
+    return markService.SetArchived(key, action === 'archive')
+  }
+  // 成功后的一句话提示，带撤销：归档会让行直接从列表消失，没有这句话用户会
+  // 怀疑是不是误删了。
+  const announceMark = (action: MarkAction, keys: string[], failed = 0) => {
+    if (!notify || keys.length === 0) return
+    notify(failed ? markPartialMessage(action, keys.length, failed) : markDoneMessage(action, keys.length), {
+      tone: failed ? 'info' : 'success',
+      action: {
+        label: '撤销',
+        run: () => {
+          void Promise.allSettled(keys.map(key => applyMark(inverseAction(action), key))).then(results => {
+            const text = undoFailureMessage(results.filter(r => r.status === 'rejected').length)
+            if (text) notify(text, { tone: 'error' })
+          })
+        },
+      },
+    })
+  }
+
   const toggleStar = (s: SessionView) => (e: React.MouseEvent) => {
     e.stopPropagation()
-    markService.SetFavorite(s.key, !s.favorite).catch(() => {})
+    markService.SetFavorite(s.key, !s.favorite).catch(reason => notify?.(`收藏操作失败：${String(reason).slice(0, 120)}`, { tone: 'error' }))
   }
 
   const unarchive = (s: SessionView) => (e: React.MouseEvent) => {
     e.stopPropagation()
-    markService.SetArchived(s.key, false).catch(() => {})
+    markService.SetArchived(s.key, false).then(() => announceMark('unarchive', [s.key]))
+      .catch(reason => notify?.(`取消归档失败：${String(reason).slice(0, 120)}`, { tone: 'error' }))
   }
 
-  const bulk = (op: (key: string) => Promise<unknown>, targets: ReadonlySet<string> = checked) => async () => {
+  const bulk = (op: (key: string) => Promise<unknown>, targets: ReadonlySet<string> = checked, done?: (succeeded: string[], failed: number) => void) => async () => {
     if (targets.size === 0 || busy) return
     setBusy(true)
     setBulkError('')
@@ -307,6 +341,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
     } finally {
       setBusy(false)
       setSelection(previous => ({ ...previous, keys: new Set([...previous.keys].filter(key => !succeeded.has(key))) }))
+      if (done) done([...succeeded], failed.length)
     }
   }
 
@@ -346,7 +381,8 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
     if (action === 'delete') { onDeleteSessions(items); return }
     if (action === 'favorite' || action === 'archive') {
       const value = !items.every(row => action === 'favorite' ? row.favorite : row.archived)
-      await bulk(key => action === 'favorite' ? markService.SetFavorite(key, value) : markService.SetArchived(key, value), new Set(items.map(row => row.key)))()
+      const mark: MarkAction = action === 'favorite' ? (value ? 'favorite' : 'unfavorite') : (value ? 'archive' : 'unarchive')
+      await bulk(key => applyMark(mark, key), new Set(items.map(row => row.key)), (keys, failed) => announceMark(mark, keys, failed))()
       return
     }
     setBusy(true); setBulkError(''); setActionMessage('')
@@ -464,13 +500,14 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
       </div>
 
       {error ? (
-        <div className={styles.center}>
+        <div className={styles.center} role="alert">
           <Text size={300}>会话加载失败：{error}</Text>
+          <Button size="small" appearance="primary" onClick={reload}>重试</Button>
         </div>
       ) : loading && rows.length === 0 ? (
         <div className={styles.center}>
           <Spinner size="tiny" />
-          <Text size={300}>正在扫描本机会话…</Text>
+          <ScanStatus />
         </div>
       ) : visibleRows.length === 0 ? (
         <div className={styles.center}>
@@ -483,6 +520,10 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
               : '使用受支持的 Agent 创建会话后，请单击“刷新”重新扫描。'}
           </Text>
           {query || month || account ? <Button size="small" onClick={() => { setQuery(''); setMonth(''); setAccount('') }}>清除筛选</Button> : null}
+          {!(query || month || account) && !filter.archived && !filter.favorites && onNewSession ? <>
+            <Button size="small" appearance="primary" onClick={onNewSession}>新建会话</Button>
+            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>已有会话却没出现？到「设置 → 数据来源」检查智能体是否被检测到。</Text>
+          </> : null}
         </div>
       ) : (
         <div ref={gridRef} className={styles.rows} role="grid" aria-label="会话列表" aria-multiselectable="true" aria-rowcount={visibleRows.length} aria-colcount={1} aria-describedby={helpId} aria-busy={busy} tabIndex={-1} onKeyDown={event => {
@@ -612,9 +653,9 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
         <div className={styles.bulkBar} role="group" aria-label="批量会话操作">
           <Text size={200} weight="semibold" aria-live="polite" style={{ marginRight: 'auto' }}>已选 {checked.size} 项</Text>
           <Button size="small" icon={<StarRegular />} disabled={busy}
-            onClick={bulk((k) => markService.SetFavorite(k, true))}>收藏</Button>
+            onClick={bulk((k) => applyMark('favorite', k), checked, (keys, failed) => announceMark('favorite', keys, failed))}>收藏</Button>
           <Button size="small" icon={filter.archived ? <ArchiveArrowBackRegular /> : <ArchiveRegular />} disabled={busy}
-            onClick={bulk((k) => markService.SetArchived(k, !filter.archived))}>{filter.archived ? '取消归档' : '归档'}</Button>
+            onClick={bulk((k) => applyMark(filter.archived ? 'unarchive' : 'archive', k), checked, (keys, failed) => announceMark(filter.archived ? 'unarchive' : 'archive', keys, failed))}>{filter.archived ? '取消归档' : '归档'}</Button>
           <Button size="small" icon={<DeleteRegular />} disabled={busy || !!deleteReason} title={deleteReason || '删除原始记录及全部保留版本'} onClick={() => onDeleteSessions(deletionTargets)}>删除会话…</Button>
         </div>
       ) : null}
@@ -671,4 +712,20 @@ function useRows(filter: SidebarFilter, listVersion?: number, markPatch?: { seq:
   // A new sidebar scope must never expose the previous scope's actionable
   // rows, including the render before the request-start effect runs.
   return state.scope === scope ? { ...state, reload: load } : { rows: [], loading: true, error: '', reload: load }
+}
+
+// 首次扫描（或缓存失效后重建）可能要十几秒：后端早就有进度，这里轮询出来，
+// 让用户知道是在推进而不是卡住。没有进度数据时退回原来的一句话。
+function ScanStatus() {
+  const [progress, setProgress] = useState<{ files: number; done: number } | null>(null)
+  useEffect(() => {
+    let active = true
+    const tick = () => sessionService.ScanProgress()
+      .then(p => { if (active) setProgress(p.indexing && p.files > 0 ? { files: p.files, done: p.done } : null) })
+      .catch(() => {})
+    tick()
+    const timer = window.setInterval(tick, 500)
+    return () => { active = false; window.clearInterval(timer) }
+  }, [])
+  return <Text size={300} role="status">正在扫描本机会话…{progress ? `（已处理 ${progress.done} / ${progress.files} 个文件）` : ''}</Text>
 }

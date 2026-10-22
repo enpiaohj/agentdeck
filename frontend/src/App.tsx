@@ -555,6 +555,8 @@ export function App() {
                 onDeleteSessions={deletion.open}
                 listVersion={listVersion}
                 markPatch={markPatch}
+                notify={notify}
+                onNewSession={() => openNewSession()}
                 refreshing={refreshing}
                 onRefresh={() => void refresh()}
                 resizer={list}
@@ -565,6 +567,7 @@ export function App() {
                 <InfoPane
                   session={selected}
                   onChanged={() => { if (selected) queueMarkRefresh(selected.key) }}
+                  notify={notify}
                   onClose={() => setInfoOpen(false)}
                   onDeleteSessions={deletion.open}
                   resizer={info}

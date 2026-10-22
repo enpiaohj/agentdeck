@@ -33,6 +33,8 @@ import { deletionUnavailableReason } from '../sessionDeletion'
 import { UPSTREAM_DELETED_HINT } from '../sessionPresentation'
 import { PaneResizer } from './PaneResizer'
 import type { usePaneResizer } from '../hooks/usePaneResizer'
+import type { Notify } from '../hooks/useToasts'
+import { markDoneMessage } from '../markFeedback'
 
 const useStyles = makeStyles({
   wrap: {
@@ -124,6 +126,8 @@ function fmtTokens(n: number): string {
 type Props = {
   session: SessionView | null
   onChanged: () => void
+  /** 全局提示条；归档会让会话从列表消失，用它给一句带撤销的确认。 */
+  notify?: Notify
   onClose: () => void
   onDeleteSessions: (items: SessionView[]) => void
   /** 详情栏宽度分隔条（由 App 持有偏好）；未传时不显示。 */
@@ -132,7 +136,7 @@ type Props = {
 
 const noteDrafts = new Map<string, string>()
 
-export function InfoPane({ session, onChanged, onClose, onDeleteSessions, resizer }: Props) {
+export function InfoPane({ session, onChanged, notify, onClose, onDeleteSessions, resizer }: Props) {
   const styles = useStyles()
   const [tagDraft, setTagDraft] = useState('')
   const [adding, setAdding] = useState(false)
@@ -208,7 +212,15 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions, resize
     markService.SetFavorite(session.key, !session.favorite).then(onChanged).catch(e => setMsg(`收藏操作失败：${String(e).slice(0, 120)}`))
   }
   const toggleArchive = () => {
-    markService.SetArchived(session.key, !session.archived).then(onChanged).catch(e => setMsg(`归档操作失败：${String(e).slice(0, 120)}`))
+    const key = session.key
+    const archive = !session.archived
+    markService.SetArchived(key, archive).then(() => {
+      onChanged()
+      notify?.(markDoneMessage(archive ? 'archive' : 'unarchive', 1), {
+        tone: 'success',
+        action: { label: '撤销', run: () => { markService.SetArchived(key, !archive).then(onChanged).catch(e => notify(`撤销失败：${String(e).slice(0, 120)}`, { tone: 'error' })) } },
+      })
+    }).catch(e => setMsg(`归档操作失败：${String(e).slice(0, 120)}`))
   }
 
   return (
