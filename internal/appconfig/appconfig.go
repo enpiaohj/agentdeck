@@ -20,7 +20,8 @@ import (
 // Version 是当前配置文件格式版本。
 const Version = 1
 
-// 终端 shell 的取值。空串按 ShellPowerShell 处理，与引入本设置之前一致。
+// 终端 shell 的取值。空串与无法识别的取值按 ShellAuto 处理：默认选版本最高的
+// 可用 PowerShell。已保存的显式取值（包括 powershell）不受影响。
 const (
 	// ShellPowerShell 是 Windows PowerShell 5.1（powershell.exe）。
 	ShellPowerShell = "powershell"
@@ -51,27 +52,27 @@ type Config struct {
 	extra map[string]json.RawMessage
 }
 
-// Default 返回默认配置：默认数据位置，终端使用 Windows PowerShell 5.1，
+// Default 返回默认配置：默认数据位置，终端优先使用 PowerShell 7+，
 // 启动后检查更新。
 func Default() Config {
-	return Config{Version: Version, TerminalShell: ShellPowerShell, AutoCheckUpdates: true}
+	return Config{Version: Version, TerminalShell: ShellAuto, AutoCheckUpdates: true}
 }
 
 // NormalizeShell 把终端 shell 取值归一化：空串与无法识别的取值回退到
-// Windows PowerShell；绝对路径（自定义可执行文件）原样保留，存在性由
+// 自动（优先 7+）；绝对路径（自定义可执行文件）原样保留，存在性由
 // 启动终端时校验。
 func NormalizeShell(value string) string {
 	v := strings.TrimSpace(value)
 	switch v {
-	case "", ShellPowerShell:
-		return ShellPowerShell
-	case ShellAuto, ShellPwsh:
+	case "", ShellAuto:
+		return ShellAuto
+	case ShellPowerShell, ShellPwsh:
 		return v
 	}
 	if filepath.IsAbs(v) {
 		return filepath.Clean(v)
 	}
-	return ShellPowerShell
+	return ShellAuto
 }
 
 // Path 返回引导文件位置：%APPDATA%\AgentDeck\app-config.json。

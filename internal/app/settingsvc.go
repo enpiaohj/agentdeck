@@ -138,7 +138,7 @@ func (s *SettingsService) SetTerminalShell(value string) (TerminalShellView, err
 	value = strings.TrimSpace(value)
 	switch value {
 	case "":
-		value = appconfig.ShellPowerShell
+		value = appconfig.ShellAuto
 	case appconfig.ShellPowerShell, appconfig.ShellAuto, appconfig.ShellPwsh:
 	default:
 		if !filepath.IsAbs(value) {

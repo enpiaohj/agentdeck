@@ -12,7 +12,7 @@ func TestLoadMissingFileIsDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("文件不存在不应报错：%v", err)
 	}
-	if cfg.TerminalShell != ShellPowerShell || cfg.DataRoot != "" || cfg.Version != Version {
+	if cfg.TerminalShell != ShellAuto || cfg.DataRoot != "" || cfg.Version != Version {
 		t.Fatalf("应得到默认配置，实际为 %+v", cfg)
 	}
 }
@@ -68,7 +68,7 @@ func TestCorruptFileReturnsDefaultAndError(t *testing.T) {
 	if err == nil {
 		t.Fatal("损坏的配置应返回错误")
 	}
-	if cfg.TerminalShell != ShellPowerShell || cfg.DataRoot != "" {
+	if cfg.TerminalShell != ShellAuto || cfg.DataRoot != "" {
 		t.Fatalf("损坏时应回退默认配置：%+v", cfg)
 	}
 }
@@ -76,14 +76,14 @@ func TestCorruptFileReturnsDefaultAndError(t *testing.T) {
 func TestNormalizeShell(t *testing.T) {
 	custom := filepath.Join(t.TempDir(), "pwsh.exe")
 	cases := []struct{ in, want string }{
-		{"", ShellPowerShell},
-		{"  ", ShellPowerShell},
+		{"", ShellAuto},
+		{"  ", ShellAuto},
 		{ShellPowerShell, ShellPowerShell},
 		{ShellAuto, ShellAuto},
 		{ShellPwsh, ShellPwsh},
 		{custom, filepath.Clean(custom)},
-		{"bash", ShellPowerShell},
-		{"relative/pwsh.exe", ShellPowerShell},
+		{"bash", ShellAuto},
+		{"relative/pwsh.exe", ShellAuto},
 	}
 	for _, c := range cases {
 		if got := NormalizeShell(c.in); got != c.want {

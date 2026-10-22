@@ -50,10 +50,11 @@ func TestResolveShellExePresets(t *testing.T) {
 	if err != nil || !strings.HasSuffix(strings.ToLower(exe), ".exe") {
 		t.Fatalf("自动解析 = %q, %v", exe, err)
 	}
-	// 空值按默认(5.1)处理,与引入本设置之前一致
+	// 空值按默认(自动,优先 7+)处理,与「自动」解析到同一个可执行文件
+	auto := exe
 	exe, err = resolveShellExe("")
-	if err != nil || filepath.Base(exe) != "powershell.exe" {
-		t.Fatalf("空取值应回退 5.1: %q, %v", exe, err)
+	if err != nil || exe != auto {
+		t.Fatalf("空取值应与自动一致: %q, %v(自动=%q)", exe, err, auto)
 	}
 }
 
@@ -87,7 +88,7 @@ func TestSetTerminalShellRejectsInvalid(t *testing.T) {
 	if _, err := svc.SetTerminalShell("bash"); err == nil {
 		t.Fatal("非绝对路径的未知取值应被拒绝")
 	}
-	if got := a.terminalShellSetting(); got != appconfig.ShellPowerShell {
+	if got := a.terminalShellSetting(); got != appconfig.ShellAuto {
 		t.Fatalf("拒绝后取值不应改变: %q", got)
 	}
 	missing := filepath.Join(t.TempDir(), "NoSuch.exe")
