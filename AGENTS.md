@@ -72,9 +72,9 @@ releases/     正式发布快照（vX.Y.Z/）
 - 测试：`go test ./... -count=1`
 - 格式化：`gofmt -l cmd internal` 应为空
 
-当前基线（v0.11.0）：27 个包全部通过（`sessions` 约 18s，`settings` 约 15s，
+当前基线（v0.12.0）：27 个包全部通过（`sessions` 约 18s，`settings` 约 15s，
 `search` 约 11s）。`internal/filememo` 的 `TestReadWhileReplaced` 曾在 Windows 上偶发失败；
-遇到时保留失败输出并调查，不通过删除测试或降低断言规避。前端 `npm test` 64 项。
+遇到时保留失败输出并调查，不通过删除测试或降低断言规避。前端 `npm test` 72 项。
 README 截图用隔离的演示用户目录生成（见陷阱 #21），不得截真实会话。
 运行验证：`go run ./cmd/agentdeck -all` 应读出本机 600+ 条会话；
 `-search "查询"`（可配 `-agent`/`-all`）对所选会话正文建 FTS5 索引并
