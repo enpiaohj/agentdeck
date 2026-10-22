@@ -26,6 +26,44 @@ func TestDeleteKeysRemovesOnlySelectedMarks(t *testing.T) {
 	}
 }
 
+func TestBackupKeysToCopiesOnlySelectedMarksAndUndoRestoresThem(t *testing.T) {
+	s := open(t)
+	if err := s.SetNote("codex:selected", "original"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetFavorite("codex:selected", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetTitle("codex:selected", "本地标题"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetNote("codex:other", "keep"); err != nil {
+		t.Fatal(err)
+	}
+	want, _ := s.Get("codex:selected")
+	backup := filepath.Join(t.TempDir(), "backup.db")
+	// 只备份被删的会话：另一条标注与不存在的 key 都不该进备份库。
+	if err := s.BackupKeysTo(backup, []string{"codex:selected", "codex:missing"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateBackup(backup); err != nil {
+		t.Fatalf("按行备份校验失败: %v", err)
+	}
+	if err := s.DeleteKeys([]string{"codex:selected"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RestoreKeysFrom(backup, []string{"codex:selected"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Get("codex:selected")
+	if err != nil || !reflect.DeepEqual(want, got) {
+		t.Fatalf("按行备份撤销后不一致: restored=%+v want=%+v err=%v", got, want, err)
+	}
+	if err := s.BackupKeysTo(backup, []string{"codex:other"}); err == nil {
+		t.Fatal("已存在的备份文件应被拒绝")
+	}
+}
+
 func TestRestoreKeysFromRestoresSelectedMarksAndKeepsCurrentData(t *testing.T) {
 	s := open(t)
 	if err := s.SetNote("codex:selected", "original"); err != nil {

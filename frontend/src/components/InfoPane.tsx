@@ -31,6 +31,8 @@ import { agentMeta, fmtTime, relTime } from '../util'
 import { AgentMark } from '../icons/AgentMark'
 import { deletionUnavailableReason } from '../sessionDeletion'
 import { UPSTREAM_DELETED_HINT } from '../sessionPresentation'
+import { PaneResizer } from './PaneResizer'
+import type { usePaneResizer } from '../hooks/usePaneResizer'
 
 const useStyles = makeStyles({
   wrap: {
@@ -40,6 +42,7 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     minWidth: 0,
     minHeight: 0,
+    position: 'relative',
     backgroundColor: tokens.colorNeutralBackground1,
     borderLeft: `1px solid ${tokens.colorNeutralStroke3}`,
   },
@@ -123,11 +126,13 @@ type Props = {
   onChanged: () => void
   onClose: () => void
   onDeleteSessions: (items: SessionView[]) => void
+  /** 详情栏宽度分隔条（由 App 持有偏好）；未传时不显示。 */
+  resizer?: ReturnType<typeof usePaneResizer>
 }
 
 const noteDrafts = new Map<string, string>()
 
-export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Props) {
+export function InfoPane({ session, onChanged, onClose, onDeleteSessions, resizer }: Props) {
   const styles = useStyles()
   const [tagDraft, setTagDraft] = useState('')
   const [adding, setAdding] = useState(false)
@@ -146,6 +151,7 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
   if (!session) {
     return (
       <aside id="session-details" className={`ad-info-pane ${styles.wrap}`} aria-label="会话信息">
+        {resizer ? <PaneResizer label="会话详情" edge="left" width={resizer} /> : null}
         <div className={styles.tabs}>
           <Text className={styles.paneHeading}>会话详情</Text>
           <Button appearance="subtle" size="small" icon={<DismissRegular />} onClick={onClose} aria-label="收起信息面板" style={{ marginLeft: 'auto' }} />
@@ -207,6 +213,7 @@ export function InfoPane({ session, onChanged, onClose, onDeleteSessions }: Prop
 
   return (
     <aside id="session-details" className={`ad-info-pane ${styles.wrap}`} aria-label="会话信息">
+      {resizer ? <PaneResizer label="会话详情" edge="left" width={resizer} /> : null}
       <div className={styles.tabs}>
         <Text className={styles.paneHeading}>会话详情</Text>
         <Button appearance="subtle" size="small" icon={<DismissRegular />} onClick={onClose} aria-label="收起信息面板" style={{ marginLeft: 'auto' }} />

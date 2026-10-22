@@ -69,9 +69,9 @@ releases/     正式发布快照（vX.Y.Z/）
 - 测试：`go test ./... -count=1`
 - 格式化：`gofmt -l cmd internal` 应为空
 
-当前基线（v0.10.0）：29 个包，27 个含测试，本轮完整测试全部通过（`sessions` 约 20s，
-`settings` 约 17s，`proc` 约 16s）。`internal/filememo` 的 `TestReadWhileReplaced` 曾在
-Windows 上偶发失败；遇到时保留失败输出并调查，不通过删除测试或降低断言规避。前端 `npm test` 62 项。
+当前基线（v0.11.0）：27 个包全部通过（`sessions` 约 18s，`settings` 约 15s，
+`search` 约 11s）。`internal/filememo` 的 `TestReadWhileReplaced` 曾在 Windows 上偶发失败；
+遇到时保留失败输出并调查，不通过删除测试或降低断言规避。前端 `npm test` 64 项。
 README 截图用隔离的演示用户目录生成（见陷阱 #21），不得截真实会话。
 运行验证：`go run ./cmd/agentdeck -all` 应读出本机 600+ 条会话；
 `-search "查询"`（可配 `-agent`/`-all`）对所选会话正文建 FTS5 索引并
@@ -248,7 +248,15 @@ README 截图用隔离的演示用户目录生成（见陷阱 #21），不得截
     受「自动检查开关 + 同版本每天一次」（`updates/check.json`）双重约束；
     手动「检查更新」不受限。测试通过 `Config.UpdateAPIURL` 指向本机服务。
 
-21. **README 截图必须用演示数据，且隔离要彻底**。仓库是公开的，真实会话的标题、项目名、
+21. **分隔条不能靠 `onDoubleClick`**。分隔条在 `pointerdown` 上必须 `preventDefault()`
+    （否则拖动会选中正文），而 Chromium 会因此吞掉兼容鼠标事件，`dblclick` 根本不触发；
+    同一次 `preventDefault()` 也会拦住默认聚焦，导致点击后方向键微调没反应。现在双击复位
+    在 `pointerdown` 里自己数连击（600ms / 6px），并在按下时显式 `focus()`。三栏共用
+    `usePaneResizer` + `PaneResizer`；宽度上限要读另两栏的实际宽度，所以量宽度直接查 DOM
+    （`.ad-nav-slot` / `.ad-list-pane` / `#session-details`），列表的包装节点在搜索时是
+    `display:contents`，量不到宽度。
+
+22. **README 截图必须用演示数据，且隔离要彻底**。仓库是公开的，真实会话的标题、项目名、
     账号都不能出现。做法：生成虚构会话到一个临时用户目录，把 `USERPROFILE`、`HOME`、
     `APPDATA`、`LOCALAPPDATA` 指过去再启动 exe（应用是单实例，先退出正在运行的那个）。
     两个坑：
@@ -269,7 +277,11 @@ README 截图用隔离的演示用户目录生成（见陷阱 #21），不得截
   - 只对 `codex` / `claude` / `claude-desktop` 的本机原生或保留会话开放，
     WSL / 网关 / 导入来源一律拒绝
   - 预览返回 token 绑定选择与内容哈希；执行前重新校验，源文件变了就整批拒绝
-  - 先写备份（原始文件 + 保留版本 + 数据库行快照）再删；备份失败不删
+  - 先写备份再删；备份失败不删。备份只含**所选会话**：原始文件逐个复制，
+    保留版本与标注按 key 复制成独立的小库（`history.BackupKeysTo` /
+    `marks.BackupKeysTo`），**不再整库 `VACUUM INTO`**——整库备份只为留那几行，
+    库越大越慢（本机 1.7 GB 的库实测 43 秒，按行备份 41 毫秒）。备份库的结构与
+    主库一致，所以 `RestoreKeysFrom` / `ValidateBackup` 两条路径都不用改
   - 绝不 `RemoveAll` 目录，只删确认过的文件与索引条目
   - 未知数据库 schema 直接拒绝，不猜测着改。唯一例外是 Codex 库自带的维护型
     trigger：仅当 DDL 明确是 `AFTER/BEFORE INSERT` 或 `UPDATE`（不响应 DELETE）、

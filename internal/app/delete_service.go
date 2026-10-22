@@ -272,13 +272,15 @@ func (s *SessionService) DeleteSessions(token string) (DeleteReport, error) {
 	backupError := func(err error) (DeleteReport, error) {
 		return DeleteReport{}, fmt.Errorf("备份未完成，未开始删除。备份目录：%s；%w", dir, err)
 	}
-	if err = a.history.BackupTo(filepath.Join(dir, "history.db")); err != nil {
+	// 只备份被删会话自己的行，不再整库 VACUUM INTO：恢复路径与校验都按 key
+	// 工作，整库拷贝的只是那几行，库越大越慢（实测 145 MB 的库要 1.1 秒）。
+	if err = a.history.BackupKeysTo(filepath.Join(dir, "history.db"), job.ownedKeys); err != nil {
 		return backupError(err)
 	}
 	if _, err = history.ValidateBackup(filepath.Join(dir, "history.db")); err != nil {
 		return backupError(err)
 	}
-	if err = a.marks.BackupTo(filepath.Join(dir, "marks.db")); err != nil {
+	if err = a.marks.BackupKeysTo(filepath.Join(dir, "marks.db"), job.ownedKeys); err != nil {
 		return backupError(err)
 	}
 	if err = marks.ValidateBackup(filepath.Join(dir, "marks.db")); err != nil {

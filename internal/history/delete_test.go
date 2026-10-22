@@ -65,6 +65,36 @@ func TestDeleteKeysRemovesOnlySelectedHistoryAndAllVersions(t *testing.T) {
 	}
 }
 
+func TestBackupKeysToCopiesOnlySelectedSessionsAndUndoRestoresThem(t *testing.T) {
+	s := deletionStore(t)
+	deletionSave(t, s, "selected", "first")
+	deletionSave(t, s, "selected", "second")
+	deletionSave(t, s, "other", "keep")
+	want := deletionRows(t, s, "codex:selected")
+	backup := filepath.Join(t.TempDir(), "backup.db")
+	// 只备份被删的会话：另一条会话与不存在的 key 都不该进备份库。
+	if err := s.BackupKeysTo(backup, []string{"codex:selected", "codex:missing"}); err != nil {
+		t.Fatal(err)
+	}
+	stats, err := ValidateBackup(backup)
+	if err != nil || stats.Sessions != 1 || stats.Versions != 2 {
+		t.Fatalf("备份应只含被删会话的两条版本: %+v %v", stats, err)
+	}
+	if err := s.DeleteKeys([]string{"codex:selected"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RestoreKeysFrom(backup, []string{"codex:selected"}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(want, deletionRows(t, s, "codex:selected")) {
+		t.Fatal("按行备份撤销后内容不一致")
+	}
+	// 目标已存在时拒绝覆盖：删除备份目录里不该出现半份或重复的备份。
+	if err := s.BackupKeysTo(backup, []string{"codex:other"}); err == nil {
+		t.Fatal("已存在的备份文件应被拒绝")
+	}
+}
+
 func TestRestoreKeysFromRestoresExactVersionsWithoutRevertingOtherHistory(t *testing.T) {
 	s := deletionStore(t)
 	deletionSave(t, s, "selected", "first")

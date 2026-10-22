@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/enpiaohj/agentdeck/internal/sessions"
 	"os"
@@ -18,6 +19,84 @@ func (s *Store) BackupTo(dest string) error {
 	defer s.mu.Unlock()
 	_, err := s.db.Exec(`VACUUM INTO ?`, dest)
 	return err
+}
+
+// BackupKeysTo 只把给定会话的行写进一个新的恢复备份库，结构与主库一致。
+//
+// 删除会话时以前整库 VACUUM INTO + 全量 ValidateBackup：实测 145 MB 的库
+// 要 1.1 秒，库越大越慢，而真正需要留住的只有被删的那几行。这里按 key
+// 复制，恢复路径（RestoreKeysFrom）与校验（ValidateBackup）都不用改。
+//
+// 目标文件必须不存在（与 VACUUM INTO 同一语义）；先写临时文件再改名，
+// 中途失败不会留下半份备份。
+func (s *Store) BackupKeysTo(dest string, keys []string) error {
+	keys, err := deletionKeys(keys)
+	if err != nil {
+		return err
+	}
+	if len(keys) == 0 {
+		return errors.New("没有要备份的会话")
+	}
+	if _, err := os.Lstat(dest); err == nil {
+		return fmt.Errorf("恢复备份已存在：%s", dest)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	tmp := dest + ".partial"
+	_ = os.Remove(tmp)
+	if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
+		return err
+	}
+	backup, err := sql.Open("sqlite", tmp)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		backup.Close()
+		_ = os.Remove(tmp)
+	}()
+	backup.SetMaxOpenConns(1)
+	for _, stmt := range []string{
+		`PRAGMA journal_mode=DELETE`,
+		`CREATE TABLE history_versions (key TEXT NOT NULL, hash TEXT NOT NULL, transcript BLOB NOT NULL, saved_at TEXT NOT NULL, codec INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(key, hash))`,
+		`CREATE TABLE history_sessions (key TEXT PRIMARY KEY, metadata BLOB NOT NULL, hash TEXT NOT NULL)`,
+	} {
+		if _, err = backup.Exec(stmt); err != nil {
+			return err
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := backup.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// 读主库、写备份库：两个连接，读走的是与 DeleteKeys 相同的快照语义
+	// （调用方持有 dataMu，删除尚未开始）。
+	for _, key := range keys {
+		record, err := readDeletionRecord(s.db, key, true)
+		if err != nil {
+			return err
+		}
+		for _, version := range record.versions {
+			if _, err := tx.Exec(`INSERT INTO history_versions(key,hash,transcript,saved_at,codec) VALUES(?,?,?,?,?)`, key, version.hash, []byte(version.stored), version.savedAt, version.codec); err != nil {
+				return err
+			}
+		}
+		if record.present {
+			if _, err := tx.Exec(`INSERT INTO history_sessions(key,metadata,hash) VALUES(?,?,?)`, key, []byte(record.metadata), record.hash); err != nil {
+				return err
+			}
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	if err = backup.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp, dest)
 }
 func ValidateBackup(path string) (Stats, error) {
 

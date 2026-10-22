@@ -40,7 +40,9 @@ import { ClaudeHistoryImport } from './components/ClaudeHistoryImport'
 import { DeleteSessionsDialog, DeletedSessionsNotice } from './components/DeleteSessionsDialog'
 import { useSessionDeletion } from './hooks/useSessionDeletion'
 import { deletedSessionKeys } from './sessionDeletion'
-import { navWidthRange, readerWidthCss, rememberProject } from './preferences'
+import { navWidthRange, listWidthRange, infoWidthRange, paneWidthCss, readerWidthCss, rememberProject } from './preferences'
+import { usePaneResizer, readerMinWidth } from './hooks/usePaneResizer'
+import { PaneResizer } from './components/PaneResizer'
 import { platformLabel } from './agentOptions'
 import type { SessionView, ClaudeImportReport } from '../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as searchService from '../bindings/github.com/enpiaohj/agentdeck/internal/app/searchservice'
@@ -391,41 +393,31 @@ export function App() {
     else setView('sessions')
   }
 
-  // 导航宽度：用户没调过（navWidth=0）时跟随布局默认，调过就固定住。
-  const [resizing, setResizing] = useState(false)
-  const [previewWidth, setPreviewWidth] = useState(0)
-  const previewRef = useRef(0)
-  const drag = useRef({ startX: 0, startWidth: 0 })
-  const navSlot = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!resizing) return
-    const clamp = (value: number) => Math.min(navWidthRange.max, Math.max(navWidthRange.min, Math.round(value)))
-    const move = (event: PointerEvent) => {
-      const next = clamp(drag.current.startWidth + event.clientX - drag.current.startX)
-      previewRef.current = next; setPreviewWidth(next)
-    }
-    const end = () => {
-      setResizing(false)
-      if (previewRef.current) update({ navWidth: previewRef.current })
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', end)
-    window.addEventListener('pointercancel', end)
-    return () => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', end)
-      window.removeEventListener('pointercancel', end)
-    }
-  }, [resizing, update])
-  const navWidth = resizing && previewWidth ? previewWidth : preferences.navWidth
-  const nudgeWidth = (delta: number) => {
-    const current = preferences.navWidth || navSlot.current?.getBoundingClientRect().width || 192
-    update({ navWidth: Math.min(navWidthRange.max, Math.max(navWidthRange.min, Math.round(current + delta))) })
+  // 三栏宽度：导航、会话列表、会话详情都可用分隔条拖动，双击恢复自动宽度。
+  // 没调过（0）时跟随布局默认，调过就固定，但始终给阅读区留下 readerMinWidth。
+  // 量宽度直接查 DOM：列表的包装节点在搜索时是 display:contents，量不到宽度。
+  const paneWidth = (kind: 'nav' | 'list' | 'info') => {
+    const selector = kind === 'nav' ? '.ad-nav-slot' : kind === 'list' ? '.ad-list-pane' : '#session-details'
+    return document.querySelector(selector)?.getBoundingClientRect().width ?? 0
   }
+  // 拖动某一栏时，另两栏的实际宽度加上阅读区下限就是它的可用上限。
+  const reserveExcept = (kind: 'nav' | 'list' | 'info') => () =>
+    readerMinWidth + (['nav', 'list', 'info'] as const).filter(item => item !== kind).reduce((sum, item) => sum + paneWidth(item), 0)
+  const nav = usePaneResizer(preferences.navWidth, navWidthRange, width => update({ navWidth: width }), 'right', reserveExcept('nav'))
+  const list = usePaneResizer(preferences.listWidth, listWidthRange, width => update({ listWidth: width }), 'right', reserveExcept('list'))
+  const info = usePaneResizer(preferences.infoWidth, infoWidthRange, width => update({ infoWidth: width }), 'left', reserveExcept('info'))
+  const resizing = nav.resizing || list.resizing || info.resizing
+  // 导航收起时宽度由折叠样式决定，拖动过的值只在展开态生效。
+  const navWidth = collapsed ? 0 : nav.width
+  const paneVars = {
+    ...(navWidth ? { '--ad-nav-width': paneWidthCss(navWidth, navWidthRange) } : {}),
+    ...(list.width ? { '--ad-list-width': paneWidthCss(list.width, listWidthRange) } : {}),
+    ...(info.width ? { '--ad-info-width': paneWidthCss(info.width, infoWidthRange) } : {}),
+  } as React.CSSProperties
 
   return (
     <FluentProvider theme={themeName === 'dark' ? darkTheme : lightTheme}>
-      <div className={`ad-app ${styles.outer}${resizing ? ' is-resizing' : ''}`} data-theme={themeName} style={{ '--ad-reader-font-size':`${preferences.fontSize}px`, '--ad-reader-line-height':preferences.spacing==='comfortable'?'1.85':'1.65', '--ad-reader-width':readerWidthCss(preferences.readingWidth), ...(navWidth ? { '--ad-nav-width': `${navWidth}px` } : {}) } as React.CSSProperties}>
+      <div className={`ad-app ${styles.outer}${resizing ? ' is-resizing' : ''}`} data-theme={themeName} style={{ '--ad-reader-font-size':`${preferences.fontSize}px`, '--ad-reader-line-height':preferences.spacing==='comfortable'?'1.85':'1.65', '--ad-reader-width':readerWidthCss(preferences.readingWidth), ...paneVars } as React.CSSProperties}>
         {/* 无边框窗口:顶栏整体为拖拽区,交互控件标 no-drag */}
         <div className={`ad-titlebar ${styles.topbar}`} style={{ '--wails-draggable': 'drag' } as React.CSSProperties}
           onDoubleClick={event => {
@@ -497,7 +489,7 @@ export function App() {
           if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
           if (event.key === 'Escape' && !event.nativeEvent.isComposing && event.keyCode !== 229 && searchQuery) { setSearchQuery(''); searchRef.current?.focus() }
         }}>
-          {view !== 'diagnostics' ? <div className="ad-nav-slot" ref={navSlot}>
+          {view !== 'diagnostics' ? <div className="ad-nav-slot" ref={nav.slot}>
             <Sidebar
               collapsed={collapsed}
               onToggle={() => setCollapsed((v) => !v)}
@@ -511,28 +503,7 @@ export function App() {
               onNewProject={openNewProject}
               notify={notify}
             />
-            {!collapsed ? <div
-              className="ad-resizer"
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="调整侧栏宽度"
-              tabIndex={0}
-              title="拖拽调整侧栏宽度，双击恢复默认"
-              onPointerDown={event => {
-                const width = navSlot.current?.getBoundingClientRect().width ?? (preferences.navWidth || 192)
-                drag.current = { startX: event.clientX, startWidth: width }
-                previewRef.current = width
-                setPreviewWidth(width)
-                setResizing(true)
-                event.preventDefault()
-              }}
-              onDoubleClick={() => update({ navWidth: 0 })}
-              onKeyDown={event => {
-                if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
-                event.preventDefault()
-                nudgeWidth((event.key === 'ArrowRight' ? 1 : -1) * (event.shiftKey ? 32 : 8))
-              }}
-            /> : null}
+            {!collapsed ? <PaneResizer label="侧栏" width={nav} /> : null}
           </div> : null}
           {view === 'diagnostics' || view === 'imports' ? (
             <div style={{ gridColumn: view === 'diagnostics' ? '1 / -1' : 'span 3', minWidth: 0, overflow: 'hidden' }}>
@@ -551,6 +522,7 @@ export function App() {
                 listVersion={listVersion}
                 refreshing={refreshing}
                 onRefresh={() => void refresh()}
+                resizer={list}
               /></div>
               {searchQuery.trim() ? <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}><Button size="small" onClick={() => setSearchQuery('')}>返回会话列表 · 保留筛选与位置</Button><SearchResults query={searchQuery} revision={listVersion} selectedKey={selected?.key ?? null} onFocusSearch={() => searchRef.current?.focus()} onJump={onJump} /></div> : null}
               <MessagePane session={selected} sourceVersion={sourceVersion} jumpPart={jumpPart} jumpToken={jumpToken} infoOpen={infoOpen} onToggleInfo={() => setInfoOpen(value => !value)} onOpenInfo={() => setInfoOpen(true)} />
@@ -560,6 +532,7 @@ export function App() {
                   onChanged={() => setListVersion((v) => v + 1)}
                   onClose={() => setInfoOpen(false)}
                   onDeleteSessions={deletion.open}
+                  resizer={info}
                 />
               ) : (
                 <button

@@ -10,7 +10,7 @@ export function DeleteSessionsDialog({ deletion: d }: { deletion: SessionDeletio
           opening the dialog cannot scroll the explanation out of view. */}
       <DialogContent className="ad-delete-content" tabIndex={-1} ref={node => node?.focus({ preventScroll: true })}>
         <p>将删除所选会话的 <strong>Codex / Claude 原始记录</strong>，以及 AgentDeck 保存的全部内容版本、收藏、归档、标签和备注。</p>
-        <p>请先在原应用或终端中结束这些会话。删除前会自动生成可恢复备份；备份失败时不会开始删除。</p>
+        <p>请先在原应用或终端中结束这些会话。删除前会自动把所选会话的原始记录与本地内容写入恢复备份（只含所选会话，不复制整库）；备份失败时不会开始删除。</p>
         <Checkbox checked={d.includeChildren} disabled={d.busy} onChange={(_, data) => d.changeChildren(data.checked === true)} label="同时删除这些会话的已知子会话" />
         <p className="ad-delete-hint">默认保留未选中的独立子会话。Claude 主记录专属的子 Agent 文件属于该记录的删除范围，会列在下方。</p>
         {d.loading ? <div className="ad-delete-loading" role="status"><Spinner size="tiny" />正在核对原始记录与删除范围…</div> : null}

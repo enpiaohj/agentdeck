@@ -44,6 +44,8 @@ import { selectSession, selectContextSession, pruneSelection, type SessionSelect
 import { SessionContextMenu, type SessionAction } from './SessionContextMenu'
 import { groupSessionRows } from '../sessionHierarchy'
 import { deletionUnavailableReason, explicitDeletionTargets } from '../sessionDeletion'
+import { PaneResizer } from './PaneResizer'
+import type { usePaneResizer } from '../hooks/usePaneResizer'
 
 const useStyles = makeStyles({
   wrap: {
@@ -166,9 +168,11 @@ type Props = {
   /** 重新扫描本机会话（与 F5 同一入口）；放在列表头部，就在结果旁边。 */
   onRefresh?: () => void
   refreshing?: boolean
+  /** 列表宽度分隔条（由 App 持有偏好）；未传时不显示。 */
+  resizer?: ReturnType<typeof usePaneResizer>
 }
 
-export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDeleteSessions, listVersion, onFilter, resetToken, onRefresh, refreshing = false }: Props) {
+export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDeleteSessions, listVersion, onFilter, resetToken, onRefresh, refreshing = false, resizer }: Props) {
   const styles = useStyles()
   const { rows, loading, error, reload } = useRows(filter, listVersion)
   const [selection, setSelection] = useState<SessionSelection>(() => ({ keys: new Set(selectedKey ? [selectedKey] : []), anchor: selectedKey, focus: selectedKey }))
@@ -400,7 +404,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
     : titleParts.join(' · ')
 
   return (
-    <div className={styles.wrap} onKeyDown={event => {
+    <div className={`ad-list-pane ${styles.wrap}`} onKeyDown={event => {
       if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
       if (event.nativeEvent.isComposing || event.keyCode === 229 || (event.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"], [role="menu"]')) return
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') { event.preventDefault(); selectAll() }
@@ -614,6 +618,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
         </div>
       ) : null}
       {checked.size > 1 && deleteReason ? <Text size={200} className="ad-delete-disabled-reason">{deleteReason}</Text> : null}
+      {resizer ? <PaneResizer label="会话列表" width={resizer} /> : null}
     </div>
   )
 }
