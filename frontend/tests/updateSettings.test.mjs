@@ -5,7 +5,8 @@ import { createUpdateSettings } from '../src/updateSettings.ts'
 const view = (changes = {}) => ({
   current: '0.9.0', dev: false, checked: false, latest: '', available: false, notes: '', page_url: '',
   checked_at: '', published_at: '', checking: false, downloading: false, progress: 0,
-  downloaded_dir: '', downloadable: false, auto_check: true, error: '', release_page_url: 'https://example.test',
+  downloaded_dir: '', ready_to_restart: false, target_path: '', can_install: true,
+  downloadable: false, auto_check: true, error: '', release_page_url: 'https://example.test',
   ...changes,
 })
 const events = () => {
@@ -87,4 +88,28 @@ test('打开下载目录失败写进错误提示', async () => {
   await settings.load()
   await settings.openFolder()
   assert.match(settings.getSnapshot().error, /资源管理器不可用/)
+})
+
+test('重启并安装失败后回读状态，不假装已重启', async () => {
+  const settings = createUpdateSettings({
+    Status: async () => view({ checked: true, latest: '1.1.0', available: true, ready_to_restart: true, target_path: 'D:/Apps/AgentDeck-v1.1.0-win-x64.exe' }),
+    RestartToInstall: async () => { throw new Error('当前没有待安装的更新') },
+  }, noEvents())
+  await settings.load()
+  await settings.restart()
+  assert.match(settings.getSnapshot().error, /重启失败/)
+  // 仍处于「待重启」，用户可以直接再点一次，而不是回到「发现新版本」。
+  assert.equal(settings.getSnapshot().view.ready_to_restart, true)
+})
+
+test('重启成功后不写错误', async () => {
+  let called = 0
+  const settings = createUpdateSettings({
+    Status: async () => view({ checked: true, latest: '1.1.0', ready_to_restart: true }),
+    RestartToInstall: async () => { called++ },
+  }, noEvents())
+  await settings.load()
+  await settings.restart()
+  assert.equal(called, 1)
+  assert.equal(settings.getSnapshot().error, '')
 })

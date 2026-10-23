@@ -4,6 +4,7 @@ type UpdateAPI = {
   Status: () => Promise<UpdateView>
   Check: () => Promise<UpdateView>
   Download: () => Promise<UpdateView>
+  RestartToInstall: () => Promise<void>
   SetAutoCheck: (enabled: boolean) => Promise<UpdateView>
   OpenDownloadFolder: () => Promise<void>
 }
@@ -60,6 +61,13 @@ export function createUpdateSettings(api: UpdateAPI, events: UpdateEvents) {
         publish({ view: await api.SetAutoCheck(enabled), loading: false, error: '' })
       } catch (reason) {
         await refresh(`保存自动检查设置失败：${String(reason)}`)
+      }
+    },
+    async restart() {
+      try {
+        await api.RestartToInstall()
+      } catch (reason) {
+        await refresh(`重启失败：${String(reason)}`)
       }
     },
     async openFolder() {

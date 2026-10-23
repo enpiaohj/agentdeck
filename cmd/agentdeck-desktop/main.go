@@ -9,10 +9,11 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	appkg "github.com/enpiaohj/agentdeck/internal/app"
-	"github.com/enpiaohj/agentdeck/internal/proc"
+	"github.com/enpiaohj/agentdeck/internal/updateinstall"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
@@ -42,12 +43,37 @@ const relaunchFlag = "--relaunch"
 // relaunchWait 是自动重启时等待上一个实例退出的上限。
 const relaunchWait = 20 * time.Second
 
+// restartPending 记录「退出后要重新拉起自己」。更新落地与启动都在退出收尾里做，
+// 因此这里只记意图；用户取消退出时不会误启动。
+var restartPending atomic.Bool
+
+// afterUpdateFlag 标记本次启动是更新落地后的重启：新实例需要等待旧进程退出。
+const afterUpdateFlag = "--after-update"
+
+// afterUpdateWait 是更新重启时等待旧进程退出的上限。比数据迁移重启宽松：
+// 更新落地要先复制、改名、改指向，旧进程可能多花几秒。
+const afterUpdateWait = 30 * time.Second
+
+// updateFailedFlag 标记上次更新落地失败、拉起的是原版本。
+const updateFailedFlag = "--update-failed"
+
+// updateFailed 记录上次退出时更新落地失败（读后即清的标记）。
+var updateFailed bool
+
 func main() {
 	e := &lateEmitter{}
-	relaunch := slices.Contains(os.Args[1:], relaunchFlag)
+	args := os.Args[1:]
+	// 更新落地后的重启与数据迁移重启都要等旧进程退出：单实例互斥锁还在
+	// 旧进程手里，抢不到就直接退出会让「重启」变成「关掉应用」。
+	relaunch := slices.Contains(args, relaunchFlag) || slices.Contains(args, afterUpdateFlag)
 	trayIcon, iconErr := assets.ReadFile("assets/appicon-256.png")
 	trayAvailable := iconErr == nil && len(trayIcon) > 0
 	startup := desktopStartup()
+	installer := newUpdateInstaller(startup.retarget)
+	// 上次更新是否落地失败：只提示一次，读后即清。
+	if installer != nil {
+		updateFailed = updateinstall.ConsumeFailureMarker(installer.current)
+	}
 	var lifecycle *desktopLifecycle
 	a, err := appkg.New(appkg.Config{
 		Emit: e.Emit,
@@ -66,17 +92,32 @@ func main() {
 		fmt.Fprintln(os.Stderr, "装配失败:", err)
 		os.Exit(1)
 	}
+	if installer != nil {
+		a.SetUpdateInstaller(installer.Stage, installer.Finish)
+	}
+	// defer 后进先出：先 a.Close()（关库、释放单实例锁、清崩溃标记），
+	// 再 finalize（落地更新包、必要时拉起新版本）。
+	defer finalize(installer)
 	defer a.Close()
+
+	// 启动时善后上一次更新：清临时文件与回滚副本，文件名变过的更新则确认
+	// 启动项与快捷方式已改指向后删除旧文件。必须在取得单实例所有权之后。
+	if installer != nil {
+		installer.cleanupPrevious()
+	}
 
 	// 单实例：已有窗口在运行时直接退出。此前只有 session.lock 文件标记，
 	// 多开一次就被误判成「上次未正常退出」，崩溃横幅会无端亮起。
 	deadline := time.Now().Add(relaunchWait)
+	if slices.Contains(args, afterUpdateFlag) {
+		deadline = time.Now().Add(afterUpdateWait)
+	}
 	for {
 		if !a.ClaimSingleInstance() {
 			break
 		}
 		if !relaunch || time.Now().After(deadline) {
-			if !slices.Contains(os.Args[1:], startupFlag) {
+			if !slices.Contains(args, startupFlag) {
 				activateExistingWindow()
 			}
 			fmt.Fprintln(os.Stderr, "AgentDeck 已在运行，本次启动已退出。")
@@ -183,6 +224,9 @@ func main() {
 	// 启动后检查更新:受「自动检查」开关与 24 小时缓存约束,不阻塞启动,
 	// 失败只落在状态里。结果经 update:status 推送。
 	updateService := a.NewUpdateService()
+	if updateFailed {
+		updateService.ReportUpdateFailure()
+	}
 	go updateService.AutoCheckOnStartup()
 
 	if err := wails.Run(); err != nil {
@@ -196,19 +240,40 @@ func main() {
 // 新实例带 relaunchFlag，会等本进程走完正常退出（defer a.Close() 释放
 // 单实例互斥锁、清除运行标记），因此不会出现「重启后什么都没发生」。
 // 不用 os.Exit 硬退：那会留下假的「上次异常退出」标记。
+//
+// 真正的启动推迟到退出收尾（见 finalize）：更新包要等 a.Close() 之后才能
+// 落地，而落地成功后的程序路径可能已经换了名字，此刻还不知道该启动哪个。
 func relaunchSelf(quit func()) error {
-	exe, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("无法定位 AgentDeck 程序路径：%w", err)
-	}
-	cmd := proc.Command(exe, relaunchFlag)
-	if err = cmd.Start(); err != nil {
-		return fmt.Errorf("启动新实例失败：%w", err)
-	}
+	restartPending.Store(true)
 	// 先让本次调用返回前端（界面要显示正在重启），再退出。
 	go func() {
 		time.Sleep(300 * time.Millisecond)
 		quit()
 	}()
 	return nil
+}
+
+// finalize 是退出的最后一步：落地已登记的更新包，必要时拉起程序。
+//
+// 必须在 a.Close() 之后执行（defer 顺序保证）：那时数据库已关闭、单实例
+// 互斥锁已释放，新实例才抢得到锁，也才不会有「旧的还开着、新的直接退出」。
+// 此时已没有界面可以报错，任何失败都保持原文件可用并留下标记供下次启动提示。
+func finalize(installer *updateInstaller) {
+	if installer == nil {
+		return
+	}
+	exe := installer.Finish()
+	restart := restartPending.Load()
+	if !restart {
+		// 用户只是正常退出：更新已经落地，下次启动就是新版本。
+		return
+	}
+	arg := afterUpdateFlag
+	if exe == installer.current {
+		// 没有落地（或落地失败）：拉起原版本，并告诉它上次更新没成。
+		arg = updateFailedFlag
+	}
+	if err := launch(exe, arg); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+	}
 }

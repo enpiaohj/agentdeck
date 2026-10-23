@@ -91,6 +91,21 @@ func desktopStartup() startupRegistration {
 	return startupRegistration{value: windowsStartupValue{}, executable: os.Executable}
 }
 
+// retarget 把自启动项里指向 oldPath 的路径换成 newPath，其余参数保持不变。
+//
+// 应用内更新会让可执行文件换名（AgentDeck-v0.14.0 → v0.15.0），自启动项仍写着
+// 旧路径，不跟着改就会在下次开机时启动一个已经不存在的文件。
+func (r startupRegistration) retarget(oldPath, newPath string) {
+	current, err := r.value.read()
+	if err != nil || current == "" {
+		return
+	}
+	if !strings.Contains(strings.ToLower(current), strings.ToLower(oldPath)) {
+		return
+	}
+	_ = r.value.write(strings.ReplaceAll(current, oldPath, newPath))
+}
+
 const activationEventName = `Local\AgentDeck-ActivateWindow`
 
 // 在已有实例中调用 Wails Show，确保隐藏的 WebView 也被恢复。

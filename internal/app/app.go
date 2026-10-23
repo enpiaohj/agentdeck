@@ -53,6 +53,14 @@ type Config struct {
 	TerminalShell string
 	// Restart 重启应用（迁移数据位置后让新落点生效）；nil 时界面只提示手动重启。
 	Restart func() error
+	// StageUpdate 登记一个已校验的更新包，返回新版本将落到的路径。
+	//
+	// 这里只做可写性检查并记下来：正在运行的 exe 不能覆盖，落地必须等到进程
+	// 退出的最后一步（见 FinishUpdate）。nil 表示当前运行方式不支持应用内更新。
+	StageUpdate func(packagePath string) (string, error)
+	// FinishUpdate 在退出的最后一步落地已登记的更新包，返回应启动的程序路径。
+	// 没有登记或落地失败时返回当前程序路径。
+	FinishUpdate func() string
 	// StartAtLoginStatus 查询操作系统中的实际自启动注册状态。
 	StartAtLoginStatus func() (bool, error)
 	// SetStartAtLogin 显式注册或移除自启动；与查询回调同时存在才支持设置。

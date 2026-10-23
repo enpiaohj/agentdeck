@@ -305,6 +305,12 @@ type UpdateView struct {
 	Progress float64 `json:"progress"`
 	// DownloadedDir 是上一次下载解压到的目录；未下载过为空。
 	DownloadedDir string `json:"downloaded_dir"`
+	// ReadyToRestart 表示更新包已校验并登记，退出或重启后生效。
+	ReadyToRestart bool `json:"ready_to_restart"`
+	// TargetPath 是新版本落地后的程序路径；未登记时为空。
+	TargetPath string `json:"target_path"`
+	// CanInstall 表示当前运行方式支持应用内更新（就地落地并重启）。
+	CanInstall bool `json:"can_install"`
 	// Downloadable 表示现在可以点「下载」。
 	Downloadable bool `json:"downloadable"`
 	// AutoCheck 是「启动后自动检查」开关的当前取值。

@@ -1,5 +1,5 @@
 import { Button, ProgressBar, Spinner } from '@fluentui/react-components'
-import { ArrowDownloadRegular, FolderOpenRegular, OpenRegular } from '@fluentui/react-icons'
+import { ArrowDownloadRegular, ArrowSyncRegular, FolderOpenRegular, OpenRegular } from '@fluentui/react-icons'
 import { Browser, Events } from '@wailsio/runtime'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import * as updateService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/updateservice'
@@ -17,7 +17,7 @@ const subscribeStatus = (handler: (view: UpdateView) => void) =>
 
 const versionDescription = '当前安装的版本。检查更新会联网读取 GitHub 上的最新正式发布。'
 const autoDescription = '启动后在后台检查一次新版本，同一个版本每天最多打扰一次。关闭后仍可手动检查。'
-export const matchesUpdateSettings = (query: string) => matchesSetting(query, '更新 版本 检查更新 新版本 升级 自动检查', versionDescription, autoDescription)
+export const matchesUpdateSettings = (query: string) => matchesSetting(query, '更新 版本 检查更新 新版本 升级 安装 重启 自动检查', versionDescription, autoDescription)
 
 // 时间按本地时区显示到分钟：发布与检查时间只需要能对上，不需要秒。
 function formatTime(value: string): string {
@@ -39,8 +39,6 @@ export function UpdateControl({ id }: { id: string }) {
   const version = view?.dev ? '开发版本' : view?.current ? `v${view.current}` : '读取中…'
   const checkedAt = formatTime(view?.checked_at ?? '')
   const publishedAt = formatTime(view?.published_at ?? '')
-  // 已经下过同一版本时不再重复提示「发现新版本」，只显示下载结果。
-  const downloadedCurrent = !!view?.downloaded_dir && !!view?.latest && view.downloaded_dir.includes(`AgentDeck-v${view.latest}-`)
   return <div className="ad-update-settings" aria-busy={busy}>
     <div className="ad-setting-card">
       <SettingRow id={`${id}-version`} title="当前版本" description={versionDescription}>
@@ -62,26 +60,26 @@ export function UpdateControl({ id }: { id: string }) {
       <span>{view.progress > 0 ? `正在下载并校验：${Math.round(view.progress * 100)}%` : '正在下载并校验新版本…'}</span>
     </div> : null}
 
-    {view?.available && !view.downloading && !downloadedCurrent ? <div className="ad-update-found">
+    {view?.available && !view.downloading && !view.ready_to_restart ? <div className="ad-update-found">
       <div className="ad-update-found-head">
         <strong>发现新版本 v{view.latest}</strong>
         <span>{publishedAt ? `发布于 ${publishedAt}` : ''}</span>
       </div>
       {view.notes ? <pre className="ad-update-notes">{view.notes}</pre> : null}
       <div className="ad-update-actions">
-        <Button size="small" appearance="primary" icon={<ArrowDownloadRegular />} disabled={busy || !view.downloadable} onClick={() => void settings.download()}>下载到本地</Button>
+        <Button size="small" appearance="primary" icon={<ArrowDownloadRegular />} disabled={busy || !view.downloadable} onClick={() => void settings.download()}>{view.can_install ? '下载并准备安装' : '下载到本地'}</Button>
         <Button size="small" appearance="subtle" icon={<OpenRegular />} onClick={() => void Browser.OpenURL(view.page_url || view.release_page_url)}>打开发布页面</Button>
       </div>
     </div> : null}
 
-    {view?.downloaded_dir ? <div className="ad-update-downloaded">
-      <strong>新版本已下载并校验通过</strong>
-      <p className="ad-update-path">{view.downloaded_dir}</p>
+    {view?.ready_to_restart ? <div className="ad-update-downloaded">
+      <strong>新版本 v{view.latest} 已下载并校验</strong>
+      {view.target_path ? <p className="ad-update-path">{view.target_path}</p> : null}
       <div className="ad-update-actions">
+        <Button size="small" appearance="primary" icon={<ArrowSyncRegular />} disabled={busy} onClick={() => void settings.restart()}>重启并安装</Button>
         <Button size="small" icon={<FolderOpenRegular />} onClick={() => void settings.openFolder()}>打开所在文件夹</Button>
-        <Button size="small" appearance="subtle" icon={<OpenRegular />} onClick={() => void Browser.OpenURL(view.page_url || view.release_page_url)}>打开发布页面</Button>
       </div>
-      <p className="ad-settings-note">请关闭 AgentDeck，用该目录中的 <code>AgentDeck-v{view.latest}-win-x64.exe</code> 替换当前程序后再启动。程序不会自行替换正在运行的文件。</p>
+      <p className="ad-settings-note">点「重启并安装」会关闭 AgentDeck、写入新版本并重新打开。也可以直接退出：新版本会在退出时写入，下次启动即为新版本。正在运行的会话请先在终端里结束。</p>
     </div> : null}
 
     {view?.checked && !view.dev && !view.available && !view.downloading ? <div className="ad-update-status" role="status">

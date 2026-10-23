@@ -1856,6 +1856,21 @@ export class UpdateView {
     "downloaded_dir": string;
 
     /**
+     * ReadyToRestart 表示更新包已校验并登记，退出或重启后生效。
+     */
+    "ready_to_restart": boolean;
+
+    /**
+     * TargetPath 是新版本落地后的程序路径；未登记时为空。
+     */
+    "target_path": string;
+
+    /**
+     * CanInstall 表示当前运行方式支持应用内更新（就地落地并重启）。
+     */
+    "can_install": boolean;
+
+    /**
      * Downloadable 表示现在可以点「下载」。
      */
     "downloadable": boolean;
@@ -1915,6 +1930,15 @@ export class UpdateView {
         }
         if (!("downloaded_dir" in $$source)) {
             this["downloaded_dir"] = "";
+        }
+        if (!("ready_to_restart" in $$source)) {
+            this["ready_to_restart"] = false;
+        }
+        if (!("target_path" in $$source)) {
+            this["target_path"] = "";
+        }
+        if (!("can_install" in $$source)) {
+            this["can_install"] = false;
         }
         if (!("downloadable" in $$source)) {
             this["downloadable"] = false;

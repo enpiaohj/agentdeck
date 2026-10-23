@@ -6,7 +6,7 @@
 import { Create as $Create } from "@wailsio/runtime";
 
 /**
- * Location 按规范化完整路径精确关联，不匹配子目录，也不递归追踪目标。
+ * Location 是原项目目录与当前实际目录的一条关联。
  */
 export class Location {
     "original": string;

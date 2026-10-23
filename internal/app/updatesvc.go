@@ -30,14 +30,19 @@ type updateState struct {
 	result  update.Result
 	// dir 是上一次下载解压到的目录。
 	dir string
+	// packagePath 是已登记待落地的更新包；空表示没有。
+	packagePath string
+	// targetPath 是新版本落地后的路径。
+	targetPath string
 	// errMsg 是上一次操作的错误说明。
 	errMsg string
 }
 
-// UpdateService 提供「检查更新 → 下载到本地」。
+// UpdateService 提供「检查更新 → 下载校验 → 退出时落地 → 重启」。
 //
-// 刻意不自动替换正在运行的 exe：产品没有代码签名，替换失败用户手里
-// 就没有能用的程序；把解压目录交给用户手动替换，出问题也回得去。
+// 落地一律推迟到进程退出的最后一步：正在运行的 exe 不能被覆盖，而落地
+// 失败会让用户手里没有能用的程序。产品没有代码签名，校验只说明下载内容与
+// 发布清单一致，不构成发布者身份证明。
 type UpdateService struct{ a *App }
 
 // Version 返回产品版本；开发构建（读不到 VERSIONINFO）返回 "dev"。
@@ -80,6 +85,9 @@ func (a *App) updateViewLocked() UpdateView {
 		Downloading:    a.update.downloading,
 		Progress:       a.update.progress,
 		DownloadedDir:  a.update.dir,
+		ReadyToRestart: a.update.packagePath != "",
+		TargetPath:     a.update.targetPath,
+		CanInstall:     a.cfg.StageUpdate != nil,
 		Error:          a.update.errMsg,
 		AutoCheck:      a.autoCheckSetting(),
 		ReleasePageURL: update.ReleasePageURL,
@@ -246,8 +254,10 @@ func (a *App) saveUpdateState(result update.Result) {
 	})
 }
 
-// Download 下载并校验新版本，解压到数据目录下的 updates/。
-// 不替换正在运行的程序，失败也不留下半成品。
+// Download 下载并校验新版本，然后登记为「退出时落地」。
+//
+// 不覆盖正在运行的程序：登记只做可写性检查，落地在进程退出、数据库关闭与
+// 单实例锁释放之后进行（见 FinishUpdate）。失败也不留下半成品。
 func (s *UpdateService) Download() (UpdateView, error) {
 	a := s.a
 	a.updateMu.Lock()
@@ -260,6 +270,11 @@ func (s *UpdateService) Download() (UpdateView, error) {
 		view := a.updateViewLocked()
 		a.updateMu.Unlock()
 		return view, errors.New("当前没有可下载的新版本")
+	}
+	if a.cfg.StageUpdate == nil {
+		view := a.updateViewLocked()
+		a.updateMu.Unlock()
+		return view, errors.New("当前运行方式不支持应用内更新，请到发布页下载")
 	}
 	result := a.update.result
 	a.update.downloading = true
@@ -283,6 +298,12 @@ func (s *UpdateService) Download() (UpdateView, error) {
 		a.emit(EventUpdateStatus, view)
 	})
 
+	if err == nil {
+		// 登记必须在下载结果之外单独报错：可写性检查失败（程序装在 Program
+		// Files 之类只读目录）是用户最可能遇到的情况，得说清楚下一步做什么。
+		dir, err = a.stageUpdate(dir, result)
+	}
+
 	a.updateMu.Lock()
 	a.update.downloading = false
 	if err != nil {
@@ -300,6 +321,63 @@ func (s *UpdateService) Download() (UpdateView, error) {
 		return view, err
 	}
 	return view, nil
+}
+
+// stageUpdate 从解压目录里取出 exe 并登记为待落地，返回解压目录。
+//
+// 更新包里的 exe 名与版本一致（AgentDeck-vX.Y.Z-win-x64.exe），落地后的名字
+// 由 StageUpdate 决定：当前文件名是发布产物命名时跟着版本走，否则原地替换。
+func (a *App) stageUpdate(dir string, result update.Result) (string, error) {
+	exe := filepath.Join(dir, result.ExeAsset.Name)
+	if info, err := os.Stat(exe); err != nil || info.IsDir() {
+		return dir, fmt.Errorf("更新包中缺少 %s，请重试或到发布页手动更新", result.ExeAsset.Name)
+	}
+	target, err := a.cfg.StageUpdate(exe)
+	if err != nil {
+		return dir, err
+	}
+	a.updateMu.Lock()
+	a.update.packagePath = exe
+	a.update.targetPath = target
+	a.updateMu.Unlock()
+	return dir, nil
+}
+
+// SetUpdateInstaller 接入应用内更新：stage 登记已校验的更新包并返回落地路径，
+// finish 在退出的最后一步执行落地并返回应启动的程序路径。
+//
+// 由 cmd 层装配：服务层不知道 exe 在哪、也不能在退出时自己动手，那样会与
+// 数据库关闭和单实例锁释放的先后顺序打架。
+func (a *App) SetUpdateInstaller(stage func(string) (string, error), finish func() string) {
+	a.cfg.StageUpdate = stage
+	a.cfg.FinishUpdate = finish
+}
+
+// ReportUpdateFailure 报告上次退出时更新落地失败，写进状态让界面提示一次。
+func (s *UpdateService) ReportUpdateFailure() {
+	s.a.updateMu.Lock()
+	s.a.update.errMsg = "上次退出时未能完成更新，仍在运行原版本。请到发布页手动下载，或把 AgentDeck 移到有写入权限的目录后重试。"
+	view := s.a.updateViewLocked()
+	s.a.updateMu.Unlock()
+	s.a.emit(EventUpdateStatus, view)
+}
+
+// RestartToInstall 在退出时落地已登记的更新包，并重启到新版本。
+//
+// 与「数据位置迁移后重启」共用 Config.Restart：它走正常退出路径，因此
+// 数据库会关闭、单实例锁会释放，新实例不会因为抢不到锁直接退出。
+func (s *UpdateService) RestartToInstall() error {
+	a := s.a
+	a.updateMu.Lock()
+	ready := a.update.packagePath != ""
+	a.updateMu.Unlock()
+	if !ready {
+		return errors.New("当前没有待安装的更新，请先下载")
+	}
+	if a.cfg.Restart == nil {
+		return errors.New("当前运行方式不支持自动重启，请手动退出并重新打开")
+	}
+	return a.cfg.Restart()
 }
 
 // OpenDownloadFolder 在资源管理器里打开更新包所在目录。

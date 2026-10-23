@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -19,7 +20,8 @@ import (
 )
 
 // updateFixture 构造一个只有更新状态与配置的 App：不打开任何数据库，
-// 数据落点指向临时目录。
+// 数据落点指向临时目录。应用内更新按真实装配接上：stage 只记路径，
+// finish 由用例自己决定是否执行。
 func updateFixture(t *testing.T) (*App, *[]string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -40,6 +42,10 @@ func updateFixture(t *testing.T) (*App, *[]string) {
 			},
 		},
 	}
+	a.SetUpdateInstaller(
+		func(packagePath string) (string, error) { return filepath.Join(dir, filepath.Base(packagePath)), nil },
+		func() string { return filepath.Join(dir, "AgentDeck.exe") },
+	)
 	return a, &launched
 }
 
@@ -251,6 +257,101 @@ func TestDownloadWritesVerifiedPackage(t *testing.T) {
 	if err != nil || string(data) != string(exe) {
 		t.Fatalf("解压内容不符：%q, %v", data, err)
 	}
+}
+
+// 下载成功后必须登记为待落地：界面据此显示「重启并安装」，而不是让用户
+// 自己去目录里找 exe 手动替换。
+func TestDownloadStagesPackageForRestart(t *testing.T) {
+	a, _ := updateFixture(t)
+	const version = "1.1.0"
+	root := "AgentDeck-v" + version + "-win-x64"
+	exe := []byte("exe payload")
+	zipBytes := buildTestZip(t, map[string][]byte{root + "/" + update.AssetPrefix + version + update.AssetSuffix: exe})
+	server := updateServer(t, version, zipBytes, exe)
+	defer server.Close()
+	prepareAvailable(a, version, server.URL)
+
+	view, err := a.NewUpdateService().Download()
+	if err != nil {
+		t.Fatalf("Download: %v", err)
+	}
+	if !view.ReadyToRestart || view.TargetPath == "" || !view.CanInstall {
+		t.Fatalf("下载后应可重启安装：%+v", view)
+	}
+	if !strings.HasSuffix(view.TargetPath, update.AssetPrefix+version+update.AssetSuffix) {
+		t.Fatalf("落地路径应跟随版本：%q", view.TargetPath)
+	}
+}
+
+// 未装配安装器（开发构建或非桌面入口）时不给「下载」按钮一个注定失败的承诺。
+func TestDownloadWithoutInstallerReportsUnsupported(t *testing.T) {
+	a, _ := updateFixture(t)
+	a.cfg.StageUpdate, a.cfg.FinishUpdate = nil, nil
+	const version = "1.1.0"
+	zipBytes := buildTestZip(t, map[string][]byte{"AgentDeck-v" + version + "-win-x64/" + update.AssetPrefix + version + update.AssetSuffix: []byte("x")})
+	server := updateServer(t, version, zipBytes, []byte("x"))
+	defer server.Close()
+	prepareAvailable(a, version, server.URL)
+
+	view, err := a.NewUpdateService().Download()
+	if err == nil || !strings.Contains(err.Error(), "不支持应用内更新") {
+		t.Fatalf("应当拒绝下载：%v", err)
+	}
+	if view.ReadyToRestart || view.CanInstall {
+		t.Fatalf("不支持时不应报告可安装：%+v", view)
+	}
+}
+
+// 登记失败（程序目录不可写）要如实报错，且不留下「已就绪」的假象。
+func TestDownloadStagingFailureSurfaces(t *testing.T) {
+	a, _ := updateFixture(t)
+	a.SetUpdateInstaller(func(string) (string, error) { return "", errors.New("程序所在目录没有写入权限") }, func() string { return "" })
+	const version = "1.1.0"
+	exe := []byte("exe payload")
+	zipBytes := buildTestZip(t, map[string][]byte{"AgentDeck-v" + version + "-win-x64/" + update.AssetPrefix + version + update.AssetSuffix: exe})
+	server := updateServer(t, version, zipBytes, exe)
+	defer server.Close()
+	prepareAvailable(a, version, server.URL)
+
+	view, err := a.NewUpdateService().Download()
+	if err == nil || !strings.Contains(err.Error(), "写入权限") {
+		t.Fatalf("应当报出写入权限问题：%v", err)
+	}
+	if view.ReadyToRestart {
+		t.Fatalf("登记失败后不应报告可重启：%+v", view)
+	}
+}
+
+func TestRestartToInstallRequiresStagedPackage(t *testing.T) {
+	a, _ := updateFixture(t)
+	if err := a.NewUpdateService().RestartToInstall(); err == nil {
+		t.Fatal("没有待安装的更新时应报错")
+	}
+}
+
+func updateServer(t *testing.T, version string, zipBytes, exe []byte) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if filepath.Base(r.URL.Path) == update.SumsAsset {
+			w.Write([]byte(sumOf(zipBytes) + "  AgentDeck-v" + version + "-win-x64.zip\n" +
+				sumOf(exe) + "  " + update.AssetPrefix + version + update.AssetSuffix + "\n"))
+			return
+		}
+		w.Write(zipBytes)
+	}))
+}
+
+func prepareAvailable(a *App, version, baseURL string) {
+	a.updateMu.Lock()
+	a.update.checked = true
+	a.update.result = update.Result{
+		Current:   "0.9.0",
+		Latest:    version,
+		Available: true,
+		ExeAsset:  update.Asset{Name: update.AssetPrefix + version + update.AssetSuffix, URL: baseURL + "/pkg"},
+		SumsAsset: update.Asset{Name: update.SumsAsset, URL: baseURL + "/" + update.SumsAsset},
+	}
+	a.updateMu.Unlock()
 }
 
 func buildTestZip(t *testing.T, entries map[string][]byte) []byte {
