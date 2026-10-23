@@ -108,3 +108,21 @@ export function createUpdateSettings(api: UpdateAPI, events: UpdateEvents) {
     },
   }
 }
+
+// UpdateStage 是界面的显式状态：只有一处判断，标题、按钮与提示都跟着它走，
+// 避免「按钮可点但其实必然失败」这类靠字段各自为政推导出来的组合。
+// noAsset：有更新的版本，但发布里暂时没有可下载并校验的安装文件。
+export type UpdateStage = 'loading' | 'checking' | 'downloading' | 'ready' | 'available' | 'noAsset' | 'upToDate' | 'dev' | 'idle'
+
+export function stageOf(view: UpdateView | null, loading: boolean): UpdateStage {
+  if (loading && !view) return 'loading'
+  if (!view) return 'idle'
+  if (view.checking) return 'checking'
+  if (view.downloading) return 'downloading'
+  if (view.ready_to_restart) return 'ready'
+  if (view.available) return 'available'
+  if (view.asset_missing) return 'noAsset'
+  if (view.dev && view.checked) return 'dev'
+  if (view.checked) return 'upToDate'
+  return 'idle'
+}

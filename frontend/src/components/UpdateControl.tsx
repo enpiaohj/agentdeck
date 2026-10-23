@@ -5,7 +5,7 @@ import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react
 import * as updateService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/updateservice'
 import type { UpdateView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import { matchesSetting } from '../settingsSearch'
-import { createUpdateSettings } from '../updateSettings'
+import { createUpdateSettings, stageOf } from '../updateSettings'
 import { FormDialog } from './FormDialog'
 import { SettingRow } from './SettingRow'
 
@@ -25,22 +25,6 @@ function formatTime(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
   return date.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-}
-
-// UpdateStage 是界面的显式状态：只有一处判断，标题、按钮与提示都跟着它走，
-// 避免「按钮可点但其实必然失败」这类靠字段各自为政推导出来的组合。
-type UpdateStage = 'loading' | 'checking' | 'downloading' | 'ready' | 'available' | 'upToDate' | 'dev' | 'idle'
-
-export function stageOf(view: UpdateView | null, loading: boolean): UpdateStage {
-  if (loading && !view) return 'loading'
-  if (!view) return 'idle'
-  if (view.checking) return 'checking'
-  if (view.downloading) return 'downloading'
-  if (view.ready_to_restart) return 'ready'
-  if (view.available) return 'available'
-  if (view.dev && view.checked) return 'dev'
-  if (view.checked) return 'upToDate'
-  return 'idle'
 }
 
 type Tone = 'ok' | 'accent' | 'neutral' | 'error'
@@ -89,6 +73,10 @@ export function UpdateControl({ id }: { id: string }) {
     tone = 'accent'; icon = <ArrowCircleDownFilled />
     title = `发现新版本 ${latest}`
     detail = installable ? (publishedAt ? `发布于 ${publishedAt}` : '可下载并校验后更新。') : '当前运行方式不支持应用内安装，请到发布页手动下载。'
+  } else if (stage === 'noAsset') {
+    tone = 'accent'
+    title = `发现新版本 ${latest}`
+    detail = '该版本暂时没有可下载的安装文件（可能仍在上传），请稍后重新检查，或到发布页查看。'
   } else if (stage === 'upToDate') {
     tone = 'ok'; icon = <CheckmarkCircleFilled />
     title = '已是最新版本'
@@ -100,8 +88,8 @@ export function UpdateControl({ id }: { id: string }) {
   // 取消下载后后端只是回到「有新版本」，取消这件事没有别的痕迹，用一条中性提示说出来。
   const aside = message ? '' : stage === 'available' ? notice : ''
   if (message) { tone = 'error'; icon = <ErrorCircleFilled /> }
-  const showNotes = !!notes && (stage === 'available' || stage === 'downloading' || stage === 'ready' || !!message)
-  const method = !installable ? '手动下载（到发布页）' : '应用内下载，SHA-256 校验，退出时写入'
+  const showNotes = !!notes && (stage === 'available' || stage === 'noAsset' || stage === 'downloading' || stage === 'ready' || !!message)
+  const method = stage === 'noAsset' ? '暂不可下载（发布里还没有安装文件）' : !installable ? '手动下载（到发布页）' : '应用内下载，SHA-256 校验，退出时写入'
 
   return <div className="ad-update-settings" aria-busy={busy}>
     <div className="ad-setting-card">
@@ -112,10 +100,12 @@ export function UpdateControl({ id }: { id: string }) {
           {detail ? <p>{detail}</p> : null}
         </div>
         <div className="ad-update-actions">
-          {stage !== 'ready' ? <Button id={`${id}-check`} size="small" appearance={stage === 'available' || stage === 'downloading' ? 'secondary' : 'primary'} icon={<ArrowSyncRegular />}
+          {stage !== 'ready' ? <Button id={`${id}-check`} size="small" appearance={stage === 'available' || stage === 'noAsset' || stage === 'downloading' ? 'secondary' : 'primary'} icon={<ArrowSyncRegular />}
             disabled={busy} onClick={() => void settings.check()}>{stage === 'checking' ? '正在检查…' : '检查更新'}</Button> : null}
           {stage === 'available' && installable ? <Button id={`${id}-download`} size="small" appearance="primary" icon={<ArrowDownloadRegular />}
             disabled={!view?.downloadable} onClick={() => void settings.download()}>下载并更新</Button> : null}
+          {stage === 'noAsset' && releasePage ? <Button size="small" appearance="primary" icon={<OpenRegular />}
+            onClick={() => void Browser.OpenURL(releasePage)}>到发布页查看</Button> : null}
           {stage === 'available' && !installable && releasePage ? <Button size="small" appearance="primary" icon={<OpenRegular />}
             onClick={() => void Browser.OpenURL(releasePage)}>到发布页下载</Button> : null}
           {stage === 'downloading' ? <Button id={`${id}-cancel`} size="small" appearance="subtle" icon={<DismissRegular />}

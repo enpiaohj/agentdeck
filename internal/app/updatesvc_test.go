@@ -464,3 +464,25 @@ func sumOf(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }
+
+// 上次的结论是「更新但暂无可下载文件」：恢复出同样的提示，而不是可点必败的下载，
+// 也不是误导的「已是最新版本」。
+func TestRestoreUpdateStateKeepsAssetMissing(t *testing.T) {
+	a, _ := updateFixture(t)
+	a.version = "1.0.0"
+	a.restoreUpdateState(update.State{CheckedAt: time.Now(), Latest: "1.1.0", AssetMissing: true})
+	view := a.updateView()
+	if !view.Checked || view.Available || view.Downloadable || !view.AssetMissing || view.Latest != "1.1.0" {
+		t.Fatalf("应显示更新但无可下载文件：%+v", view)
+	}
+}
+
+// 用户已手动升级后，昨天的「暂无文件」结论同样作废。
+func TestRestoreUpdateStateDropsAssetMissingWhenCurrent(t *testing.T) {
+	a, _ := updateFixture(t)
+	a.version = "1.1.0"
+	a.restoreUpdateState(update.State{CheckedAt: time.Now(), Latest: "1.1.0", AssetMissing: true})
+	if view := a.updateView(); view.AssetMissing || view.Available {
+		t.Fatalf("同版本不应再提示：%+v", view)
+	}
+}

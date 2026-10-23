@@ -289,8 +289,11 @@ type UpdateView struct {
 	Checked bool `json:"checked"`
 	// Latest 是远端最新正式版。
 	Latest string `json:"latest"`
-	// Available 表示 Latest 比 Current 新。
+	// Available 表示 Latest 比 Current 新，并且有可下载、可校验的安装文件。
 	Available bool `json:"available"`
+	// AssetMissing 表示 Latest 比 Current 新，但发布里暂时没有可下载并校验的安装文件
+	// （没传完或缺摘要）；界面据此提示到发布页查看，而不是显示「已是最新版本」。
+	AssetMissing bool `json:"asset_missing"`
 	// Notes 是发布说明正文（Markdown）。
 	Notes string `json:"notes"`
 	// PageURL 是该版本的 Release 页面。

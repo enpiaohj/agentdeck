@@ -117,6 +117,10 @@ type Result struct {
 	PageURL string
 	// PublishedAt 是发布时间。
 	PublishedAt time.Time
+	// AssetMissing 为真表示远端有比 Current 更新的版本，但没有可下载并校验的安装文件
+	// （发布还没传完，或没有摘要也没有校验清单）。此时 Available 为假：不给出一个
+	// 注定失败的下载，界面改为提示到发布页查看。
+	AssetMissing bool
 	// ExeAsset 与 SumsAsset 在 Available 为真时可用。
 	ExeAsset  Asset
 	SumsAsset Asset
@@ -140,7 +144,9 @@ func (c Client) checkClient() *http.Client {
 	if c.HTTP != nil {
 		return c.HTTP
 	}
-	return &http.Client{Timeout: checkTimeout}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = proxyFunc
+	return &http.Client{Timeout: checkTimeout, Transport: transport}
 }
 
 // downloadClient 是下载用的客户端：**不设整次请求的总超时**。
@@ -153,7 +159,7 @@ func (c Client) downloadClient() *http.Client {
 		return c.HTTP
 	}
 	return &http.Client{Transport: &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
+		Proxy:                 proxyFunc,
 		DialContext:           (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          10,
@@ -227,6 +233,7 @@ func (c Client) Check(ctx context.Context, current string) (Result, error) {
 		result.ExeAsset = exeAsset
 		result.SumsAsset = sumsAsset
 	} else {
+		result.AssetMissing = result.Available
 		result.Available = false
 	}
 	return result, nil

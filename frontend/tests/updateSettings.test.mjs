@@ -1,10 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createUpdateSettings } from '../src/updateSettings.ts'
+import { createUpdateSettings, stageOf } from '../src/updateSettings.ts'
 
 const view = (changes = {}) => ({
   current: '0.9.0', dev: false, checked: false, latest: '', available: false, notes: '', page_url: '',
-  checked_at: '', published_at: '', checking: false, downloading: false, progress: 0,
+  asset_missing: false, checked_at: '', published_at: '', checking: false, downloading: false, progress: 0,
   downloaded_dir: '', ready_to_restart: false, target_path: '', can_install: true,
   downloadable: false, auto_check: true, error: '', release_page_url: 'https://example.test',
   ...changes,
@@ -212,3 +212,15 @@ test('重新检查或下载都清掉取消提示', async () => {
   assert.equal(settings.getSnapshot().notice, '')
   assert.equal(settings.getSnapshot().view.ready_to_restart, true)
 })
+
+test('界面状态：有更新但暂无可下载文件，不显示成已是最新版本', () => {
+  assert.equal(stageOf(null, true), 'loading')
+  assert.equal(stageOf(null, false), 'idle')
+  assert.equal(stageOf(view({ checked: true, latest: '1.1.0', asset_missing: true }), false), 'noAsset')
+  assert.equal(stageOf(view({ checked: true, latest: '0.9.0' }), false), 'upToDate')
+  assert.equal(stageOf(view({ checked: true, latest: '1.1.0', available: true }), false), 'available')
+  assert.equal(stageOf(view({ checked: true, dev: true, latest: '1.1.0' }), false), 'dev')
+  // 进行中的动作优先于其他结论。
+  assert.equal(stageOf(view({ checked: true, available: true, downloading: true }), false), 'downloading')
+  assert.equal(stageOf(view({ checked: true, available: true, ready_to_restart: true }), false), 'ready')
+}) 

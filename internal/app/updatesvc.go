@@ -110,6 +110,7 @@ func (a *App) updateViewLocked() UpdateView {
 	r := a.update.result
 	view.Latest = r.Latest
 	view.Available = r.Available
+	view.AssetMissing = r.AssetMissing
 	view.Notes = r.Notes
 	view.PageURL = r.PageURL
 	view.CheckedAt = rfc3339(r.CheckedAt)
@@ -210,16 +211,20 @@ func (a *App) restoreUpdateState(state update.State) {
 	exe, sums, _ := state.Assets()
 	a.updateMu.Lock()
 	defer a.updateMu.Unlock()
+	newer := update.IsNewer(state.Latest, a.Version())
+	// 上次的结论是「更新却暂无可下载文件」时，恢复出同样的提示，而不是一个点了必败的下载。
+	missing := newer && state.AssetMissing
 	a.update.result = update.Result{
-		Current:     a.Version(),
-		Latest:      state.Latest,
-		Available:   update.IsNewer(state.Latest, a.Version()),
-		Notes:       state.Notes,
-		PageURL:     state.PageURL,
-		PublishedAt: state.PublishedAt,
-		CheckedAt:   state.CheckedAt,
-		ExeAsset:    exe,
-		SumsAsset:   sums,
+		Current:      a.Version(),
+		Latest:       state.Latest,
+		Available:    newer && !missing,
+		AssetMissing: missing,
+		Notes:        state.Notes,
+		PageURL:      state.PageURL,
+		PublishedAt:  state.PublishedAt,
+		CheckedAt:    state.CheckedAt,
+		ExeAsset:     exe,
+		SumsAsset:    sums,
 	}
 	a.update.checked = true
 }
@@ -258,18 +263,19 @@ func (s *UpdateService) check(ctx context.Context) (UpdateView, error) {
 // 与本次已经得到的结论无关，不该在界面上报一个错。
 func (a *App) saveUpdateState(result update.Result) {
 	_ = update.SaveState(a.updateStatePath(), update.State{
-		CheckedAt:   result.CheckedAt,
-		Current:     result.Current,
-		Latest:      result.Latest,
-		Available:   result.Available,
-		Notes:       result.Notes,
-		PageURL:     result.PageURL,
-		PublishedAt: result.PublishedAt,
-		ExeName:     result.ExeAsset.Name,
-		ExeURL:      result.ExeAsset.URL,
-		ExeSize:     result.ExeAsset.Size,
-		ExeDigest:   result.ExeAsset.Digest,
-		SumsURL:     result.SumsAsset.URL,
+		CheckedAt:    result.CheckedAt,
+		Current:      result.Current,
+		Latest:       result.Latest,
+		Available:    result.Available,
+		AssetMissing: result.AssetMissing,
+		Notes:        result.Notes,
+		PageURL:      result.PageURL,
+		PublishedAt:  result.PublishedAt,
+		ExeName:      result.ExeAsset.Name,
+		ExeURL:       result.ExeAsset.URL,
+		ExeSize:      result.ExeAsset.Size,
+		ExeDigest:    result.ExeAsset.Digest,
+		SumsURL:      result.SumsAsset.URL,
 	})
 }
 
@@ -296,19 +302,19 @@ func (s *UpdateService) Download() (UpdateView, error) {
 		return view, errors.New("当前运行方式不支持应用内更新，请到发布页下载")
 	}
 	result := a.update.result
+	// 取消函数必须与「正在下载」同时登记：分开做的话，两步之间到达的取消请求会读到
+	// 空函数而被当成「没有正在进行的下载」。
+	ctx, cancel := context.WithTimeout(context.Background(), update.DownloadTimeout)
+	defer cancel()
 	a.update.downloading = true
 	a.update.progress = 0
 	a.update.errMsg = ""
+	a.update.cancel = cancel
+	a.update.canceled = false
 	view := a.updateViewLocked()
 	a.updateMu.Unlock()
 	a.emit(EventUpdateStatus, view)
 
-	ctx, cancel := context.WithTimeout(context.Background(), update.DownloadTimeout)
-	defer cancel()
-	a.updateMu.Lock()
-	a.update.cancel = cancel
-	a.update.canceled = false
-	a.updateMu.Unlock()
 	client := update.Client{Version: a.Version()}
 	var dir string
 	exePath, err := client.Download(ctx, result, a.updateDir(), func(done, total int64) {

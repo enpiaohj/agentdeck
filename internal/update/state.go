@@ -10,13 +10,15 @@ import (
 // State 是上一次检查的结果，落盘以便启动时的后台检查遵守「每天最多一次」，
 // 也用于在没有网络时仍然能显示上次的结论。
 type State struct {
-	CheckedAt   time.Time `json:"checked_at"`
-	Current     string    `json:"current"`
-	Latest      string    `json:"latest"`
-	Available   bool      `json:"available"`
-	Notes       string    `json:"notes,omitempty"`
-	PageURL     string    `json:"page_url,omitempty"`
-	PublishedAt time.Time `json:"published_at,omitempty"`
+	CheckedAt time.Time `json:"checked_at"`
+	Current   string    `json:"current"`
+	Latest    string    `json:"latest"`
+	Available bool      `json:"available"`
+	// AssetMissing 记录「更新但暂无可下载文件」的结论，恢复时据此显示同样的提示。
+	AssetMissing bool      `json:"asset_missing,omitempty"`
+	Notes        string    `json:"notes,omitempty"`
+	PageURL      string    `json:"page_url,omitempty"`
+	PublishedAt  time.Time `json:"published_at,omitempty"`
 
 	// 资产信息也要落盘：恢复出来的结论必须能直接下载。只存版本号的话，
 	// 「检查过之后当天再打开应用」就会拿到一个不带下载地址的结论，界面上
