@@ -9,6 +9,7 @@ import (
 	"github.com/enpiaohj/agentdeck/internal/claudehistory"
 	"github.com/enpiaohj/agentdeck/internal/history"
 	"github.com/enpiaohj/agentdeck/internal/marks"
+	"github.com/enpiaohj/agentdeck/internal/projects"
 	"io"
 	"os"
 	"path"
@@ -167,7 +168,10 @@ func (s *SessionService) backupData(destDir, preferences string) (result string,
 	if err = s.a.marks.BackupTo(filepath.Join(stage, "marks.db")); err != nil {
 		return "", err
 	}
-	content := map[string]string{"history.db": filepath.Join(stage, "history.db"), "marks.db": filepath.Join(stage, "marks.db")}
+	if err = s.a.declared.BackupTo(filepath.Join(stage, "projects.db")); err != nil {
+		return "", err
+	}
+	content := map[string]string{"history.db": filepath.Join(stage, "history.db"), "marks.db": filepath.Join(stage, "marks.db"), "projects.db": filepath.Join(stage, "projects.db")}
 	if err = os.WriteFile(filepath.Join(stage, "preferences.json"), []byte(preferences), 0600); err != nil {
 		return "", err
 	}
@@ -289,7 +293,7 @@ func inspectData(src string) (info BackupInfo, stage string, err error) {
 		if f.UncompressedSize64 > uint64(backupLimit) {
 			return info, stage, fmt.Errorf("备份文件过大")
 		}
-		if f.Name != "manifest.json" && f.Name != "history.db" && f.Name != "marks.db" && f.Name != "preferences.json" && !strings.HasPrefix(f.Name, "imports/") {
+		if f.Name != "manifest.json" && f.Name != "history.db" && f.Name != "marks.db" && f.Name != "projects.db" && f.Name != "preferences.json" && !strings.HasPrefix(f.Name, "imports/") {
 			return info, stage, fmt.Errorf("备份包含未知文件")
 		}
 		limit := backupLimit - total
@@ -372,6 +376,11 @@ func inspectData(src string) (info BackupInfo, stage string, err error) {
 	}
 	if e = marks.ValidateBackup(filepath.Join(stage, "marks.db")); e != nil {
 		return info, stage, e
+	}
+	if seen["projects.db"] {
+		if e = projects.ValidateBackup(filepath.Join(stage, "projects.db")); e != nil {
+			return info, stage, e
+		}
 	}
 	prefs, e := os.ReadFile(filepath.Join(stage, "preferences.json"))
 	if e != nil {
@@ -469,7 +478,7 @@ func (s *SessionService) RestoreData(src, currentPreferences string) (report Res
 			for _, p := range created {
 				os.Remove(p)
 			}
-			err = fmt.Errorf("恢复未完成（各库独立事务；已合并历史不会删除）。自动备份： %s；%w", report.RollbackPath, err)
+			err = fmt.Errorf("恢复未完成。历史、标注和项目库分别提交，已合并的数据不会自动回滚。恢复前自动备份（含项目及位置关联）：%s；%w", report.RollbackPath, err)
 		}
 	}()
 	for _, p := range pending {
@@ -501,6 +510,13 @@ func (s *SessionService) RestoreData(src, currentPreferences string) (report Res
 		return report, err
 	}
 
+	if _, statErr := os.Stat(filepath.Join(stage, "projects.db")); statErr == nil {
+		if err = a.declared.MergeBackup(filepath.Join(stage, "projects.db")); err != nil {
+			return report, err
+		}
+	} else if !os.IsNotExist(statErr) {
+		return report, statErr
+	}
 	report.Preferences = info.Preferences
 	report.Message = "已合并恢复；现有历史正文及版本保留，标注采用备份。全文索引需要重建。"
 	return report, nil

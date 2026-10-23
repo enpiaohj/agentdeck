@@ -284,6 +284,7 @@ func TestResumeActions(t *testing.T) {
 	real := sessions.Session{Agent: "claude", ID: "real1", Cwd: dir,
 		Resume: "claude --resume real1", Path: filepath.Join(dir, "real1.jsonl")}
 	wsl := sessions.Session{Agent: "claude", ID: "wsl1", WSL: "Ubuntu-22.04", Resume: "wsl cmd"}
+	s1.Cwd = dir
 	a.setList([]sessions.Session{s1, real, wsl})
 	r := &ResumeService{a: a}
 
@@ -328,20 +329,21 @@ func TestResumeCommandCarriesLocalTitle(t *testing.T) {
 		Resume: "codex resume cx1", Path: filepath.Join(dir, "cx1.jsonl")}
 	wsl := sessions.Session{Agent: "claude", ID: "wsl1", WSL: "Ubuntu-22.04",
 		Resume: `wsl.exe -d 'Ubuntu' -e sh -lc 'claude --resume wsl1'`}
+	plain.Cwd, quoted.Cwd = dir, dir
 	a.setList([]sessions.Session{plain, quoted, codex, wsl})
 	marks := &MarkService{a: a}
 	r := &ResumeService{a: a}
 
 	// 未改名:恢复命令保持原样。
 	cmd, err := r.Command("claude:named1")
-	if err != nil || cmd != "claude --resume named1" {
+	if err != nil || cmd != sessions.ResumeCommandAt(plain, dir) {
 		t.Fatalf("未改名的恢复命令 = %q, %v", cmd, err)
 	}
 	if err := marks.SetTitle("claude:named1", "定价问题排查"); err != nil {
 		t.Fatal(err)
 	}
 	cmd, err = r.Command("claude:named1")
-	if err != nil || cmd != "claude --resume named1 --name '定价问题排查'" {
+	if err != nil || cmd != sessions.ResumeCommandAt(plain, dir)+" --name '定价问题排查'" {
 		t.Fatalf("改名后的恢复命令 = %q, %v", cmd, err)
 	}
 	// 复制命令与直开终端走同一条,不能只在一条路上生效。
@@ -357,7 +359,7 @@ func TestResumeCommandCarriesLocalTitle(t *testing.T) {
 		t.Fatal(err)
 	}
 	cmd, err = r.Command("claude:named2")
-	if err != nil || cmd != "claude --resume named2 --name 'it''s 会话'" {
+	if err != nil || cmd != sessions.ResumeCommandAt(quoted, dir)+" --name 'it''s 会话'" {
 		t.Fatalf("含引号的恢复命令 = %q, %v", cmd, err)
 	}
 
@@ -365,7 +367,7 @@ func TestResumeCommandCarriesLocalTitle(t *testing.T) {
 	if err := marks.SetTitle("codex:cx1", "Codex 本地名"); err != nil {
 		t.Fatal(err)
 	}
-	if cmd, err = r.Command("codex:cx1"); err != nil || cmd != "codex resume cx1" {
+	if cmd, err = r.Command("codex:cx1"); err != nil || cmd != sessions.ResumeCommandAt(codex, dir) {
 		t.Fatalf("codex 恢复命令 = %q, %v", cmd, err)
 	}
 	// WSL 命令是整条 wsl.exe -e sh -lc '…',参数塞不进内层引号,保持原样。
@@ -387,6 +389,7 @@ func TestOpenInTerminalSyncsCodexName(t *testing.T) {
 	codex := sessions.Session{Agent: "codex", ID: thread, Cwd: dir,
 		Resume: "codex resume " + thread, Path: filepath.Join(dir, "rollout.jsonl")}
 	claude := claudeFixture(t, dir, "claude1", "hi")
+	claude.Cwd = dir
 	wsl := sessions.Session{Agent: "codex", ID: "wslcx", WSL: "Ubuntu-22.04", Resume: "wsl codex resume wslcx"}
 	a.setList([]sessions.Session{codex, claude, wsl})
 	var calls [][2]string

@@ -31,7 +31,7 @@ import { createContext, useCallback, useContext, useEffect, useId, useMemo, useR
 import { Browser } from '@wailsio/runtime'
 import type { SessionView, TranscriptView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
-import * as resumeService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/resumeservice'
+import { resumeWithLocation } from './ProjectLocationDialog'
 import { agentMeta, fmtTime } from '../util'
 import { pickOpenPath } from '../nativeDialogs'
 import { AgentMark } from '../icons/AgentMark'
@@ -546,10 +546,10 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
           <>
             <Tooltip content={`在 ${m.label} 终端中继续此会话`} relationship="label">
               <Button size="small" appearance="primary" icon={<OpenRegular />} disabled={actionBusy}
-                onClick={() => void runAction(() => resumeService.OpenInTerminal(session.key))}>{actionBusy ? '正在打开…' : '继续会话'}</Button>
+                onClick={() => void runAction(async () => { await resumeWithLocation(session.key, 'resume') })}>{actionBusy ? '正在打开…' : '继续会话'}</Button>
             </Tooltip>
             <Button size="small" appearance="subtle" icon={<CopyRegular />} disabled={actionBusy}
-              onClick={() => void runAction(() => resumeService.CopyToClipboard(session.key))}>复制恢复命令</Button>
+              onClick={() => void runAction(async () => { await resumeWithLocation(session.key, 'copy') })}>复制恢复命令</Button>
           </>
         ) : (
           <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>此记录支持阅读、检索与导出</Text>

@@ -40,7 +40,7 @@ func TestGrok(t *testing.T) {
 	}
 	want := "cd '/work/grok' && grok --resume " + grokMain
 	if runtime.GOOS == "windows" {
-		want = "Set-Location -LiteralPath '/work/grok'; grok --resume " + grokMain
+		want = "Set-Location -LiteralPath '/work/grok' -ErrorAction Stop; grok --resume " + grokMain
 	}
 	if g.Resume != want {
 		t.Fatalf("resume %q", g.Resume)

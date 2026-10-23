@@ -49,7 +49,7 @@ func TestOmp(t *testing.T) {
 	}
 	want := "cd '/work/omp' && omp --resume " + ompMain
 	if runtime.GOOS == "windows" {
-		want = "Set-Location -LiteralPath '/work/omp'; omp --resume " + ompMain
+		want = "Set-Location -LiteralPath '/work/omp' -ErrorAction Stop; omp --resume " + ompMain
 	}
 	if m.Resume != want {
 		t.Fatalf("resume %q", m.Resume)

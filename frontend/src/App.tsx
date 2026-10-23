@@ -31,6 +31,7 @@ import { SearchResults } from './components/SearchPalette'
 import { SettingsView } from './components/SettingsView'
 import { NewProjectDialog } from './components/NewProjectDialog'
 import { NewSessionDialog } from './components/NewSessionDialog'
+import { ProjectLocationDialog } from './components/ProjectLocationDialog'
 import { ToastHost } from './components/Toasts'
 import { usePreferences } from './hooks/usePreferences'
 import { useToasts } from './hooks/useToasts'
@@ -413,10 +414,10 @@ export function App() {
       }, 45_000),
     ]
   }
-  const onLaunched = async (project: string, agent: string) => {
-    await resumeService.NewSession(project, agent)
-    update({ recentProjects: rememberProject(preferences.recentProjects, project) })
-    notify(`已在终端中打开 ${platformLabel(agent)}：${project}。生成会话记录后列表会自动刷新。`, { tone: 'success' })
+  const onLaunched = async (project: string, agent: string, directory: string) => {
+    await resumeService.NewSessionAt(project, directory, agent)
+    update({ recentProjects: rememberProject(preferences.recentProjects, directory) })
+    notify(`已在终端中打开 ${platformLabel(agent)}：${directory}。生成会话记录后列表会自动刷新。`, { tone: 'success' })
     schedulePostLaunchRefresh()
   }
 
@@ -456,6 +457,7 @@ export function App() {
 
   return (
     <FluentProvider theme={themeName === 'dark' ? darkTheme : lightTheme}>
+      <ProjectLocationDialog />
       <div className={`ad-app ${styles.outer}${resizing ? ' is-resizing' : ''}`} data-theme={themeName} style={{ '--ad-reader-font-size':`${preferences.fontSize}px`, '--ad-reader-line-height':preferences.spacing==='comfortable'?'1.85':'1.65', '--ad-reader-width':readerWidthCss(preferences.readingWidth), ...paneVars } as React.CSSProperties}>
         {/* 无边框窗口:顶栏整体为拖拽区,交互控件标 no-drag */}
         <div className={`ad-titlebar ${styles.topbar}`} style={{ '--wails-draggable': 'drag' } as React.CSSProperties}

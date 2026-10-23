@@ -32,6 +32,7 @@ import {
   PinFilled,
 } from '@fluentui/react-icons'
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
+import { changeProjectLocation } from './ProjectLocationDialog'
 import type { AgentView, NavCounts, ProjectView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import { usePreferences } from '../hooks/usePreferences'
 import { agentRange } from '../sidebarSelection'
@@ -248,6 +249,15 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
     : projects.filter((p, index) => index < PROJECT_PREVIEW || filter.project === p.path)
   const counts = useCounts(listVersion)
   const [menu, setMenu] = useState<{ target: MenuTarget; x: number; y: number } | null>(null)
+  const [linkedPaths, setLinkedPaths] = useState<string[]>([])
+  useEffect(() => {
+    let active = true
+    setLinkedPaths([])
+    if (menu?.target.kind === 'project') void projectService.Locations().then(rows => {
+      if (active) setLinkedPaths(rows.map(row => row.original.toLowerCase()))
+    }).catch(reason => { if (active) notify(String(reason), { tone: 'error' }) })
+    return () => { active = false }
+  }, [menu, listVersion, notify])
   const [action, setAction] = useState<ProjectAction | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
   const [actionError, setActionError] = useState('')
@@ -332,6 +342,9 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
           <div className="ad-context-heading">{menu.target.project.name}</div>
           <MenuItem icon={projectPinned(menu.target.project.path) ? <PinOffRegular /> : <PinRegular />} onClick={() => { if (menu.target.kind === 'project') update({ pinnedProjects: togglePins(preferences.pinnedProjects, [menu.target.project.path], true) }); setMenu(null) }}>{projectPinned(menu.target.project.path) ? '取消置顶' : '置顶'}</MenuItem>
           <MenuItem icon={<OpenRegular />} onClick={() => { if (menu.target.kind === 'project') onNewSession(menu.target.project.path, menu.target.project.agent || undefined); setMenu(null) }}>在此新建会话…</MenuItem>
+          <MenuItem onClick={() => { if (menu.target.kind !== 'project') return; const path = menu.target.project.path; setMenu(null); void projectService.Open(path).catch(reason => notify(String(reason), { tone: 'error' })) }}>打开项目目录</MenuItem>
+          <MenuItem onClick={() => { if (menu.target.kind !== 'project') return; const path = menu.target.project.path; setMenu(null); void changeProjectLocation(path).then(saved => { if (saved) { onRefresh(); notify('项目位置关联已保存。', { tone: 'success' }) } }).catch(reason => notify(String(reason), { tone: 'error' })) }}>更改项目位置…</MenuItem>
+          {linkedPaths.includes(menu.target.project.path.toLowerCase()) ? <MenuItem onClick={() => { if (menu.target.kind !== 'project') return; const path = menu.target.project.path; setMenu(null); void projectService.RemoveLocation(path).then(() => { onRefresh(); notify('项目位置关联已移除。后续操作将使用原项目目录。', { tone: 'success' }) }).catch(reason => notify(String(reason), { tone: 'error' })) }}>移除位置关联</MenuItem> : null}
           {menu.target.project.declared ? <>
             <MenuItem icon={<EditRegular />} onClick={() => { if (menu.target.kind === 'project') openAction('rename', menu.target.project) }}>修改显示名称…</MenuItem>
             <MenuItem icon={<DeleteRegular />} onClick={() => { if (menu.target.kind === 'project') openAction('remove', menu.target.project) }}>从项目列表移除…</MenuItem>

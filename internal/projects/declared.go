@@ -92,6 +92,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS project_locations (lkey TEXT PRIMARY KEY, original TEXT NOT NULL, target TEXT NOT NULL)`); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return &Store{db: db}, nil
 }
 
@@ -109,8 +113,9 @@ func (s *Store) BackupTo(dest string) error {
 	return err
 }
 
-// ValidateBackup 校验 path 是合法的 AgentDeck 声明项目库：只有
-// declared_projects 一张表、必需列齐全、完整性检查通过。
+// ValidateBackup 校验声明项目库及可选的位置关联表：
+// 支持仅含声明项目的旧备份；存在位置关联表时同时校验其结构与路径。
+// 必需列齐全、无未知表或触发器，且完整性检查通过后才允许合并。
 func ValidateBackup(path string) error {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -118,13 +123,32 @@ func ValidateBackup(path string) error {
 	}
 	defer db.Close()
 	var objects int
-	if err = db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type IN ('view','trigger') OR (type='table' AND name NOT IN ('declared_projects'))`).Scan(&objects); err != nil || objects != 0 {
+	if err = db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type IN ('view','trigger') OR (type='table' AND name NOT IN ('declared_projects','project_locations'))`).Scan(&objects); err != nil || objects != 0 {
 		return fmt.Errorf("声明项目库表结构无效：%v", err)
 	}
 	for _, column := range []string{"lkey", "path", "name", "added", "agent"} {
 		var n int
 		if err = db.QueryRow(`SELECT count(*) FROM pragma_table_info('declared_projects') WHERE name = ?`, column).Scan(&n); err != nil || n != 1 {
 			return fmt.Errorf("声明项目库缺少 %s 列：%v", column, err)
+		}
+	}
+	// 旧备份可以没有关联表；存在时必须与当前表结构完全一致。
+	var locations int
+	if err = db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type='table' AND name='project_locations'`).Scan(&locations); err != nil {
+		return err
+	}
+	if locations != 0 {
+		var valid int
+		err = db.QueryRow(`SELECT count(*) FROM pragma_table_info('project_locations') WHERE type='TEXT' AND ((name='lkey' AND pk=1) OR (name IN ('original','target') AND "notnull"=1 AND pk=0))`).Scan(&valid)
+		var total int
+		if err != nil {
+			return err
+		}
+		if err = db.QueryRow(`SELECT count(*) FROM pragma_table_info('project_locations')`).Scan(&total); err != nil {
+			return err
+		}
+		if valid != 3 || total != 3 {
+			return fmt.Errorf("项目位置关联表结构无效")
 		}
 	}
 	var integrity string

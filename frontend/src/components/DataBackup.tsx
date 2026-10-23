@@ -52,7 +52,7 @@ export function DataBackup({ onRestored }: { onRestored: () => void }) {
   }
   return <section className="ad-backup-section" aria-label="完整数据备份与恢复">
     <h2>完整备份</h2>
-    <p>将本地会话库及全部内容版本、收藏、归档、标签、备注、导入历史和界面偏好保存为一个 ZIP 文件。</p>
+    <p>将本地会话库及全部内容版本、收藏、归档、标签、备注、导入历史、项目设置、位置关联和界面偏好保存为一个 ZIP 文件。</p>
     <div className="ad-backup-actions">
       <Button size="small" icon={busy === 'backup' ? <Spinner size="extra-tiny" /> : <DatabaseRegular />} disabled={!!busy} onClick={() => void backup()}>{busy === 'backup' ? '正在备份…' : '创建完整备份…'}</Button>
       <Button size="small" icon={busy === 'inspect' ? <Spinner size="extra-tiny" /> : <ArrowUploadRegular />} disabled={!!busy} onClick={() => void chooseRestore()}>{busy === 'inspect' ? '正在校验…' : '从完整备份恢复…'}</Button>
@@ -76,7 +76,7 @@ export function DataBackup({ onRestored }: { onRestored: () => void }) {
               <dt>数据大小</dt><dd>{(pending.info.bytes / 1024 / 1024).toFixed(1)} MB</dd>
               <dt>备份文件</dt><dd>{pending.path}</dd>
             </dl>
-            <p>当前新增会话和历史版本将予以保留。同一会话的标注及界面偏好将使用备份中的设置；存在冲突的导入文件不会被覆盖。</p>
+            <p>当前新增会话和历史版本将予以保留。同一会话的标注、同一项目的设置与位置关联及界面偏好将采用备份中的内容；存在冲突的导入文件不会被覆盖。</p>
             <p>恢复前将自动保存当前数据，完成后重新构建全文索引。</p>
           </> : null}
         </DialogContent>

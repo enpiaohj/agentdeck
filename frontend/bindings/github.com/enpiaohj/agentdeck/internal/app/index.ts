@@ -42,6 +42,8 @@ export {
     ProjectView,
     PromptMark,
     RestoreReport,
+    ResumeOpenResult,
+    ResumePreview,
     ScanProgress,
     SearchHitView,
     SearchReply,

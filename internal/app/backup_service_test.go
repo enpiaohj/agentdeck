@@ -16,6 +16,10 @@ import (
 func TestDataBackupRoundTrip(t *testing.T) {
 	a, _, _, _ := newTestApp(t)
 	s := a.NewSessionService()
+	original, target := filepath.Join(t.TempDir(), "old"), t.TempDir()
+	if err := a.declared.SetLocation(original, target); err != nil {
+		t.Fatal(err)
+	}
 	if err := a.marks.SetNote("claude:test", "saved"); err != nil {
 		t.Fatal(err)
 	}
@@ -27,6 +31,9 @@ func TestDataBackupRoundTrip(t *testing.T) {
 	if err != nil || info.Preferences != `{"theme":"dark"}` {
 		t.Fatalf("%+v %v", info, err)
 	}
+	if err := a.declared.RemoveLocation(original); err != nil {
+		t.Fatal(err)
+	}
 	a.marks.SetNote("claude:test", "changed")
 	report, err := s.RestoreData(p, `{}`)
 	if err != nil {
@@ -34,6 +41,9 @@ func TestDataBackupRoundTrip(t *testing.T) {
 	}
 	if _, err = os.Stat(report.RollbackPath); err != nil {
 		t.Fatal(err)
+	}
+	if got, err := a.declared.Location(original); err != nil || got != target {
+		t.Fatalf("restored project location = %q %v", got, err)
 	}
 	m, _ := a.marks.Get("claude:test")
 	if m.Note != "saved" {

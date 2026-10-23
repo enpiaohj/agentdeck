@@ -34,7 +34,7 @@ import { Events } from '@wailsio/runtime'
 import type { SessionView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import * as markService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/markservice'
-import * as resumeService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/resumeservice'
+import { resumeWithLocation } from './ProjectLocationDialog'
 import { agentMeta, fmtTime, relTime } from '../util'
 import { pickOpenPath } from '../nativeDialogs'
 import { AgentMark } from '../icons/AgentMark'
@@ -398,10 +398,10 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
       } else if (action === 'resume') {
         // 这条路径的错误消息后端保证自解释（其中一条是「终端已打开、只是
         // 附带动作失败」），不再套「操作失败：」前缀，否则与事实相反。
-        try { await resumeService.OpenInTerminal(item.key); setActionMessage('已在终端中打开会话。') }
+        try { if (await resumeWithLocation(item.key, 'resume')) setActionMessage('已在终端中打开会话。') }
         catch (reason) { setBulkError(String(reason).slice(0, 240)) }
       } else if (action === 'copyResume') {
-        await resumeService.CopyToClipboard(item.key); setActionMessage('恢复命令已复制。')
+        if (await resumeWithLocation(item.key, 'copy')) setActionMessage('恢复命令已复制。')
       } else if (action === 'export') {
         const dir = await pickOpenPath({ CanChooseDirectories: true, CanChooseFiles: false, CanCreateDirectories: true, Title: '选择 Markdown 导出目录', ButtonText: '导出到此目录' })
         if (!dir || typeof dir !== 'string') return

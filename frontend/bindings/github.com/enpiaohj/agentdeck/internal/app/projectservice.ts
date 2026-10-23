@@ -19,6 +19,10 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as projects$0 from "../projects/models.js";
+
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
 /**
@@ -62,11 +66,35 @@ export function Exists(path: string): $CancellablePromise<boolean> {
 }
 
 /**
+ * Location 查询当前有效位置；保持项目筛选、置顶和会话原始 cwd 不变。
+ */
+export function Location(original: string): $CancellablePromise<string> {
+    return $Call.ByID(3320937154, original);
+}
+
+export function Locations(): $CancellablePromise<projects$0.Location[]> {
+    return $Call.ByID(1277437091).then(($result: any) => {
+        return $$createType3($result);
+    });
+}
+
+/**
+ * Open 在资源管理器中打开有效项目目录，保留原项目身份。
+ */
+export function Open(original: string): $CancellablePromise<void> {
+    return $Call.ByID(36798565, original);
+}
+
+/**
  * Remove 取消声明。目录与里面的文件一概不删——声明只是 AgentDeck 列表里
  * 的一行，删它不该动用户的数据。
  */
 export function Remove(path: string): $CancellablePromise<void> {
     return $Call.ByID(1253856713, path);
+}
+
+export function RemoveLocation(original: string): $CancellablePromise<void> {
+    return $Call.ByID(180934034, original);
 }
 
 /**
@@ -77,6 +105,12 @@ export function Rename(path: string, name: string): $CancellablePromise<void> {
     return $Call.ByID(2329264791, path, name);
 }
 
+export function SetLocation(original: string, target: string): $CancellablePromise<void> {
+    return $Call.ByID(3830693672, original, target);
+}
+
 // Private type creation functions
 const $$createType0 = $models.DeclaredProjectView.createFrom;
 const $$createType1 = $Create.Array($$createType0);
+const $$createType2 = projects$0.Location.createFrom;
+const $$createType3 = $Create.Array($$createType2);

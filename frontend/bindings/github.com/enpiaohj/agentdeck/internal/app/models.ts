@@ -1011,6 +1011,67 @@ export class RestoreReport {
 }
 
 /**
+ * ResumeOpenResult 区分终端启动成功与附带名称同步警告，避免用户重试时重复启动。
+ */
+export class ResumeOpenResult {
+    "warning": string;
+
+    /** Creates a new ResumeOpenResult instance. */
+    constructor($$source: Partial<ResumeOpenResult> = {}) {
+        if (!("warning" in $$source)) {
+            this["warning"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ResumeOpenResult instance from a string or object.
+     */
+    static createFrom($$source: any = {}): ResumeOpenResult {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ResumeOpenResult($$parsedSource as Partial<ResumeOpenResult>);
+    }
+}
+
+export class ResumePreview {
+    "original": string;
+    "directory": string;
+    "command": string;
+    "needsLocation": boolean;
+    "notice": string;
+
+    /** Creates a new ResumePreview instance. */
+    constructor($$source: Partial<ResumePreview> = {}) {
+        if (!("original" in $$source)) {
+            this["original"] = "";
+        }
+        if (!("directory" in $$source)) {
+            this["directory"] = "";
+        }
+        if (!("command" in $$source)) {
+            this["command"] = "";
+        }
+        if (!("needsLocation" in $$source)) {
+            this["needsLocation"] = false;
+        }
+        if (!("notice" in $$source)) {
+            this["notice"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ResumePreview instance from a string or object.
+     */
+    static createFrom($$source: any = {}): ResumePreview {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ResumePreview($$parsedSource as Partial<ResumePreview>);
+    }
+}
+
+/**
  * ScanProgress 是会话文件扫描（sessions 层）的进度，首次列表装配期间
  * 前端轮询它画进度条。
  */

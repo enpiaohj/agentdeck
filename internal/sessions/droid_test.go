@@ -81,7 +81,7 @@ func TestDroid(t *testing.T) {
 	}
 	want := "cd '/work/droid' && droid --resume " + droidMain
 	if runtime.GOOS == "windows" {
-		want = "Set-Location -LiteralPath '/work/droid'; droid --resume " + droidMain
+		want = "Set-Location -LiteralPath '/work/droid' -ErrorAction Stop; droid --resume " + droidMain
 	}
 	if d.Resume != want {
 		t.Fatalf("resume %q", d.Resume)

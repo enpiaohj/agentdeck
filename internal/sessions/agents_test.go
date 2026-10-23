@@ -215,7 +215,7 @@ func TestCline(t *testing.T) {
 	}
 	want := "cd '/work/cline' && cline --id " + clineMain
 	if runtime.GOOS == "windows" {
-		want = "Set-Location -LiteralPath '/work/cline'; cline --id " + clineMain
+		want = "Set-Location -LiteralPath '/work/cline' -ErrorAction Stop; cline --id " + clineMain
 	}
 	if c.Resume != want {
 		t.Fatalf("resume %q", c.Resume)
@@ -261,7 +261,7 @@ func TestQoder(t *testing.T) {
 		}
 		want := "cd '/work/q' && " + c.run + " --resume " + c.id
 		if runtime.GOOS == "windows" {
-			want = "Set-Location -LiteralPath '/work/q'; " + c.run + " --resume " + c.id
+			want = "Set-Location -LiteralPath '/work/q' -ErrorAction Stop; " + c.run + " --resume " + c.id
 		}
 		if q.Resume != want {
 			t.Fatalf("resume %q", q.Resume)

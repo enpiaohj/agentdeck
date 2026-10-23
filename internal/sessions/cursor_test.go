@@ -252,7 +252,7 @@ func TestCursor(t *testing.T) {
 	} else {
 		// the same prefix every other resume here gets on Windows
 		// (sessions.go's resumeCommand), as TestCarryPiToOmp expects
-		want = "Set-Location -LiteralPath '/work/cur'; " + want
+		want = "Set-Location -LiteralPath '/work/cur' -ErrorAction Stop; " + want
 	}
 	if s.Resume != want {
 		t.Fatalf("resume %q, want %q", s.Resume, want)

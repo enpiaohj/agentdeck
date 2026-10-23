@@ -11,15 +11,16 @@ import { usePreferences } from '../hooks/usePreferences'
 import { missingCommand } from '../hooks/useAgentAvailability'
 import { AgentSelect } from './AgentSelect'
 import { FormDialog } from './FormDialog'
+import * as projectService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/projectservice'
 
 export function NewSessionDialog({ open, project, initialAgent, availability, recent, onLaunched, onClose }: {
   open: boolean
-  /** 从项目进入时目录固定为该项目，不再让用户改。 */
+  /** 保留原项目身份；工作目录可在解析关联后修改。 */
   project?: string
   initialAgent?: string
   availability: Record<string, CliAvailability>
   recent: string[]
-  onLaunched: (project: string, agent: string) => void | Promise<void>
+  onLaunched: (project: string, agent: string, directory: string) => void | Promise<void>
   onClose: () => void
 }) {
   const { preferences } = usePreferences()
@@ -28,6 +29,8 @@ export function NewSessionDialog({ open, project, initialAgent, availability, re
   const [command, setCommand] = useState('')
   const [pathError, setPathError] = useState('')
   const [checking, setChecking] = useState(false)
+  const [resolving, setResolving] = useState(false)
+  const [validated, setValidated] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState('')
@@ -36,7 +39,10 @@ export function NewSessionDialog({ open, project, initialAgent, availability, re
   useEffect(() => {
     generation.current++
     if (open) { setPath(project ?? ''); setAgent(cliAgent(initialAgent, preferences.defaultAgent)); setError(''); setCommand(''); setPathError(''); setCopied('') }
-    return () => { generation.current++ }
+    let active = true
+    setResolving(!!(open && project)); setValidated('')
+    if (open && project) projectService.Location(project).then(directory => { if (active) setPath(directory) }).catch(reason => { if (active) setError(String(reason)) }).finally(() => { if (active) setResolving(false) })
+    return () => { active = false; generation.current++ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, project, initialAgent])
 
@@ -44,23 +50,24 @@ export function NewSessionDialog({ open, project, initialAgent, availability, re
   // 入口，因此这里判定的结论就是启动时的结论。
   const trimmedPath = path.trim()
   useEffect(() => {
-    if (!open || !trimmedPath) { setCommand(''); setPathError(''); setChecking(false); return }
     const request = ++generation.current
+    setValidated(''); setCommand('')
+    if (!open || !trimmedPath || resolving) { setPathError(''); setChecking(false); return }
     setChecking(true)
     const timer = window.setTimeout(() => {
-      resumeService.PreviewCommand(trimmedPath, agent).then(value => {
+      resumeService.PreviewCommandAt(project || trimmedPath, trimmedPath, agent).then(value => {
         if (request !== generation.current) return
-        setCommand(value); setPathError(''); setChecking(false)
+        setCommand(value); setValidated(`${trimmedPath}\n${agent}`); setPathError(''); setChecking(false)
       }).catch(reason => {
         if (request !== generation.current) return
         setCommand(''); setPathError(String(reason)); setChecking(false)
       })
     }, 250)
-    return () => clearTimeout(timer)
-  }, [open, trimmedPath, agent])
+    return () => { clearTimeout(timer); generation.current++ }
+  }, [open, trimmedPath, agent, project, resolving])
 
   const missing = missingCommand(availability, agent)
-  const blocked = !!pathError || checking
+  const blocked = !!pathError || checking || resolving || validated !== `${trimmedPath}\n${agent}`
 
   const browse = async () => {
     if (pending.current) return
@@ -84,7 +91,7 @@ export function NewSessionDialog({ open, project, initialAgent, availability, re
   const submit = async () => {
     if (pending.current || !trimmedPath || blocked) return
     pending.current = true; setBusy(true); setError('')
-    try { await onLaunched(trimmedPath, agent); onClose() }
+    try { await onLaunched(project || trimmedPath, agent, trimmedPath); onClose() }
     catch (reason) { setError(String(reason)) }
     finally { pending.current = false; setBusy(false) }
   }
@@ -106,10 +113,11 @@ export function NewSessionDialog({ open, project, initialAgent, availability, re
     <div className="ad-form">
       <Field label="工作目录" required validationMessage={pathError} validationState={pathError ? 'error' : 'none'}>
         <div className="ad-form-row">
-          <Input aria-label="工作目录" value={path} readOnly={!!project} disabled={busy} onChange={(_, data) => setPath(data.value)} style={{ flex: 1, minWidth: 0 }} />
-          {!project ? <Button disabled={busy} onClick={() => void browse()}>浏览…</Button> : null}
+          <Input aria-label="工作目录" value={path} disabled={busy || resolving} onChange={(_, data) => setPath(data.value)} style={{ flex: 1, minWidth: 0 }} />
+          <Button disabled={busy || resolving} onClick={() => void browse()}>更改目录…</Button>
         </div>
       </Field>
+      {project ? <p className="ad-form-note">工作目录已解析为项目的实际位置。更改目录仅用于本次新建会话，不保存位置关联。</p> : null}
       {hints ? <div className="ad-recent">
         <span className="ad-recent-label">最近使用</span>
         {recent.filter(dir => dir.toLowerCase() !== trimmedPath.toLowerCase()).map(dir => (

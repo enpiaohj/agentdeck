@@ -131,14 +131,14 @@ func TestList(t *testing.T) {
 	}
 	want := `cd '/work/it'\''s' && codex resume 01a0bdc9-b5fd-7e63-9658-68bc8dce5ecd`
 	if runtime.GOOS == "windows" {
-		want = `Set-Location -LiteralPath '/work/it''s'; codex resume 01a0bdc9-b5fd-7e63-9658-68bc8dce5ecd`
+		want = `Set-Location -LiteralPath '/work/it''s' -ErrorAction Stop; codex resume 01a0bdc9-b5fd-7e63-9658-68bc8dce5ecd`
 	}
 	if cx.Resume != want {
 		t.Fatalf("resume %q", cx.Resume)
 	}
 	want = "cd '/work/app' && claude --resume 11111111-2222-3333-4444-555555555555"
 	if runtime.GOOS == "windows" {
-		want = "Set-Location -LiteralPath '/work/app'; claude --resume 11111111-2222-3333-4444-555555555555"
+		want = "Set-Location -LiteralPath '/work/app' -ErrorAction Stop; claude --resume 11111111-2222-3333-4444-555555555555"
 	}
 	if cc.Resume != want {
 		t.Fatalf("resume %q", cc.Resume)
@@ -234,6 +234,26 @@ func TestResumeCommand(t *testing.T) {
 	}
 	if ResumeCommand("goose", "abc", "/tmp") != "" {
 		t.Fatal("unknown agent")
+	}
+}
+
+func TestResumeCommandAt(t *testing.T) {
+	codex := Session{Agent: "codex", ID: "abc", Cwd: `/old/app`}
+	moved := `/new/app`
+	got := ResumeCommandAt(codex, moved)
+	if !strings.Contains(got, "--cd") || !strings.Contains(got, moved) {
+		t.Fatalf("codex 跨目录缺少 --cd: %q", got)
+	}
+	if same := ResumeCommandAt(codex, codex.Cwd); strings.Contains(same, "--cd") {
+		t.Fatalf("codex 同目录不应追加 --cd: %q", same)
+	}
+	claude := Session{Agent: "claude", ID: "abc", Cwd: `/old/app`}
+	if got := ResumeCommandAt(claude, moved); strings.Contains(got, "--cd") {
+		t.Fatalf("--cd 只用于 codex: %q", got)
+	}
+	quoted := ResumeCommandAt(Session{Agent: "codex", ID: "abc", Cwd: `/old/app`}, `/new/it's`)
+	if !strings.Contains(quoted, `--cd `) || strings.Count(quoted, "'") < 4 {
+		t.Fatalf("含单引号的目录未转义: %q", quoted)
 	}
 }
 

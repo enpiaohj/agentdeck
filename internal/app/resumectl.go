@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,16 +18,18 @@ type ResumeService struct{ a *App }
 
 // Command 返回恢复命令原文(空串 = 该会话不可恢复,前端标「仅可查看历史」)。
 func (s *ResumeService) Command(key string) (string, error) {
-	_, byKey, ms := s.a.snapshot()
-	sess, ok := byKey[key]
-	if !ok {
-		return "", fmt.Errorf("会话不存在: %s", key)
-	}
-	cmd := sessionResume(sess)
-	if cmd == "" {
+	_, byKey, _ := s.a.snapshot()
+	if sess, ok := byKey[key]; ok && sessionResume(sess) == "" {
 		return "", nil
 	}
-	return cmd + resumeName(sess, ms[s.a.markKey(key)].Title), nil
+	preview, err := s.Prepare(key, "")
+	if err != nil {
+		return "", err
+	}
+	if preview.NeedsLocation && preview.Command == "" {
+		return "", fmt.Errorf("项目位置不可用，请选择新项目位置")
+	}
+	return preview.Command, nil
 }
 
 // resumeName 是恢复命令里把 AgentDeck 的会话名交给 agent CLI 的那一段。
@@ -91,15 +94,40 @@ func (s *ResumeService) CopyToClipboard(key string) error {
 // agent 为空时先取项目平台，再按可启动的本机会话统计回退；无记录时用 claude。
 // 返回的错误自解释，与 OpenInTerminal 同一套措辞（前端不套前缀）。
 func (s *ResumeService) NewSession(project, agent string) error {
-	dir, err := existingDir(project)
+	dir, err := s.projectDirectory(project, "")
 	if err != nil {
 		return err
 	}
-	agent, err = s.resolveAgent(dir, agent)
+	agent, err = s.resolveAgent(projects.Normalize(project), agent)
 	if err != nil {
 		return err
 	}
 	return s.launchInTerminal(dir, newSessionScript(dir, cliCommand(agent)))
+}
+
+// NewSessionAt 使用已明确选择的目录，不对目标再次应用位置关联。
+func (s *ResumeService) NewSessionAt(project, target, agent string) error {
+	dir, err := existingDir(target)
+	if err != nil {
+		return err
+	}
+	agent, err = s.resolveAgent(projects.Normalize(project), agent)
+	if err != nil {
+		return err
+	}
+	return s.launchInTerminal(dir, newSessionScript(dir, cliCommand(agent)))
+}
+
+func (s *ResumeService) PreviewCommandAt(project, target, agent string) (string, error) {
+	dir, err := existingDir(target)
+	if err != nil {
+		return "", err
+	}
+	agent, err = s.resolveAgent(projects.Normalize(project), agent)
+	if err != nil {
+		return "", err
+	}
+	return newSessionScript(dir, cliCommand(agent)), nil
 }
 
 // resolveAgent 定下这次要启动谁：显式指定 > 项目保存的默认智能体 > 本机会话
@@ -160,11 +188,11 @@ func (s *ResumeService) Available() []CliAvailability {
 // 校验与 NewSession 完全一致（含目录必须已存在）：预览说能开、真开却失败，
 // 是比没有预览更坏的结果，所以这条路径不做任何放宽。
 func (s *ResumeService) PreviewCommand(project, agent string) (string, error) {
-	dir, err := existingDir(project)
+	dir, err := s.projectDirectory(project, "")
 	if err != nil {
 		return "", err
 	}
-	agent, err = s.resolveAgent(dir, agent)
+	agent, err = s.resolveAgent(projects.Normalize(project), agent)
 	if err != nil {
 		return "", err
 	}
@@ -267,6 +295,27 @@ func quotePowerShellPath(p string) string {
 // 因为其中一条是「终端已经开出来了,只是附带动作失败」,扣「操作失败」的
 // 帽子与事实相反。
 func (s *ResumeService) OpenInTerminal(key string) error {
+	return s.OpenAt(key, "")
+}
+
+// ResumeOpenResult 区分终端启动成功与附带名称同步警告，避免用户重试时重复启动。
+type ResumeOpenResult struct {
+	Warning string `json:"warning"`
+}
+
+type resumeStartedError struct{ error }
+
+func (s *ResumeService) OpenAtResult(key, override string) (ResumeOpenResult, error) {
+	err := s.OpenAt(key, override)
+	var started *resumeStartedError
+	if errors.As(err, &started) {
+		return ResumeOpenResult{Warning: started.Error()}, nil
+	}
+	return ResumeOpenResult{}, err
+}
+
+// OpenAt 支持仅本次指定目录，执行前重新校验，不回退至其他位置。
+func (s *ResumeService) OpenAt(key, override string) error {
 	_, byKey, ms := s.a.snapshot()
 	sess, ok := byKey[key]
 	if !ok {
@@ -275,13 +324,14 @@ func (s *ResumeService) OpenInTerminal(key string) error {
 	if sess.WSL != "" {
 		return fmt.Errorf("WSL 会话请在 WSL 终端中手动执行恢复命令")
 	}
-	cmd, err := s.Command(key)
+	preview, err := s.Prepare(key, override)
 	if err != nil {
 		return err
 	}
-	if cmd == "" {
-		return fmt.Errorf("该会话不可恢复,仅可查看历史")
+	if preview.NeedsLocation {
+		return fmt.Errorf("项目位置不可用，请选择新的项目目录")
 	}
+	cmd := preview.Command
 	// shell 明确定义在设置里，解析失败要在任何附带动作之前报出来：不能先
 	// 改了 Codex 原生名再因为终端起不来而整件事半途而废。
 	shellExe, err := s.a.shellExe()
@@ -297,7 +347,10 @@ func (s *ResumeService) OpenInTerminal(key string) error {
 		nameErr = s.a.codexName(sess.ID, title)
 		renamed = nameErr == nil
 	}
-	name, args := terminalCommand(sess.Cwd, cmd, shellExe)
+	if _, err := existingDir(preview.Directory); err != nil {
+		return err
+	}
+	name, args := terminalCommand(preview.Directory, cmd, shellExe)
 	run := s.a.cfg.Runner
 	if run == nil {
 		run = terminalLauncher()
@@ -312,7 +365,7 @@ func (s *ResumeService) OpenInTerminal(key string) error {
 	if nameErr != nil {
 		// 只能说「可能」:没收到答复不等于没写成功(codex 可能已经落盘,只是
 		// 我们没读到那一行),字面断言「仍是旧名」会把不确定说成事实。
-		return fmt.Errorf("已在终端中打开会话，但同步 Codex 原生名称失败（CLI 里可能仍是旧名）：%w", nameErr)
+		return &resumeStartedError{fmt.Errorf("已在终端中打开会话，但同步 Codex 原生名称失败（命令行工具中可能仍显示原名称）：%w", nameErr)}
 	}
 	return nil
 }
@@ -335,6 +388,9 @@ func terminalLauncher() func(name string, args ...string) error {
 func (s *ResumeService) launchInTerminal(dir, script string) error {
 	shellExe, err := s.a.shellExe()
 	if err != nil {
+		return err
+	}
+	if _, err := existingDir(dir); err != nil {
 		return err
 	}
 	name, args := terminalCommand(dir, script, shellExe)

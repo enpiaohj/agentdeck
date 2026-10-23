@@ -1469,6 +1469,21 @@ var safeOmpProfile = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 // folder, or "" for an id that isn't plain.
 func ResumeCommand(agent, id, cwd string) string { return resumeCommand("", agent, id, cwd, "") }
 
+// ResumeCommandAt 是 AgentDeck 的位置关联入口：重新构造命令并保留 OMP profile，
+// 不替换已有命令字符串，也不修改原会话的 cwd 或上游记录。
+func ResumeCommandAt(s Session, cwd string) string {
+	command := resumeCommand(s.WSL, s.Agent, s.ID, cwd, s.Path)
+	// AgentDeck：Codex 跨目录恢复必须显式覆盖会话记录中的原工作目录。
+	if command != "" && s.Agent == "codex" && s.WSL == "" && cwd != "" && !strings.EqualFold(s.Cwd, cwd) {
+		quoted := shellQuote(cwd)
+		if runtime.GOOS == "windows" {
+			quoted = "'" + strings.ReplaceAll(cwd, "'", "''") + "'"
+		}
+		command += " --cd " + quoted
+	}
+	return command
+}
+
 // resumeCommand is ResumeCommand for a session in a WSL distro too, when
 // distro is set: see wslResume.
 func resumeCommand(distro, agent, id, cwd, path string) string {
@@ -1521,7 +1536,7 @@ func resumeCommand(distro, agent, id, cwd, path string) string {
 		return run
 	}
 	if runtime.GOOS == "windows" {
-		return "Set-Location -LiteralPath '" + strings.ReplaceAll(cwd, "'", "''") + "'; " + run
+		return "Set-Location -LiteralPath '" + strings.ReplaceAll(cwd, "'", "''") + "' -ErrorAction Stop; " + run
 	}
 	return "cd " + shellQuote(cwd) + " && " + run
 }

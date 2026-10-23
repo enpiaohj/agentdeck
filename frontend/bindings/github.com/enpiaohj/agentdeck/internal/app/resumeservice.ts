@@ -31,6 +31,10 @@ export function Command(key: string): $CancellablePromise<string> {
     return $Call.ByID(611334482, key);
 }
 
+export function CopyAt(key: string, override: string): $CancellablePromise<void> {
+    return $Call.ByID(293918737, key, override);
+}
+
 /**
  * CopyToClipboard 复制恢复命令。
  */
@@ -64,6 +68,26 @@ export function NewSession(project: string, agent: string): $CancellablePromise<
 }
 
 /**
+ * NewSessionAt 使用已明确选择的目录，不对目标再次应用位置关联。
+ */
+export function NewSessionAt(project: string, target: string, agent: string): $CancellablePromise<void> {
+    return $Call.ByID(4081785990, project, target, agent);
+}
+
+/**
+ * OpenAt 支持仅本次指定目录，执行前重新校验，不回退至其他位置。
+ */
+export function OpenAt(key: string, override: string): $CancellablePromise<void> {
+    return $Call.ByID(1660496100, key, override);
+}
+
+export function OpenAtResult(key: string, override: string): $CancellablePromise<$models.ResumeOpenResult> {
+    return $Call.ByID(3460876605, key, override).then(($result: any) => {
+        return $$createType2($result);
+    });
+}
+
+/**
  * OpenInTerminal 在终端里打开会话原工作目录并执行恢复命令(Windows 上
  * 直接启动 wt.exe / powershell.exe,恢复命令经 -EncodedCommand 交付,
  * 见 terminalCommand)。WSL 会话不支持直开——只提供复制。
@@ -77,6 +101,15 @@ export function OpenInTerminal(key: string): $CancellablePromise<void> {
 }
 
 /**
+ * Prepare 与执行共用最终目录和命令构造；不保存关联，也不启动进程。
+ */
+export function Prepare(key: string, override: string): $CancellablePromise<$models.ResumePreview> {
+    return $Call.ByID(1343646076, key, override).then(($result: any) => {
+        return $$createType3($result);
+    });
+}
+
+/**
  * PreviewCommand 返回新会话会交给终端的命令原文，不启动任何进程。
  * 终端启动失败时前端可以用它做「复制命令」兜底。
  * 
@@ -87,6 +120,12 @@ export function PreviewCommand(project: string, agent: string): $CancellableProm
     return $Call.ByID(3382995844, project, agent);
 }
 
+export function PreviewCommandAt(project: string, target: string, agent: string): $CancellablePromise<string> {
+    return $Call.ByID(1901497713, project, target, agent);
+}
+
 // Private type creation functions
 const $$createType0 = $models.CliAvailability.createFrom;
 const $$createType1 = $Create.Array($$createType0);
+const $$createType2 = $models.ResumeOpenResult.createFrom;
+const $$createType3 = $models.ResumePreview.createFrom;

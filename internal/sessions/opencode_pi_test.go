@@ -78,7 +78,7 @@ func checkOpenCode(t *testing.T, ss []Session) {
 	}
 	want := "cd '/work/oc' && opencode --session " + ocMain
 	if runtime.GOOS == "windows" {
-		want = "Set-Location -LiteralPath '/work/oc'; opencode --session " + ocMain
+		want = "Set-Location -LiteralPath '/work/oc' -ErrorAction Stop; opencode --session " + ocMain
 	}
 	if oc.Resume != want {
 		t.Fatalf("resume %q", oc.Resume)
@@ -228,7 +228,7 @@ func TestPi(t *testing.T) {
 	}
 	want := "cd '/work/pi' && pi --session " + piFirst
 	if runtime.GOOS == "windows" {
-		want = "Set-Location -LiteralPath '/work/pi'; pi --session " + piFirst
+		want = "Set-Location -LiteralPath '/work/pi' -ErrorAction Stop; pi --session " + piFirst
 	}
 	if p.Resume != want {
 		t.Fatalf("resume %q", p.Resume)

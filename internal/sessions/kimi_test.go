@@ -114,7 +114,7 @@ func TestKimiCodeSessions(t *testing.T) {
 	}
 	want := "cd '/work/kimi' && kimi --session " + kimiEarly
 	if runtime.GOOS == "windows" {
-		want = "Set-Location -LiteralPath '/work/kimi'; kimi --session " + kimiEarly
+		want = "Set-Location -LiteralPath '/work/kimi' -ErrorAction Stop; kimi --session " + kimiEarly
 	}
 	if e.Resume != want {
 		t.Fatalf("early resume %q", e.Resume)
@@ -153,7 +153,7 @@ func TestKimiCodeSessionFolderFromIndex(t *testing.T) {
 	}
 	want := "cd '/Users/me/Desktop/june' && kimi --session " + kimiJune
 	if runtime.GOOS == "windows" {
-		want = "Set-Location -LiteralPath '/Users/me/Desktop/june'; kimi --session " + kimiJune
+		want = "Set-Location -LiteralPath '/Users/me/Desktop/june' -ErrorAction Stop; kimi --session " + kimiJune
 	}
 	if j.Resume != want {
 		t.Fatalf("june resume %q", j.Resume)
