@@ -20,12 +20,12 @@ type updateInstaller struct {
 	current  string // 当前运行的可执行文件
 	package_ string // 已登记待落地的更新包
 	target   string // 新版本落地后的路径
-	retarget func(oldPath, newPath string)
+	retarget func(oldPath, newPath string) bool
 }
 
-// newUpdateInstaller 装配安装器。retarget 负责把自启动项改指向新路径；
-// 快捷方式由 updateinstall 自己处理。
-func newUpdateInstaller(retarget func(oldPath, newPath string)) *updateInstaller {
+// newUpdateInstaller 装配安装器。retarget 负责把自启动项改指向新路径并报告是否
+// 确认改完；快捷方式由 updateinstall 自己处理（见 handOver）。
+func newUpdateInstaller(retarget func(oldPath, newPath string) bool) *updateInstaller {
 	exe, err := os.Executable()
 	if err != nil {
 		// 定位不到自己就不提供应用内更新：装错地方比不装更糟。
@@ -77,12 +77,20 @@ func (i *updateInstaller) cleanupPrevious() {
 	if i == nil {
 		return
 	}
-	updateinstall.Cleanup(i.current, func(oldPath, newPath string) {
-		if i.retarget != nil {
-			i.retarget(oldPath, newPath)
-		}
-		updateinstall.RetargetShortcuts(oldPath, newPath)
-	})
+	updateinstall.Cleanup(i.current, i.handOver)
+}
+
+// handOver 把自启动项与快捷方式从 oldPath 改指向 newPath，返回是否确认改完。
+//
+// 两条时机都要用：退出的最后一步（落地后立刻改指向，否则下次从快捷方式启动的
+// 还是旧版本），以及新版本启动时的善后（退出的那一次可能没成功）。
+func (i *updateInstaller) handOver(oldPath, newPath string) bool {
+	ok := true
+	if i.retarget != nil {
+		ok = i.retarget(oldPath, newPath)
+	}
+	updateinstall.RetargetShortcuts(oldPath, newPath)
+	return ok && !updateinstall.ShortcutsPointingTo(oldPath)
 }
 
 // launch 启动指定程序。返回的错误自解释，供重启路径原样展示。

@@ -17,6 +17,29 @@ type State struct {
 	Notes       string    `json:"notes,omitempty"`
 	PageURL     string    `json:"page_url,omitempty"`
 	PublishedAt time.Time `json:"published_at,omitempty"`
+
+	// 资产信息也要落盘：恢复出来的结论必须能直接下载。只存版本号的话，
+	// 「检查过之后当天再打开应用」就会拿到一个不带下载地址的结论，界面上
+	// 按钮可点、点下去必然失败（曾如此）。旧版本写下的 check.json 没有这些
+	// 字段，读回来是空值，此时下载会明确要求重新检查。
+	ExeName   string `json:"exe_name,omitempty"`
+	ExeURL    string `json:"exe_url,omitempty"`
+	ExeSize   int64  `json:"exe_size,omitempty"`
+	ExeDigest string `json:"exe_digest,omitempty"`
+	SumsURL   string `json:"sums_url,omitempty"`
+}
+
+// Assets 把落盘的资产信息还原成可下载的资产；没有下载地址时返回 false。
+func (s State) Assets() (Asset, Asset, bool) {
+	if s.ExeURL == "" || s.ExeName == "" {
+		return Asset{}, Asset{}, false
+	}
+	exe := Asset{Name: s.ExeName, URL: s.ExeURL, Size: s.ExeSize, Digest: s.ExeDigest}
+	var sums Asset
+	if s.SumsURL != "" {
+		sums = Asset{Name: SumsAsset, URL: s.SumsURL}
+	}
+	return exe, sums, true
 }
 
 // StateDue 判断距上次检查是否已超过 interval。零值（从未检查）视为到期。

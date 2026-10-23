@@ -36,7 +36,15 @@ type updateState struct {
 	targetPath string
 	// errMsg 是上一次操作的错误说明。
 	errMsg string
+	// cancel 中止正在进行的下载；只在 downloading 为真时有值。
+	cancel func()
+	// canceled 表示这次下载是被用户取消的，不算失败（不报错）。
+	canceled bool
 }
+
+// errDownloadCanceled 是用户主动取消下载时的返回值：界面据此回到「有新版本」
+// 状态，而不是把它当成一次错误。
+var errDownloadCanceled = errors.New("已取消下载")
 
 // UpdateService 提供「检查更新 → 下载校验 → 退出时落地 → 重启」。
 //
@@ -199,6 +207,7 @@ func (a *App) restoreUpdateState(state update.State) {
 	if state.CheckedAt.IsZero() {
 		return
 	}
+	exe, sums, _ := state.Assets()
 	a.updateMu.Lock()
 	defer a.updateMu.Unlock()
 	a.update.result = update.Result{
@@ -209,6 +218,8 @@ func (a *App) restoreUpdateState(state update.State) {
 		PageURL:     state.PageURL,
 		PublishedAt: state.PublishedAt,
 		CheckedAt:   state.CheckedAt,
+		ExeAsset:    exe,
+		SumsAsset:   sums,
 	}
 	a.update.checked = true
 }
@@ -240,6 +251,9 @@ func (s *UpdateService) check(ctx context.Context) (UpdateView, error) {
 
 // saveUpdateState 记录本次检查，供下次启动的 24 小时判断使用。
 //
+// 连同资产地址一起记：恢复出来的结论要能直接下载，否则「检查过之后当天再打开
+// 应用」拿到的是一个点下去必然失败的「有新版本」（见 restoreUpdateState）。
+//
 // 写失败不外泄：这个文件只影响「下次是否再查一次」，丢了最坏是多查一次，
 // 与本次已经得到的结论无关，不该在界面上报一个错。
 func (a *App) saveUpdateState(result update.Result) {
@@ -251,6 +265,11 @@ func (a *App) saveUpdateState(result update.Result) {
 		Notes:       result.Notes,
 		PageURL:     result.PageURL,
 		PublishedAt: result.PublishedAt,
+		ExeName:     result.ExeAsset.Name,
+		ExeURL:      result.ExeAsset.URL,
+		ExeSize:     result.ExeAsset.Size,
+		ExeDigest:   result.ExeAsset.Digest,
+		SumsURL:     result.SumsAsset.URL,
 	})
 }
 
@@ -286,8 +305,13 @@ func (s *UpdateService) Download() (UpdateView, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), update.DownloadTimeout)
 	defer cancel()
+	a.updateMu.Lock()
+	a.update.cancel = cancel
+	a.update.canceled = false
+	a.updateMu.Unlock()
 	client := update.Client{Version: a.Version()}
-	dir, err := client.Download(ctx, result, a.updateDir(), func(done, total int64) {
+	var dir string
+	exePath, err := client.Download(ctx, result, a.updateDir(), func(done, total int64) {
 		if total <= 0 {
 			return
 		}
@@ -299,16 +323,24 @@ func (s *UpdateService) Download() (UpdateView, error) {
 	})
 
 	if err == nil {
+		dir = filepath.Dir(exePath)
 		// 登记必须在下载结果之外单独报错：可写性检查失败（程序装在 Program
 		// Files 之类只读目录）是用户最可能遇到的情况，得说清楚下一步做什么。
-		dir, err = a.stageUpdate(dir, result)
+		_, err = a.stageUpdate(exePath)
 	}
 
 	a.updateMu.Lock()
+	a.update.cancel = nil
 	a.update.downloading = false
 	if err != nil {
 		a.update.errMsg = err.Error()
 		a.update.progress = 0
+		if a.update.canceled {
+			// 用户主动取消：不是失败，退回「有新版本」状态。
+			a.update.canceled = false
+			a.update.errMsg = ""
+			err = errDownloadCanceled
+		}
 	} else {
 		a.update.dir = dir
 		a.update.errMsg = ""
@@ -323,24 +355,47 @@ func (s *UpdateService) Download() (UpdateView, error) {
 	return view, nil
 }
 
-// stageUpdate 从解压目录里取出 exe 并登记为待落地，返回解压目录。
+// CancelDownload 中止正在进行的下载。
 //
-// 更新包里的 exe 名与版本一致（AgentDeck-vX.Y.Z-win-x64.exe），落地后的名字
-// 由 StageUpdate 决定：当前文件名是发布产物命名时跟着版本走，否则原地替换。
-func (a *App) stageUpdate(dir string, result update.Result) (string, error) {
-	exe := filepath.Join(dir, result.ExeAsset.Name)
-	if info, err := os.Stat(exe); err != nil || info.IsDir() {
-		return dir, fmt.Errorf("更新包中缺少 %s，请重试或到发布页手动更新", result.ExeAsset.Name)
+// 真正收尾的是另一次 Download 调用：它拿到 context canceled 之后按「用户取消」
+// 处理，不报错、退回「有新版本」。这里只负责取消并立刻把进度清零推给界面。
+func (s *UpdateService) CancelDownload() (UpdateView, error) {
+	a := s.a
+	a.updateMu.Lock()
+	cancel, downloading := a.update.cancel, a.update.downloading
+	if !downloading || cancel == nil {
+		view := a.updateViewLocked()
+		a.updateMu.Unlock()
+		return view, errors.New("当前没有正在进行的下载")
 	}
-	target, err := a.cfg.StageUpdate(exe)
+	a.update.canceled = true
+	a.update.progress = 0
+	view := a.updateViewLocked()
+	a.updateMu.Unlock()
+	cancel()
+	a.emit(EventUpdateStatus, view)
+	return view, nil
+}
+
+// stageUpdate 把已校验的更新包登记为待落地，返回落地后的目标路径。
+//
+// 更新包本身就是可执行文件（名字与版本一致：AgentDeck-vX.Y.Z-win-x64.exe），
+// 不再经 ZIP 中转，所以这里没有解压这一步。落地后的名字由 StageUpdate 决定：
+// 当前文件名是发布产物命名时跟着版本走，否则原地替换。
+func (a *App) stageUpdate(packagePath string) (string, error) {
+	if info, err := os.Stat(packagePath); err != nil || info.IsDir() {
+		return "", fmt.Errorf("更新包不可用（%s），请重试或到发布页手动更新", filepath.Base(packagePath))
+	}
+	target, err := a.cfg.StageUpdate(packagePath)
 	if err != nil {
-		return dir, err
+		return "", err
 	}
 	a.updateMu.Lock()
-	a.update.packagePath = exe
+	a.update.dir = filepath.Dir(packagePath)
+	a.update.packagePath = packagePath
 	a.update.targetPath = target
 	a.updateMu.Unlock()
-	return dir, nil
+	return target, nil
 }
 
 // SetUpdateInstaller 接入应用内更新：stage 登记已校验的更新包并返回落地路径，

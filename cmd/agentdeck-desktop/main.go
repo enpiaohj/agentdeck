@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -77,10 +78,6 @@ func main() {
 	trayAvailable := iconErr == nil && len(trayIcon) > 0
 	startup := desktopStartup()
 	installer := newUpdateInstaller(startup.retarget)
-	// 上次更新是否落地失败：只提示一次，读后即清。
-	if installer != nil {
-		updateFailed = updateinstall.ConsumeFailureMarker(installer.current)
-	}
 	var lifecycle *desktopLifecycle
 	a, err := appkg.New(appkg.Config{
 		Emit: e.Emit,
@@ -125,6 +122,15 @@ func main() {
 			os.Exit(0)
 		}
 		time.Sleep(200 * time.Millisecond)
+	}
+
+	// 上次更新是否落地失败：只提示一次，读后即清。
+	//
+	// 必须在取得单实例所有权之后：开机自启与用户双击同时发生时，后启动的这个
+	// 实例会在单实例判定处 os.Exit(0)（defer 不执行）；标记若先被它消费掉，
+	// 真正活下来的那个实例就读不到，落地失败对用户就变成静默的。
+	if installer != nil {
+		updateFailed = updateinstall.ConsumeFailureMarker(installer.current)
 	}
 
 	// 启动时善后上一次更新：清临时文件与回滚副本，文件名变过的更新则确认
@@ -274,6 +280,14 @@ func finalize(installer *updateInstaller) {
 		return
 	}
 	exe := installer.Finish()
+	// 落地后文件名可能变了（发布产物命名时跟着版本走）。无论是否立刻重启，都要
+	// 把启动项与快捷方式改指向新文件：只退出不重启的用户，下次从快捷方式启动的
+	// 否则还是旧版本，更新等于没做——而界面说的是「下次启动即为新版本」。
+	// 新版本自己启动时也会做一次（Cleanup），这里重复执行是幂等的。
+	landedElsewhere := !strings.EqualFold(exe, installer.current)
+	if landedElsewhere {
+		installer.handOver(installer.current, exe)
+	}
 	restart := restartPending.Load()
 	if !restart {
 		// 用户只是正常退出：更新已经落地，下次启动就是新版本。
@@ -286,5 +300,14 @@ func finalize(installer *updateInstaller) {
 	}
 	if err := launch(exe, arg); err != nil {
 		fmt.Fprintln(os.Stderr, err)
+		// 已经退出，界面报不了错，只能留下标记让下次启动提示一次，否则用户看到
+		// 的是「点了重启并安装，程序关掉就没再起来」。
+		if landedElsewhere {
+			// 新版本起不来就把启动项改回原路径，别留下一个点不开的快捷方式。
+			installer.handOver(exe, installer.current)
+			updateinstall.MarkFailed(installer.current)
+			return
+		}
+		updateinstall.MarkFailed(updateinstall.UsablePath(installer.current))
 	}
 }

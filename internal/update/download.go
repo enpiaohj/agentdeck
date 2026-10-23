@@ -1,7 +1,6 @@
 package update
 
 import (
-	"archive/zip"
 	"bufio"
 	"context"
 	"crypto/sha256"
@@ -10,79 +9,90 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
-// maxDownload 是单个资产的下载上限。正式包不到 20 MB，留足余量同时挡住
+// maxDownload 是单个资产的下载上限。正式包不到 25 MB，留足余量同时挡住
 // 异常响应把磁盘写满。
 const maxDownload = 256 << 20
+
+// stallTimeout 是「一段时间内没有任何数据到达」的上限。
+//
+// 与「整次下载的总时限」不同：慢而稳定的链路不会被误杀，只有真的卡住才中断。
+// 曾是变量以便测试调小；正常运行不要改它。
+var stallTimeout = 45 * time.Second
 
 // Progress 是下载进度回调：done 为已下载字节，total 为总字节（未知时为 0）。
 type Progress func(done, total int64)
 
-// Download 把 Release 分发包下载到 dir 并解压，返回解压后的目录。
+// Download 下载并校验新版本的可执行文件，返回它在 dir 下的完整路径。
 //
-// 步骤：取 SHA256SUMS → 下载分发 ZIP → 比对哈希 → 解压到 dir/vX.Y.Z/。
-// 任何一步失败都不留下半成品：先写临时文件，校验通过才改名；解压目录
-// 最后一次性改名到位。
+// 只下载发布资产里那一个 exe：不经 ZIP 中转，因此不存在「下载 A 却按 B 校验」
+// 的可能（曾经正是如此——下载 exe 却比对 ZIP 的哈希，导致应用内更新 100% 失败）。
+// 校验优先用资产自带的 digest，没有时回退到 SHA256SUMS 里的同名行；大小也按
+// 发布记录核对。任何一步失败都不留半成品：先写 .part，全部通过才改名到位。
 func (c Client) Download(ctx context.Context, result Result, dir string, progress Progress) (string, error) {
 	if !result.Available {
 		return "", fmt.Errorf("没有可下载的新版本")
 	}
-	if result.ExeAsset.URL == "" || result.SumsAsset.URL == "" {
-		return "", fmt.Errorf("发布缺少分发文件或校验清单")
+	asset := result.ExeAsset
+	if asset.URL == "" || asset.Name == "" {
+		// 24 小时缓存里的检查结论不含资产地址（旧版本写入的 check.json 也没有）。
+		return "", fmt.Errorf("本地缓存的检查结果里没有下载地址，请先重新检查更新")
 	}
-	client := c.httpClient()
-	sums, err := c.fetchSums(ctx, client, result.SumsAsset.URL)
-	if err != nil {
-		return "", err
-	}
-	// 清单里记的是每个资产自身的哈希：ZIP 的哈希用于校验下载内容，
-	// exe 的哈希在解压后再比对一次（见 extract）。
-	zipName := strings.TrimSuffix(result.ExeAsset.Name, ".exe") + ".zip"
-	want, ok := sums[zipName]
-	if !ok {
-		return "", fmt.Errorf("校验清单里没有 %s", zipName)
+	want := asset.SHA256()
+	if want == "" {
+		sums, err := c.fetchSums(ctx, result.SumsAsset.URL)
+		if err != nil {
+			return "", fmt.Errorf("%w，无法校验下载内容", err)
+		}
+		value, ok := sums[asset.Name]
+		if !ok {
+			return "", fmt.Errorf("发布没有提供 %s 的 SHA-256，无法校验，已取消下载", asset.Name)
+		}
+		want = value
 	}
 
-	if err = os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("无法创建下载目录：%w", err)
 	}
-	zipPath := filepath.Join(dir, zipName+".part")
-	defer os.Remove(zipPath)
+	final := filepath.Join(dir, asset.Name)
+	staging := final + ".part"
+	defer os.Remove(staging)
 
-	got, err := c.downloadTo(ctx, client, result.ExeAsset.URL, zipPath, progress)
+	written, got, err := c.downloadTo(ctx, asset.URL, staging, asset.Size, progress)
 	if err != nil {
 		return "", err
+	}
+	if asset.Size > 0 && written != asset.Size {
+		return "", fmt.Errorf("下载的更新包大小与发布记录不一致（期望 %d 字节，实际 %d 字节），已丢弃", asset.Size, written)
 	}
 	if got != want {
-		return "", fmt.Errorf("下载文件的 SHA-256 与发布清单不一致（期望 %s，实际 %s），已丢弃", want, got)
+		return "", fmt.Errorf("下载的更新包未通过 SHA-256 校验（期望 %s，实际 %s），已丢弃", want, got)
 	}
-
-	final := filepath.Join(dir, zipName)
-	if err = os.Rename(zipPath, final); err != nil {
+	if err := os.Rename(staging, final); err != nil {
 		return "", fmt.Errorf("无法保存下载文件：%w", err)
 	}
-	out, err := extract(final, dir, fmt.Sprintf("AgentDeck-v%s-win-x64", result.Latest), result, sums)
-	if err != nil {
-		os.Remove(final)
-		return "", err
-	}
-	return out, nil
+	return final, nil
 }
 
 // fetchSums 读取 SHA256SUMS，返回「文件名 → 小写十六进制哈希」。
 // 清单格式与 sha256sum 一致：<hash> *<name>。
-func (c Client) fetchSums(ctx context.Context, client *http.Client, url string) (map[string]string, error) {
+//
+// 只在资产没有自带 digest 时使用（发布早于 GitHub 提供 digest 字段）。
+func (c Client) fetchSums(ctx context.Context, url string) (map[string]string, error) {
+	if url == "" {
+		return nil, fmt.Errorf("发布没有提供校验清单")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", userAgentPrefix+firstNonEmpty(c.Version, "dev"))
-	resp, err := client.Do(req)
+	resp, err := c.checkClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("无法下载校验清单：%w", err)
 	}
@@ -116,49 +126,72 @@ func (c Client) fetchSums(ctx context.Context, client *http.Client, url string) 
 	return sums, nil
 }
 
-// downloadTo 下载 url 到 dest，返回内容的 SHA-256。边写边算，不把整个
-// 文件读进内存。
-func (c Client) downloadTo(ctx context.Context, client *http.Client, url, dest string, progress Progress) (string, error) {
+// downloadTo 下载 url 到 dest，返回写入字节数与内容的 SHA-256。
+//
+// 边写边算，不把整个文件读进内存。expected 是发布记录里的字节数，仅在响应没有
+// Content-Length 时用于进度显示。
+func (c Client) downloadTo(ctx context.Context, url, dest string, expected int64, progress Progress) (int64, string, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return "", err
+		return 0, "", err
 	}
 	req.Header.Set("User-Agent", userAgentPrefix+firstNonEmpty(c.Version, "dev"))
-	resp, err := client.Do(req)
+	resp, err := c.downloadClient().Do(req)
 	if err != nil {
-		return "", fmt.Errorf("无法下载更新：%w", err)
+		return 0, "", fmt.Errorf("无法下载更新：%w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("下载更新失败：HTTP %s", resp.Status)
+		return 0, "", fmt.Errorf("下载更新失败：HTTP %s", resp.Status)
 	}
-	if resp.ContentLength > maxDownload {
-		return "", fmt.Errorf("分发包大小异常（%d 字节），已拒绝下载", resp.ContentLength)
+	total := resp.ContentLength
+	if total <= 0 {
+		total = expected
 	}
+	if total > maxDownload {
+		return 0, "", fmt.Errorf("分发包大小异常（%d 字节），已拒绝下载", total)
+	}
+
 	file, err := os.Create(dest)
 	if err != nil {
-		return "", fmt.Errorf("无法写入下载文件：%w", err)
+		return 0, "", fmt.Errorf("无法写入下载文件：%w", err)
+	}
+	// 停滞看门狗：每收到一段数据就重置，真的卡住时才取消请求，并给出可执行的
+	// 说明，而不是把 context canceled 原样抛给用户。
+	var stalled atomic.Bool
+	watchdog := time.AfterFunc(stallTimeout, func() {
+		stalled.Store(true)
+		cancel()
+	})
+	reader := &progressReader{
+		reader:   io.LimitReader(resp.Body, maxDownload+1),
+		total:    total,
+		progress: progress,
+		tick:     func() { watchdog.Reset(stallTimeout) },
 	}
 	digest := sha256.New()
-	written, copyErr := io.Copy(io.MultiWriter(file, digest), &progressReader{
-		reader:   io.LimitReader(resp.Body, maxDownload+1),
-		total:    resp.ContentLength,
-		progress: progress,
-	})
+	written, copyErr := io.Copy(io.MultiWriter(file, digest), reader)
+	watchdog.Stop()
 	closeErr := file.Close()
 	if copyErr != nil {
-		return "", fmt.Errorf("下载中断：%w", copyErr)
+		if stalled.Load() {
+			return 0, "", fmt.Errorf("下载停滞超过 %s 没有任何数据，已中断；请稍后重试或到发布页手动下载", stallTimeout)
+		}
+		return 0, "", fmt.Errorf("下载中断：%w", copyErr)
 	}
 	if closeErr != nil {
-		return "", fmt.Errorf("保存下载文件失败：%w", closeErr)
+		return 0, "", fmt.Errorf("保存下载文件失败：%w", closeErr)
 	}
 	if written > maxDownload {
-		return "", fmt.Errorf("分发包超过 %d 字节上限，已拒绝保存", maxDownload)
+		return 0, "", fmt.Errorf("分发包超过 %d 字节上限，已拒绝保存", maxDownload)
 	}
-	return hex.EncodeToString(digest.Sum(nil)), nil
+	return written, hex.EncodeToString(digest.Sum(nil)), nil
 }
 
-// progressReader 汇报下载进度。进度回调按 128 KiB 节流，避免每读一次
+// progressReader 汇报下载进度并喂看门狗。进度回调按 128 KiB 节流，避免每读一次
 // 就跨进程推一次事件。
 type progressReader struct {
 	reader   io.Reader
@@ -166,10 +199,14 @@ type progressReader struct {
 	done     int64
 	last     int64
 	progress Progress
+	tick     func()
 }
 
 func (r *progressReader) Read(p []byte) (int, error) {
 	n, err := r.reader.Read(p)
+	if n > 0 && r.tick != nil {
+		r.tick()
+	}
 	r.done += int64(n)
 	if r.progress != nil && (r.done-r.last >= 128<<10 || err == io.EOF) {
 		r.last = r.done
@@ -178,104 +215,6 @@ func (r *progressReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// extract 解压分发 ZIP 到 dir/<root>/，返回该目录。
-//
-// 只接受以 expectedRoot 开头的条目，拒绝绝对路径、盘符与 ..：发布包由
-// 本项目生成，但下载内容一律当作不可信输入处理。
-func extract(zipPath, dir, expectedRoot string, result Result, sums map[string]string) (string, error) {
-	reader, err := zip.OpenReader(zipPath)
-	if err != nil {
-		return "", fmt.Errorf("下载的文件不是有效的 ZIP：%w", err)
-	}
-	defer reader.Close()
-
-	target := filepath.Join(dir, expectedRoot)
-	// 只清理本目录内、名字正是我们生成的那一个解压目录：不碰用户放在
-	// 下载目录里的其他东西。
-	if filepath.Dir(target) != filepath.Clean(dir) {
-		return "", fmt.Errorf("解压目标 %q 越出了下载目录", target)
-	}
-	staging := target + ".part"
-	if err = os.RemoveAll(staging); err != nil {
-		return "", fmt.Errorf("无法清理临时目录：%w", err)
-	}
-	defer os.RemoveAll(staging)
-
-	for _, entry := range reader.File {
-		if entry.FileInfo().IsDir() {
-			continue
-		}
-		name := path.Clean(strings.ReplaceAll(entry.Name, "\\", "/"))
-		if !strings.HasPrefix(name, expectedRoot+"/") {
-			return "", fmt.Errorf("分发包包含意外路径 %q，已停止解压", entry.Name)
-		}
-		rel := strings.TrimPrefix(name, expectedRoot+"/")
-		if rel == "" || strings.HasPrefix(rel, "../") || strings.Contains(rel, ":") {
-			return "", fmt.Errorf("分发包包含意外路径 %q，已停止解压", entry.Name)
-		}
-		if entry.UncompressedSize64 > maxDownload {
-			return "", fmt.Errorf("分发包内的文件过大：%s", entry.Name)
-		}
-		dest := filepath.Join(staging, filepath.FromSlash(rel))
-		if err = extractOne(entry, dest); err != nil {
-			return "", err
-		}
-	}
-
-	// 清单里记的是 exe 的哈希，用来确认解压出来的程序就是发布的那一个。
-	exePath := filepath.Join(staging, result.ExeAsset.Name)
-	got, err := hashFile(exePath)
-	if err != nil {
-		return "", fmt.Errorf("分发包内没有 %s：%w", result.ExeAsset.Name, err)
-	}
-	if want, ok := sums[result.ExeAsset.Name]; ok && got != want {
-		return "", fmt.Errorf("%s 的 SHA-256 与发布清单不一致，已丢弃", result.ExeAsset.Name)
-	}
-
-	os.RemoveAll(target)
-	if err = os.Rename(staging, target); err != nil {
-		return "", fmt.Errorf("无法完成解压：%w", err)
-	}
-	return target, nil
-}
-
-func extractOne(entry *zip.File, dest string) error {
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-		return fmt.Errorf("无法创建目录：%w", err)
-	}
-	src, err := entry.Open()
-	if err != nil {
-		return fmt.Errorf("无法读取分发包：%w", err)
-	}
-	defer src.Close()
-	// 0o755：解压出来的 exe 要能直接替换运行。
-	out, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755)
-	if err != nil {
-		return fmt.Errorf("无法写入 %s：%w", filepath.Base(dest), err)
-	}
-	if _, err = io.Copy(out, src); err != nil {
-		out.Close()
-		return fmt.Errorf("解压 %s 失败：%w", filepath.Base(dest), err)
-	}
-	if err = out.Close(); err != nil {
-		return fmt.Errorf("解压 %s 失败：%w", filepath.Base(dest), err)
-	}
-	return nil
-}
-
-func hashFile(path string) (string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-	digest := sha256.New()
-	if _, err = io.Copy(digest, file); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(digest.Sum(nil)), nil
-}
-
-// DownloadTimeout 是整次下载的上限。18 MB 的包在慢网络上也能完成，同时
+// DownloadTimeout 是整次下载的上限。20 MB 的包在慢网络上也能完成，同时
 // 避免请求无限期挂着。
 const DownloadTimeout = 10 * time.Minute

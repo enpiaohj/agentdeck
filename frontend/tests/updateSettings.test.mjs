@@ -113,3 +113,70 @@ test('重启成功后不写错误', async () => {
   assert.equal(called, 1)
   assert.equal(settings.getSnapshot().error, '')
 })
+
+test('取消下载不算失败：飞行中的那次下载以「已取消」结束也不报错', async () => {
+  let rejectDownload = null
+  const settings = createUpdateSettings({
+    Status: async () => view({ checked: true, latest: '1.1.0', available: true, downloadable: true }),
+    Download: () => new Promise((_, reject) => { rejectDownload = reject }),
+    CancelDownload: async () => view({ checked: true, latest: '1.1.0', available: true, downloadable: true }),
+  }, noEvents())
+  await settings.load()
+
+  const inflight = settings.download()
+  await settings.cancelDownload()
+  rejectDownload(new Error('已取消下载'))
+  await inflight
+
+  assert.equal(settings.getSnapshot().error, '')
+  assert.equal(settings.getSnapshot().view.available, true)
+  assert.equal(settings.getSnapshot().view.downloading, false)
+})
+
+test('取消下载后仍能重新下载（取消标志不残留）', async () => {
+  let rejectFirst = null
+  let attempts = 0
+  const settings = createUpdateSettings({
+    Status: async () => view({ checked: true, latest: '1.1.0', available: true, downloadable: true }),
+    Download: () => {
+      attempts++
+      if (attempts === 1) return new Promise((_, reject) => { rejectFirst = reject })
+      return Promise.resolve(view({ checked: true, latest: '1.1.0', available: true, ready_to_restart: true }))
+    },
+    CancelDownload: async () => view({ checked: true, latest: '1.1.0', available: true, downloadable: true }),
+  }, noEvents())
+  await settings.load()
+
+  const inflight = settings.download()
+  await settings.cancelDownload()
+  rejectFirst(new Error('已取消下载'))
+  await inflight
+
+  // 第二次失败必须是真失败：取消标志若残留，这里会把错误吞掉。
+  const settings2 = createUpdateSettings({
+    Status: async () => view({ checked: true, latest: '1.1.0', available: true, downloadable: true }),
+    Download: async () => { throw new Error('磁盘空间不足') },
+  }, noEvents())
+  await settings2.load()
+  await settings2.download()
+  assert.match(settings2.getSnapshot().error, /磁盘空间不足/)
+
+  await settings.download()
+  assert.equal(settings.getSnapshot().view.ready_to_restart, true)
+  assert.equal(settings.getSnapshot().error, '')
+})
+
+test('后端推送进度时不清掉本地错误', async () => {
+  const bus = events()
+  const settings = createUpdateSettings({
+    Status: async () => { throw new Error('后端未就绪') },
+  }, bus)
+  const stop = settings.watch()
+  await settings.load()
+  assert.match(settings.getSnapshot().error, /后端未就绪/)
+
+  bus.emit(view({ checked: true, downloading: true, progress: 0.5 }))
+  assert.equal(settings.getSnapshot().view.progress, 0.5)
+  assert.match(settings.getSnapshot().error, /后端未就绪/)
+  stop()
+})

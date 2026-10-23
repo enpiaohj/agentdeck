@@ -173,11 +173,13 @@ func ConsumeFailureMarker(current string) bool {
 }
 
 // Cleanup 在启动时善后上一次更新：清掉遗留的临时文件与回滚副本，文件名变过的
-// 更新则按标记删除旧文件。
+// 更新则确认启动项与快捷方式已改指向后删除旧文件。
 //
-// retarget 是「把指向旧路径的启动项与快捷方式改指向新路径」，可为 nil。它在这里
-// 再执行一次，是因为退出时那一步可能没成功；确认之后才删除旧文件。
-func Cleanup(current string, retarget func(oldPath, newPath string)) {
+// retarget 是「把指向旧路径的启动项与快捷方式改指向新路径」，返回是否确认改完；
+// 可为 nil，表示调用方没有改指向的能力——那时**不删旧文件**（留着旧文件只是浪费
+// 空间，删掉一个还有东西指着的文件会留下点不开的死链接）。它在这里再执行一次，
+// 是因为退出时那一步可能没成功。
+func Cleanup(current string, retarget func(oldPath, newPath string) bool) {
 	remove(current + BackupSuffix)
 	remove(current + StagingSuffix)
 
@@ -197,8 +199,9 @@ func Cleanup(current string, retarget func(oldPath, newPath string)) {
 		return
 	}
 	oldPath := filepath.Join(filepath.Dir(current), oldName)
-	if retarget != nil {
-		retarget(oldPath, current)
+	// 改指向没被确认、或还有快捷方式指着旧路径，就先不删：保留标记，下次启动再试。
+	if retarget == nil || !retarget(oldPath, current) || ShortcutsPointingTo(oldPath) {
+		return
 	}
 	if err = os.Remove(oldPath); err != nil {
 		// 旧进程可能还在退出途中：保留标记，下次启动再试。

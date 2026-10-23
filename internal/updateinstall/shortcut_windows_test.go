@@ -3,6 +3,7 @@
 package updateinstall
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -70,72 +71,41 @@ func TestRetargetLeavesUnrelatedShortcuts(t *testing.T) {
 	}
 }
 
+// 两个辅助函数同样走 withShell：COM 单元是线程本地状态，测试里不绑线程一样会
+// 偶发失败（表现为读回空路径、测试在整包并发跑时才红）。
 func createShortcut(t *testing.T, link, target string) bool {
 	t.Helper()
-	uninit, ok := comReady()
-	if !ok {
-		return false
-	}
-	defer uninit()
-	unknown, err := oleutil.CreateObject("WScript.Shell")
-	if err != nil {
-		return false
-	}
-	defer unknown.Release()
-	shell, err := unknown.QueryInterface(ole.IID_IDispatch)
-	if err != nil {
-		return false
-	}
-	defer shell.Release()
-	shortcut, err := oleutil.CallMethod(shell, "CreateShortcut", link)
-	if err != nil {
-		return false
-	}
-	dispatch := shortcut.ToIDispatch()
-	if dispatch == nil {
-		return false
-	}
-	defer dispatch.Release()
-	if _, err = oleutil.PutProperty(dispatch, "TargetPath", target); err != nil {
-		return false
-	}
-	_, _ = oleutil.PutProperty(dispatch, "WorkingDirectory", filepath.Dir(target))
-	_, err = oleutil.CallMethod(dispatch, "Save")
+	err := withShell(func(shell *ole.IDispatch) error {
+		shortcut, err := oleutil.CallMethod(shell, "CreateShortcut", link)
+		if err != nil {
+			return err
+		}
+		dispatch := shortcut.ToIDispatch()
+		if dispatch == nil {
+			return errors.New("取不到快捷方式的 IDispatch")
+		}
+		defer dispatch.Release()
+		if _, err = oleutil.PutProperty(dispatch, "TargetPath", target); err != nil {
+			return err
+		}
+		_, _ = oleutil.PutProperty(dispatch, "WorkingDirectory", filepath.Dir(target))
+		_, err = oleutil.CallMethod(dispatch, "Save")
+		return err
+	})
 	return err == nil
 }
 
 func shortcutTarget(t *testing.T, link string) string {
 	t.Helper()
-	uninit, ok := comReady()
-	if !ok {
-		return ""
-	}
-	defer uninit()
-	unknown, err := oleutil.CreateObject("WScript.Shell")
-	if err != nil {
-		return ""
-	}
-	defer unknown.Release()
-	shell, err := unknown.QueryInterface(ole.IID_IDispatch)
-	if err != nil {
-		return ""
-	}
-	defer shell.Release()
-	shortcut, err := oleutil.CallMethod(shell, "CreateShortcut", link)
-	if err != nil {
-		return ""
-	}
-	dispatch := shortcut.ToIDispatch()
-	if dispatch == nil {
-		return ""
-	}
-	defer dispatch.Release()
-	value, err := oleutil.GetProperty(dispatch, "TargetPath")
-	if err != nil {
-		return ""
-	}
-	out := value.ToString()
-	value.Clear()
+	var out string
+	_ = withShell(func(shell *ole.IDispatch) error {
+		value, ok := shortcutTargetOf(shell, link)
+		if !ok {
+			return errors.New("读不到快捷方式的目标")
+		}
+		out = value
+		return nil
+	})
 	return out
 }
 

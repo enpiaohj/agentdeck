@@ -44,10 +44,11 @@ func TestEndToEndInstallLifecycle(t *testing.T) {
 
 	// 下次启动：旧文件被删除，标记被清除。
 	var retargeted bool
-	Cleanup(next, func(from, to string) {
+	Cleanup(next, func(from, to string) bool {
 		if from == current && to == next {
 			retargeted = true
 		}
+		return true
 	})
 	if !retargeted {
 		t.Fatal("善后时应当把启动项与快捷方式改指向新文件")

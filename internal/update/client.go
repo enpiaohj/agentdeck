@@ -2,10 +2,12 @@ package update
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -20,6 +22,9 @@ const (
 	AssetSuffix      = "-win-x64.exe"
 	SumsAsset        = "SHA256SUMS"
 	userAgentPrefix  = "AgentDeck/"
+
+	// checkTimeout 是「检查更新」这类一次 JSON 查询的上限。
+	checkTimeout = 10 * time.Second
 )
 
 // 失败原因分类，界面据此给出不同的下一步提示。
@@ -35,6 +40,25 @@ type Asset struct {
 	Name string `json:"name"`
 	URL  string `json:"browser_download_url"`
 	Size int64  `json:"size"`
+	// Digest 是 GitHub 随资产一起给出的摘要，形如 "sha256:<64 位十六进制>"。
+	// 有它就按它校验下载内容；发布早于该字段时回退到 SHA256SUMS（见 Download）。
+	Digest string `json:"digest"`
+}
+
+// SHA256 返回资产自带的 SHA-256（小写十六进制），没有或格式不对时返回空串。
+func (a Asset) SHA256() string {
+	algo, value, ok := strings.Cut(strings.TrimSpace(a.Digest), ":")
+	if !ok || !strings.EqualFold(algo, "sha256") {
+		return ""
+	}
+	value = strings.ToLower(strings.TrimSpace(value))
+	if len(value) != 64 {
+		return ""
+	}
+	if _, err := hex.DecodeString(value); err != nil {
+		return ""
+	}
+	return value
 }
 
 // Release 是一次正式发布的摘要。
@@ -109,13 +133,34 @@ type Client struct {
 	Version string
 }
 
-// httpClient 返回实际使用的客户端：10 秒超时，足够覆盖慢网络下的
-// 一次 JSON 查询，又不至于让「检查更新」按钮长时间无响应。
-func (c Client) httpClient() *http.Client {
+// checkClient 是查询用的客户端：10 秒总超时足够覆盖一次 JSON 查询，又不至于让
+// 「检查更新」按钮长时间无响应。
+func (c Client) checkClient() *http.Client {
 	if c.HTTP != nil {
 		return c.HTTP
 	}
-	return &http.Client{Timeout: 10 * time.Second}
+	return &http.Client{Timeout: checkTimeout}
+}
+
+// downloadClient 是下载用的客户端：**不设整次请求的总超时**。
+//
+// 20 MB 的包在慢链路（国内直连 GitHub 常见 100 KB/s～2 MB/s）下会远超任何
+// 合理的总时限，用 10 秒的检查客户端会让下载每次都在同一秒数被砍断（曾如此）。
+// 卡死由 stallTimeout 的停滞看门狗与调用方的 context 上限兜住。
+func (c Client) downloadClient() *http.Client {
+	if c.HTTP != nil {
+		return c.HTTP
+	}
+	return &http.Client{Transport: &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          10,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   15 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}}
 }
 
 // Check 查询最新的正式发布，并与 current 比较。
@@ -134,7 +179,7 @@ func (c Client) Check(ctx context.Context, current string) (Result, error) {
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", userAgentPrefix+firstNonEmpty(c.Version, "dev"))
 
-	resp, err := c.httpClient().Do(req)
+	resp, err := c.checkClient().Do(req)
 	if err != nil {
 		return Result{}, fmt.Errorf("无法连接 GitHub：%w", err)
 	}
@@ -170,13 +215,14 @@ func (c Client) Check(ctx context.Context, current string) (Result, error) {
 		PublishedAt: release.PublishedAt,
 		CheckedAt:   time.Now(),
 	}
-	if asset, ok := release.ExeAsset(); ok {
-		result.ExeAsset = asset
-	} else {
-		result.Available = false
-	}
-	if asset, ok := release.SumsAsset(); ok {
-		result.SumsAsset = asset
+	// 可下载的前提：有这个平台的 exe 资产，并且**能校验它**——资产自带 digest，
+	// 或者发布提供了 SHA256SUMS。两者都没有时不报「有新版本」：那只会诱使用户
+	// 点一个注定失败的下载。
+	exeAsset, hasExe := release.ExeAsset()
+	sumsAsset, hasSums := release.SumsAsset()
+	if hasExe && (hasSums || exeAsset.SHA256() != "") {
+		result.ExeAsset = exeAsset
+		result.SumsAsset = sumsAsset
 	} else {
 		result.Available = false
 	}

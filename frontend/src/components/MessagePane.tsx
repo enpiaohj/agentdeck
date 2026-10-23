@@ -25,6 +25,11 @@ import {
   ArrowUpRegular,
   ArrowDownRegular,
   ChevronLeftRegular,
+  ChevronUpRegular,
+  ChevronDownRegular,
+  SearchRegular,
+  DismissRegular,
+  DismissCircleRegular,
   TextBulletListLtrRegular,
 } from '@fluentui/react-icons'
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react'
@@ -313,15 +318,27 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
     setFindOpen(true)
     requestAnimationFrame(() => { findInput.current?.focus(); findInput.current?.select() })
   }, [])
+  // 收起查找并回到查找前的阅读位置：最右的 ×、Esc、工具栏图标再点一次都走这里。
+  // 查找条自己的 onKeyDown 也会拦 Esc，但焦点移到正文之后那一条就收不到了，所以
+  // 这里在窗口级再兜一次。
+  const closeFind = useCallback(() => {
+    const origin = findOrigin.current
+    setFindOpen(false)
+    findOrigin.current = null
+    requestAnimationFrame(() => bodyRef.current?.focus({ preventScroll: true }))
+    if (origin) { restoreAnchor.current = origin; restoreScroll.current = origin.scroll; setDestination(previous => ({ at: origin.at, before: origin.before, focus: null, revision: previous.revision + 1 })) }
+  }, [])
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.isComposing || event.keyCode === 229 || document.querySelector('[role="dialog"][aria-modal="true"]')) return
       if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]') && event.target !== findInput.current) return
+      // 查找条打开时 Esc 一律收起它；焦点在别的输入框里时不拦，让那个框自己处理。
+      if (findOpen && event.key === 'Escape') { event.preventDefault(); closeFind(); return }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); openFind() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [openFind])
+  }, [openFind, closeFind, findOpen])
   useEffect(() => {
     let active = true
     setFindHits([]); setFindIndex(-1); setFindError('')
@@ -343,11 +360,10 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
     setFindIndex(next); restoreScroll.current = null
     setDestination(previous => ({ at: findHits[next], before: false, focus: findHits[next], revision: previous.revision + 1 }))
   }
-  const closeFind = () => {
-    const origin = findOrigin.current
-    setFindOpen(false); findOrigin.current = null
-    requestAnimationFrame(() => bodyRef.current?.focus({ preventScroll: true }))
-    if (origin) { restoreAnchor.current = origin; restoreScroll.current = origin.scroll; setDestination(previous => ({ at: origin.at, before: origin.before, focus: null, revision: previous.revision + 1 })) }
+  // 清空关键词但不收起查找条：命中与计数归零，焦点留下继续输入
+  const clearFind = () => {
+    setFindQuery(''); setFindHits([]); setFindSnippets([]); setFindIndex(-1); setFindError('')
+    requestAnimationFrame(() => findInput.current?.focus())
   }
 
   const runAction = async (action: () => Promise<void>) => {
@@ -447,21 +463,25 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
           <span role="status" className="ad-reader-range" title="「段」是会话正文的一个片段：消息、思考、工具调用与结果各算一段">{loading?`正在载入…${tr?.total?`（${tr.total} 段）`:''}`:tr?.total?`第 ${tr.start+1}–${tr.start+tr.parts.length} 段，共 ${tr.total} 段`:'暂无正文'}</span>
           <Tooltip content="较新的内容" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronRightRegular />} aria-label="阅读较新内容" disabled={loading||!tr?.has_after} onClick={()=>navigate((tr?.start??0)+(tr?.parts.length??0))} /></Tooltip>
         </>}
-        <Button size="small" appearance="subtle" onClick={openFind} title="查找当前会话 (Ctrl+F)">查找</Button>
+        <Tooltip content={findOpen ? '收起查找 (Esc)' : '查找当前会话 (Ctrl+F)'} relationship="label"><Button size="small" appearance={findOpen ? 'secondary' : 'subtle'} icon={<SearchRegular />} aria-label="查找当前会话" aria-pressed={findOpen} onClick={findOpen ? closeFind : openFind} /></Tooltip>
         {prompts.length > 1 ? <Tooltip content={preferences.promptRail ? '隐藏提问导航条' : '显示提问导航条：右侧每根刻度是一次提问，点击跳转'} relationship="label">
           <Button size="small" appearance={preferences.promptRail ? 'secondary' : 'subtle'} icon={<TextBulletListLtrRegular />} aria-pressed={preferences.promptRail} aria-label="提问导航条" onClick={() => updatePreferences({ promptRail: !preferences.promptRail })} />
         </Tooltip> : null}
         <Button size="small" appearance={destination.at<0?'secondary':'subtle'} icon={<ArrowDownRegular />} onClick={()=>navigate(-1)} disabled={loading}>最新消息</Button>
       </nav>
-      {findOpen ? <div className="ad-reader-nav" role="search" aria-label="会话内查找">
-        <input ref={findInput} aria-label="查找当前会话" placeholder="查找当前会话…" value={findQuery} onChange={event => setFindQuery(event.target.value)} onKeyDown={event => { if (event.nativeEvent.isComposing) return; if (event.key === 'Enter') { event.preventDefault(); moveFind(event.shiftKey ? -1 : 1) } if (event.key === 'Escape') { event.stopPropagation(); closeFind() } }} />
-        <span role="status">{findBusy ? '查找中…' : findError || `${findIndex < 0 ? 0 : findIndex + 1} / ${findHits.length} 个命中段`}</span>
-        <Button size="small" disabled={!findHits.length} onClick={() => moveFind(-1)}>上一处</Button>
-        <Button size="small" disabled={!findHits.length} onClick={() => moveFind(1)}>下一处</Button>
-        <Button size="small" onClick={closeFind}>返回原阅读位置</Button>
-      </div> : null}
-      {findOpen && findIndex >= 0 ? <p className="ad-find-context" role="status">命中段 {findHits[findIndex] + 1}：{findSnippets[findIndex]}<small>查找范围为已读取正文；长段预览可能仅显示部分内容。</small></p> : null}
       <div className="ad-reading-wrap">
+      {findOpen ? <div className="ad-find" role="search" aria-label="会话内查找" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); closeFind() } }}>
+        <div className="ad-find-row">
+          <SearchRegular className="ad-find-glyph" aria-hidden="true" />
+          <input ref={findInput} className="ad-find-input" aria-label="查找当前会话" placeholder="查找当前会话…" value={findQuery} onChange={event => setFindQuery(event.target.value)} onKeyDown={event => { if (event.nativeEvent.isComposing) return; if (event.key === 'Enter') { event.preventDefault(); moveFind(event.shiftKey ? -1 : 1) } }} />
+          {findQuery ? <Tooltip content="清除关键词" relationship="label"><Button size="small" appearance="subtle" icon={<DismissCircleRegular />} aria-label="清除关键词" onClick={clearFind} /></Tooltip> : null}
+          <span className="ad-find-count" role="status">{findBusy ? '查找中…' : findError ? '查找失败' : !findQuery.trim() ? '' : !findHits.length ? '无匹配' : findIndex < 0 ? `${findHits.length} 处` : `${findIndex + 1} / ${findHits.length}`}</span>
+          <Tooltip content="上一处 (Shift+Enter)" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronUpRegular />} aria-label="上一处匹配" disabled={!findHits.length} onClick={() => moveFind(-1)} /></Tooltip>
+          <Tooltip content="下一处 (Enter)" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronDownRegular />} aria-label="下一处匹配" disabled={!findHits.length} onClick={() => moveFind(1)} /></Tooltip>
+          <Tooltip content="收起查找，回到查找前的位置 (Esc)" relationship="label"><Button size="small" appearance="subtle" icon={<DismissRegular />} aria-label="收起查找" onClick={closeFind} /></Tooltip>
+        </div>
+        {findError ? <p className="ad-find-note" role="alert">{findError}</p> : findIndex >= 0 ? <p className="ad-find-note" role="status" title={`第 ${findHits[findIndex] + 1} 段：${findSnippets[findIndex]}`}>第 {findHits[findIndex] + 1} 段：{findSnippets[findIndex]}</p> : null}
+      </div> : null}
       <div ref={bodyRef} tabIndex={-1} onScroll={event => {
         const body = event.currentTarget
         const top = body.getBoundingClientRect().top

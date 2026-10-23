@@ -91,19 +91,23 @@ func desktopStartup() startupRegistration {
 	return startupRegistration{value: windowsStartupValue{}, executable: os.Executable}
 }
 
-// retarget 把自启动项里指向 oldPath 的路径换成 newPath，其余参数保持不变。
+// retarget 把自启动项里指向 oldPath 的路径换成 newPath，返回是否确认「改完之后
+// 不再有指向旧路径的启动项」。
 //
 // 应用内更新会让可执行文件换名（AgentDeck-v0.14.0 → v0.15.0），自启动项仍写着
-// 旧路径，不跟着改就会在下次开机时启动一个已经不存在的文件。
-func (r startupRegistration) retarget(oldPath, newPath string) {
+// 旧路径，不跟着改就会在下次开机时启动一个已经不存在的文件。返回值用于善后：
+// 只有确认改完，才敢删掉旧文件——读不到注册表或写失败时返回 false，宁可把旧
+// 文件多留一个版本，也不要留下一个开机启动一个不存在文件的项。
+func (r startupRegistration) retarget(oldPath, newPath string) bool {
 	current, err := r.value.read()
-	if err != nil || current == "" {
-		return
+	if err != nil {
+		return false
 	}
-	if !strings.Contains(strings.ToLower(current), strings.ToLower(oldPath)) {
-		return
+	// 读得到但为空：用户没开自启动，不存在指向旧路径的项。
+	if current == "" || !strings.Contains(strings.ToLower(current), strings.ToLower(oldPath)) {
+		return true
 	}
-	_ = r.value.write(strings.ReplaceAll(current, oldPath, newPath))
+	return r.value.write(strings.ReplaceAll(current, oldPath, newPath)) == nil
 }
 
 const activationEventName = `Local\AgentDeck-ActivateWindow`

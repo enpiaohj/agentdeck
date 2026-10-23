@@ -1,11 +1,10 @@
 package app
 
 import (
-	"archive/zip"
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -211,36 +210,22 @@ func TestOpenDownloadFolderCreatesDirectory(t *testing.T) {
 	}
 }
 
-// 下载链路：走本机服务，校验 SHA-256 后解压到数据目录下的 updates/。
+// 下载链路：走本机服务，校验 SHA-256 后把更新包落到数据目录下的 updates/。
+//
+// 发布里 exe 与 zip 是两个内容不同的资产，这里让 exe 的地址返回**exe 字节**：
+// 曾经代码下载 exe 却按 zip 的哈希校验，这个夹具形态就是当时没被发现的原因。
 func TestDownloadWritesVerifiedPackage(t *testing.T) {
 	a, _ := updateFixture(t)
 	const version = "1.1.0"
-	root := "AgentDeck-v" + version + "-win-x64"
-	exe := []byte("exe payload")
-	zipBytes := buildTestZip(t, map[string][]byte{root + "/" + update.AssetPrefix + version + update.AssetSuffix: exe})
-
+	exe := []byte("MZ exe payload")
 	var hits int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if filepath.Base(r.URL.Path) == update.SumsAsset {
-			w.Write([]byte(sumOf(zipBytes) + "  AgentDeck-v" + version + "-win-x64.zip\n" +
-				sumOf(exe) + "  " + update.AssetPrefix + version + update.AssetSuffix + "\n"))
-			return
-		}
 		hits++
-		w.Write(zipBytes)
+		w.Write(exe)
 	}))
 	defer server.Close()
 
-	a.updateMu.Lock()
-	a.update.checked = true
-	a.update.result = update.Result{
-		Current:   "0.9.0",
-		Latest:    version,
-		Available: true,
-		ExeAsset:  update.Asset{Name: update.AssetPrefix + version + update.AssetSuffix, URL: server.URL + "/pkg"},
-		SumsAsset: update.Asset{Name: update.SumsAsset, URL: server.URL + "/" + update.SumsAsset},
-	}
-	a.updateMu.Unlock()
+	prepareAvailable(a, version, server.URL, exe)
 
 	view, err := a.NewUpdateService().Download()
 	if err != nil {
@@ -249,13 +234,13 @@ func TestDownloadWritesVerifiedPackage(t *testing.T) {
 	if hits != 1 {
 		t.Fatalf("应当只下载一次，实际 %d 次", hits)
 	}
-	want := filepath.Join(a.updateDir(), root)
-	if view.DownloadedDir != want || view.Downloading || view.Progress != 1 || view.Error != "" {
+	if view.DownloadedDir != a.updateDir() || view.Downloading || view.Progress != 1 || view.Error != "" {
 		t.Fatalf("下载后的视图不符：%+v", view)
 	}
-	data, err := os.ReadFile(filepath.Join(want, update.AssetPrefix+version+update.AssetSuffix))
+	want := filepath.Join(a.updateDir(), update.AssetPrefix+version+update.AssetSuffix)
+	data, err := os.ReadFile(want)
 	if err != nil || string(data) != string(exe) {
-		t.Fatalf("解压内容不符：%q, %v", data, err)
+		t.Fatalf("下载内容不符：%q, %v", data, err)
 	}
 }
 
@@ -264,12 +249,10 @@ func TestDownloadWritesVerifiedPackage(t *testing.T) {
 func TestDownloadStagesPackageForRestart(t *testing.T) {
 	a, _ := updateFixture(t)
 	const version = "1.1.0"
-	root := "AgentDeck-v" + version + "-win-x64"
-	exe := []byte("exe payload")
-	zipBytes := buildTestZip(t, map[string][]byte{root + "/" + update.AssetPrefix + version + update.AssetSuffix: exe})
-	server := updateServer(t, version, zipBytes, exe)
+	exe := []byte("MZ exe payload")
+	server := updateServer(t, version, exe)
 	defer server.Close()
-	prepareAvailable(a, version, server.URL)
+	prepareAvailable(a, version, server.URL, exe)
 
 	view, err := a.NewUpdateService().Download()
 	if err != nil {
@@ -288,10 +271,10 @@ func TestDownloadWithoutInstallerReportsUnsupported(t *testing.T) {
 	a, _ := updateFixture(t)
 	a.cfg.StageUpdate, a.cfg.FinishUpdate = nil, nil
 	const version = "1.1.0"
-	zipBytes := buildTestZip(t, map[string][]byte{"AgentDeck-v" + version + "-win-x64/" + update.AssetPrefix + version + update.AssetSuffix: []byte("x")})
-	server := updateServer(t, version, zipBytes, []byte("x"))
+	exe := []byte("MZ exe payload")
+	server := updateServer(t, version, exe)
 	defer server.Close()
-	prepareAvailable(a, version, server.URL)
+	prepareAvailable(a, version, server.URL, exe)
 
 	view, err := a.NewUpdateService().Download()
 	if err == nil || !strings.Contains(err.Error(), "不支持应用内更新") {
@@ -307,11 +290,10 @@ func TestDownloadStagingFailureSurfaces(t *testing.T) {
 	a, _ := updateFixture(t)
 	a.SetUpdateInstaller(func(string) (string, error) { return "", errors.New("程序所在目录没有写入权限") }, func() string { return "" })
 	const version = "1.1.0"
-	exe := []byte("exe payload")
-	zipBytes := buildTestZip(t, map[string][]byte{"AgentDeck-v" + version + "-win-x64/" + update.AssetPrefix + version + update.AssetSuffix: exe})
-	server := updateServer(t, version, zipBytes, exe)
+	exe := []byte("MZ exe payload")
+	server := updateServer(t, version, exe)
 	defer server.Close()
-	prepareAvailable(a, version, server.URL)
+	prepareAvailable(a, version, server.URL, exe)
 
 	view, err := a.NewUpdateService().Download()
 	if err == nil || !strings.Contains(err.Error(), "写入权限") {
@@ -322,6 +304,121 @@ func TestDownloadStagingFailureSurfaces(t *testing.T) {
 	}
 }
 
+// 缓存恢复的结论必须能直接下载。
+//
+// 自动检查默认开启，用户检查过之后 24 小时内每次启动都走缓存恢复。只恢复版本号
+// 的话，界面上「下载并准备安装」可点、点下去必然报「缺少分发文件」——必须等 24
+// 小时到期重新联网检查才恢复。
+func TestCachedStateKeepsDownloadUsable(t *testing.T) {
+	a, _ := updateFixture(t)
+	const version = "1.1.0"
+	exe := []byte("MZ exe payload")
+	server := updateServer(t, version, exe)
+	defer server.Close()
+	a.cfg.UpdateAPIURL = server.URL + "/releases/latest"
+	a.settings.AutoCheckUpdates = true
+
+	// 第一次启动：联网检查，结论连同资产地址一起落盘。
+	a.NewUpdateService().AutoCheckOnStartup()
+	if view := a.updateView(); !view.Available {
+		t.Fatalf("应当发现新版本：%+v", view)
+	}
+	if state := update.LoadState(a.updateStatePath()); state.ExeURL == "" {
+		t.Fatal("检查结论应当连同资产地址落盘")
+	}
+
+	// 模拟当天重新启动：内存状态清空，缓存未过期，不再联网。
+	a.updateMu.Lock()
+	a.update = updateState{}
+	a.updateMu.Unlock()
+	a.NewUpdateService().AutoCheckOnStartup()
+
+	view := a.updateView()
+	if !view.Available || !view.Downloadable {
+		t.Fatalf("缓存恢复后应当仍可下载：%+v", view)
+	}
+	if _, err := a.NewUpdateService().Download(); err != nil {
+		t.Fatalf("缓存恢复后应当能直接下载，不该要求重新检查：%v", err)
+	}
+}
+
+// 旧版本写下的缓存没有资产地址：此时不能装作可以下载。
+func TestLegacyCachedStateIsNotDownloadable(t *testing.T) {
+	a, _ := updateFixture(t)
+	a.settings.AutoCheckUpdates = true
+	if err := os.MkdirAll(a.updateDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := `{"checked_at":"` + time.Now().Add(-time.Hour).Format(time.RFC3339) +
+		`","latest":"1.1.0","available":true,"notes":"## 变更"}`
+	if err := os.WriteFile(a.updateStatePath(), []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a.NewUpdateService().AutoCheckOnStartup()
+	view := a.updateView()
+	if !view.Available {
+		t.Fatalf("仍应提示有新版本：%+v", view)
+	}
+	_, err := a.NewUpdateService().Download()
+	if err == nil || !strings.Contains(err.Error(), "重新检查") {
+		t.Fatalf("应当让用户先重新检查：%v", err)
+	}
+}
+
+// 取消下载：不是失败，退回「有新版本」，且不留下半成品。
+func TestCancelDownloadReturnsToAvailable(t *testing.T) {
+	a, _ := updateFixture(t)
+	const version = "1.1.0"
+	exe := []byte("MZ exe payload")
+	blocked := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 发出响应头之后一直不再发数据：下载会停在这里，等取消。
+		w.Header().Set("Content-Length", "1048576")
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		<-blocked
+	}))
+	defer server.Close()
+	// defer 后进先出：先放开处理器，再关服务（Close 会等未完成的请求）。
+	defer close(blocked)
+	prepareAvailable(a, version, server.URL, exe)
+
+	done := make(chan error, 1)
+	go func() { _, err := a.NewUpdateService().Download(); done <- err }()
+
+	deadline := time.Now().Add(10 * time.Second)
+	for !a.updateView().Downloading {
+		if time.Now().After(deadline) {
+			t.Fatal("下载没有进入下载中状态")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, err := a.NewUpdateService().CancelDownload(); err != nil {
+		t.Fatalf("CancelDownload: %v", err)
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, errDownloadCanceled) {
+			t.Fatalf("取消下载应当返回明确的取消结果，实际 %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("取消后下载没有结束")
+	}
+	view := a.updateView()
+	if view.Downloading || view.ReadyToRestart || view.Error != "" {
+		t.Fatalf("取消后应当退回可下载状态：%+v", view)
+	}
+	if !view.Downloadable {
+		t.Fatalf("取消后应当还能重新下载：%+v", view)
+	}
+	if entries, _ := os.ReadDir(a.updateDir()); len(entries) != 0 {
+		t.Fatalf("取消后不该留下半成品：%v", entries)
+	}
+	if _, err := a.NewUpdateService().CancelDownload(); err == nil {
+		t.Fatal("没有下载在跑时应当报错")
+	}
+}
+
 func TestRestartToInstallRequiresStagedPackage(t *testing.T) {
 	a, _ := updateFixture(t)
 	if err := a.NewUpdateService().RestartToInstall(); err == nil {
@@ -329,48 +426,38 @@ func TestRestartToInstallRequiresStagedPackage(t *testing.T) {
 	}
 }
 
-func updateServer(t *testing.T, version string, zipBytes, exe []byte) *httptest.Server {
+// updateServer 模拟一次真实发布：/releases/latest 返回接口 JSON（带 digest），
+// 其余路径（也就是资产地址 /pkg）返回 exe 字节。
+func updateServer(t *testing.T, version string, exe []byte) *httptest.Server {
 	t.Helper()
+	name := update.AssetPrefix + version + update.AssetSuffix
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if filepath.Base(r.URL.Path) == update.SumsAsset {
-			w.Write([]byte(sumOf(zipBytes) + "  AgentDeck-v" + version + "-win-x64.zip\n" +
-				sumOf(exe) + "  " + update.AssetPrefix + version + update.AssetSuffix + "\n"))
+		if strings.HasSuffix(r.URL.Path, "/releases/latest") {
+			fmt.Fprintf(w, `{"tag_name":"v%s","name":"AgentDeck v%s","body":"## 变更\n- 修复",
+				"html_url":"https://example.test/release",
+				"assets":[{"name":"%s","browser_download_url":"http://%s/pkg","size":%d,"digest":"sha256:%s"}]}`,
+				version, version, name, r.Host, len(exe), sumOf(exe))
 			return
 		}
-		w.Write(zipBytes)
+		w.Write(exe)
 	}))
 }
 
-func prepareAvailable(a *App, version, baseURL string) {
+// prepareAvailable 把「已经检查出有 1.1.0」的状态写进 App，资产地址指向 baseURL，
+// digest 按 exe 内容算——真实的 GitHub 发布就是这么给的。
+func prepareAvailable(a *App, version, baseURL string, exe []byte) {
 	a.updateMu.Lock()
 	a.update.checked = true
 	a.update.result = update.Result{
 		Current:   "0.9.0",
 		Latest:    version,
 		Available: true,
-		ExeAsset:  update.Asset{Name: update.AssetPrefix + version + update.AssetSuffix, URL: baseURL + "/pkg"},
-		SumsAsset: update.Asset{Name: update.SumsAsset, URL: baseURL + "/" + update.SumsAsset},
+		ExeAsset: update.Asset{
+			Name: update.AssetPrefix + version + update.AssetSuffix, URL: baseURL + "/pkg",
+			Size: int64(len(exe)), Digest: "sha256:" + sumOf(exe),
+		},
 	}
 	a.updateMu.Unlock()
-}
-
-func buildTestZip(t *testing.T, entries map[string][]byte) []byte {
-	t.Helper()
-	var buf bytes.Buffer
-	writer := zip.NewWriter(&buf)
-	for name, body := range entries {
-		entry, err := writer.Create(name)
-		if err != nil {
-			t.Fatalf("构造 ZIP: %v", err)
-		}
-		if _, err = entry.Write(body); err != nil {
-			t.Fatalf("构造 ZIP: %v", err)
-		}
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatalf("构造 ZIP: %v", err)
-	}
-	return buf.Bytes()
 }
 
 func sumOf(data []byte) string {

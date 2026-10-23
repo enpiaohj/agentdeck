@@ -7,11 +7,15 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
 )
+
+// errCOMUnavailable 表示当前环境下 COM 用不了（初始化失败或 WScript.Shell 取不到）。
+var errCOMUnavailable = errors.New("COM 不可用")
 
 // RetargetShortcuts 把仍指向 oldPath 的快捷方式改指向 newPath，返回改动的个数。
 //
@@ -21,6 +25,15 @@ func RetargetShortcuts(oldPath, newPath string) int {
 	return retargetShortcutsIn(shortcutRoots(), oldPath, newPath)
 }
 
+// ShortcutsPointingTo 报告是否还有快捷方式指向 targetPath。
+//
+// 善后删除旧文件前用它复核：改指向是尽力而为的，没改到却照删，用户就会留下
+// 一个点不开的死链接。COM 整个用不了时按「可能还有」算——那时改指向本来也没成，
+// 正好一起拦住删除。
+func ShortcutsPointingTo(targetPath string) bool {
+	return anyShortcutPointsTo(shortcutRoots(), targetPath)
+}
+
 // retargetShortcutsIn 在给定目录列表里改指向。目录可注入，测试因此不碰
 // 用户真实的桌面与开始菜单。
 func retargetShortcutsIn(roots []string, oldPath, newPath string) int {
@@ -28,28 +41,70 @@ func retargetShortcutsIn(roots []string, oldPath, newPath string) int {
 	if len(links) == 0 {
 		return 0
 	}
+	updated := 0
+	_ = withShell(func(shell *ole.IDispatch) error {
+		for _, link := range links {
+			if retargetShortcut(shell, link, oldPath, newPath) {
+				updated++
+			}
+		}
+		return nil
+	})
+	return updated
+}
+
+// anyShortcutPointsTo 与 retargetShortcutsIn 同一套扫描，只读不改。
+//
+// 读不出结果的**单个**快捷方式跳过（可能是用户自己的坏链接，不该因此永远留着
+// 旧 exe），只有 COM 整个用不了才按「可能还有」处理。
+func anyShortcutPointsTo(roots []string, targetPath string) bool {
+	links := findShortcuts(roots)
+	if len(links) == 0 {
+		return false
+	}
+	found := false
+	err := withShell(func(shell *ole.IDispatch) error {
+		for _, link := range links {
+			value, ok := shortcutTargetOf(shell, link)
+			if ok && strings.EqualFold(value, targetPath) {
+				found = true
+				return nil
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return true
+	}
+	return found
+}
+
+// withShell 在一个绑定到当前 OS 线程的 COM 单元里创建 WScript.Shell 并执行 fn。
+//
+// **必须锁定线程**：COM 单元是线程本地状态，CoInitializeEx 只作用于调用它的那
+// 一个 OS 线程；Go 不保证 goroutine 与线程的亲缘关系。不锁定时，调度器一旦把
+// goroutine 挪到别的线程，后续 CreateObject / CallMethod 就会返回
+// CO_E_NOTINITIALIZED，而调用方（本包的扫描函数）会把它当成「没有可改的快捷
+// 方式」静默返回 0 —— 用户看到的是「更新成功但快捷方式还指向旧版本」。
+func withShell(fn func(shell *ole.IDispatch) error) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 	uninit, ok := comReady()
 	if !ok {
-		return 0
+		return errCOMUnavailable
 	}
 	defer uninit()
 	unknown, err := oleutil.CreateObject("WScript.Shell")
 	if err != nil {
-		return 0
+		return err
 	}
 	defer unknown.Release()
 	shell, err := unknown.QueryInterface(ole.IID_IDispatch)
 	if err != nil {
-		return 0
+		return err
 	}
 	defer shell.Release()
-	updated := 0
-	for _, link := range links {
-		if retargetShortcut(shell, link, oldPath, newPath) {
-			updated++
-		}
-	}
-	return updated
+	return fn(shell)
 }
 
 // comReady 在当前线程上准备好 COM，返回一个「用完要不要反初始化」的函数。
@@ -97,6 +152,26 @@ func comOutcome(err error) (counted bool, ok bool) {
 		}
 	}
 	return false, false
+}
+
+// shortcutTargetOf 读一个快捷方式的目标路径；COM 读不动时返回 false。
+func shortcutTargetOf(shell *ole.IDispatch, link string) (string, bool) {
+	shortcut, err := oleutil.CallMethod(shell, "CreateShortcut", link)
+	if err != nil {
+		return "", false
+	}
+	dispatch := shortcut.ToIDispatch()
+	if dispatch == nil {
+		return "", false
+	}
+	defer dispatch.Release()
+	target, err := oleutil.GetProperty(dispatch, "TargetPath")
+	if err != nil {
+		return "", false
+	}
+	value := target.ToString()
+	target.Clear()
+	return value, true
 }
 
 func retargetShortcut(shell *ole.IDispatch, link, oldPath, newPath string) bool {

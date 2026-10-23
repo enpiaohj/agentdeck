@@ -27,6 +27,18 @@ export function AutoCheckOnStartup(): $CancellablePromise<void> {
 }
 
 /**
+ * CancelDownload 中止正在进行的下载。
+ * 
+ * 真正收尾的是另一次 Download 调用：它拿到 context canceled 之后按「用户取消」
+ * 处理，不报错、退回「有新版本」。这里只负责取消并立刻把进度清零推给界面。
+ */
+export function CancelDownload(): $CancellablePromise<$models.UpdateView> {
+    return $Call.ByID(4285791913).then(($result: any) => {
+        return $$createType0($result);
+    });
+}
+
+/**
  * Check 立即检查一次更新（用户点击「检查更新」）。不受 24 小时限制。
  */
 export function Check(): $CancellablePromise<$models.UpdateView> {

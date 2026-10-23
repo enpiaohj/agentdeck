@@ -154,7 +154,10 @@ func TestCleanupRemovesPreviousVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	var retargeted [][2]string
-	Cleanup(current, func(from, to string) { retargeted = append(retargeted, [2]string{from, to}) })
+	Cleanup(current, func(from, to string) bool {
+		retargeted = append(retargeted, [2]string{from, to})
+		return true
+	})
 
 	if len(retargeted) != 1 || retargeted[0][0] != old || retargeted[0][1] != current {
 		t.Fatalf("改指向参数 = %v", retargeted)
@@ -164,6 +167,43 @@ func TestCleanupRemovesPreviousVersion(t *testing.T) {
 	}
 	if _, err := os.Stat(current + ReplacesSuffix); !os.IsNotExist(err) {
 		t.Fatal("标记应当被清除")
+	}
+}
+
+// 改指向没被确认时不能删旧文件：删掉一个还有东西指着的文件，用户就会留下
+// 一个点不开的死链接。标记保留，下次启动再试。
+func TestCleanupKeepsOldFileWhenRetargetUnconfirmed(t *testing.T) {
+	dir := t.TempDir()
+	old := writeExe(t, dir, "AgentDeck-v0.14.0-win-x64.exe", "old")
+	current := writeExe(t, dir, "AgentDeck-v0.15.0-win-x64.exe", "new")
+	if err := os.WriteFile(current+ReplacesSuffix, []byte(filepath.Base(old)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	Cleanup(current, func(string, string) bool { return false })
+
+	if _, err := os.Stat(old); err != nil {
+		t.Fatal("改指向未确认时不该删旧文件")
+	}
+	if _, err := os.Stat(current + ReplacesSuffix); err != nil {
+		t.Fatal("旧文件还在，标记就该保留")
+	}
+}
+
+// 没有改指向能力（retarget 为 nil）时同样不删旧文件。
+func TestCleanupWithoutRetargetKeepsOldFile(t *testing.T) {
+	dir := t.TempDir()
+	old := writeExe(t, dir, "AgentDeck-v0.14.0-win-x64.exe", "old")
+	current := writeExe(t, dir, "AgentDeck-v0.15.0-win-x64.exe", "new")
+	if err := os.WriteFile(current+ReplacesSuffix, []byte(filepath.Base(old)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	Cleanup(current, nil)
+
+	if _, err := os.Stat(old); err != nil {
+		t.Fatal("没有改指向能力时不该删旧文件")
+	}
+	if _, err := os.Stat(current + ReplacesSuffix); err != nil {
+		t.Fatal("旧文件还在，标记就该保留")
 	}
 }
 
@@ -177,7 +217,7 @@ func TestCleanupIgnoresUnsafeMarker(t *testing.T) {
 			t.Fatal(err)
 		}
 		called := false
-		Cleanup(current, func(string, string) { called = true })
+		Cleanup(current, func(string, string) bool { called = true; return true })
 		if called {
 			t.Fatalf("标记 %q 不应触发改指向", marker)
 		}
