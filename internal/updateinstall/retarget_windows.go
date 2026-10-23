@@ -60,27 +60,43 @@ func retargetShortcutsIn(roots []string, oldPath, newPath string) int {
 // WebView2 先把主线程初始化成了 MTA。把它们当失败会让快捷方式改指向静默失效，
 // 而且不报错，用户只会看到「更新了但快捷方式还是旧的」。
 //
-// RPC_E_CHANGED_MODE 时不能再调 CoUninitialize：本次并没有增加计数。
+// S_FALSE 与 RPC_E_CHANGED_MODE 都不能调 CoUninitialize：这两种情况本次并没有
+// 增加初始化计数，多减一次会减掉调用方的计数（同一线程调两次就把计数减穿），
+// 之后该线程上的 COM 调用会失败。
 func comReady() (func(), bool) {
+	err := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED|ole.COINIT_DISABLE_OLE1DDE)
+	counted, ok := comOutcome(err)
+	if !ok {
+		return nil, false
+	}
+	if counted {
+		return ole.CoUninitialize, true
+	}
+	return func() {}, true
+}
+
+// comOutcome 判定 CoInitializeEx 的结果：COM 是否可用，以及本次调用是否增加了
+// 引用计数（只有增加过才该调 CoUninitialize）。
+//
+// 抽成纯函数是为了能直接测——S_FALSE 与 RPC_E_CHANGED_MODE 依赖线程既有的 COM
+// 状态，在测试进程里很难稳定构造出来。
+func comOutcome(err error) (counted bool, ok bool) {
 	const (
 		sFalse          = 0x00000001
 		rpcEChangedMode = 0x80010106
 	)
-	err := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED|ole.COINIT_DISABLE_OLE1DDE)
 	if err == nil {
-		return ole.CoUninitialize, true
+		return true, true
 	}
 	var oleErr *ole.OleError
 	if errors.As(err, &oleErr) {
 		switch uint32(oleErr.Code()) {
-		case sFalse:
-			return ole.CoUninitialize, true
-		case rpcEChangedMode:
-			// 线程已处于其他单元，COM 本身可用，直接用。
-			return func() {}, true
+		case sFalse, rpcEChangedMode:
+			// 线程已初始化过，COM 本身可用，本次没有增加计数。
+			return false, true
 		}
 	}
-	return nil, false
+	return false, false
 }
 
 func retargetShortcut(shell *ole.IDispatch, link, oldPath, newPath string) bool {

@@ -54,7 +54,11 @@ const afterUpdateFlag = "--after-update"
 // 更新落地要先复制、改名、改指向，旧进程可能多花几秒。
 const afterUpdateWait = 30 * time.Second
 
-// updateFailedFlag 标记上次更新落地失败、拉起的是原版本。
+// updateFailedFlag 标记本次启动是「更新落地失败后重新拉起的原版本」。
+//
+// 落地失败时 Finish 已经写了失败标记，新实例启动时会读到它并提示；这个 flag
+// 只用来把两件事串起来——失败后的重启同样要等旧进程退出，否则新实例抢不到
+// 单实例锁，会直接退出，用户看到的是「重启后程序没了」。
 const updateFailedFlag = "--update-failed"
 
 // updateFailed 记录上次退出时更新落地失败（读后即清的标记）。
@@ -64,8 +68,11 @@ func main() {
 	e := &lateEmitter{}
 	args := os.Args[1:]
 	// 更新落地后的重启与数据迁移重启都要等旧进程退出：单实例互斥锁还在
-	// 旧进程手里，抢不到就直接退出会让「重启」变成「关掉应用」。
-	relaunch := slices.Contains(args, relaunchFlag) || slices.Contains(args, afterUpdateFlag)
+	// 旧进程手里，抢不到就直接退出会让「重启」变成「关掉应用」。落地失败后
+	// 拉起的原版本同理。
+	relaunch := slices.Contains(args, relaunchFlag) ||
+		slices.Contains(args, afterUpdateFlag) ||
+		slices.Contains(args, updateFailedFlag)
 	trayIcon, iconErr := assets.ReadFile("assets/appicon-256.png")
 	trayAvailable := iconErr == nil && len(trayIcon) > 0
 	startup := desktopStartup()
@@ -100,16 +107,10 @@ func main() {
 	defer finalize(installer)
 	defer a.Close()
 
-	// 启动时善后上一次更新：清临时文件与回滚副本，文件名变过的更新则确认
-	// 启动项与快捷方式已改指向后删除旧文件。必须在取得单实例所有权之后。
-	if installer != nil {
-		installer.cleanupPrevious()
-	}
-
 	// 单实例：已有窗口在运行时直接退出。此前只有 session.lock 文件标记，
 	// 多开一次就被误判成「上次未正常退出」，崩溃横幅会无端亮起。
 	deadline := time.Now().Add(relaunchWait)
-	if slices.Contains(args, afterUpdateFlag) {
+	if slices.Contains(args, afterUpdateFlag) || slices.Contains(args, updateFailedFlag) {
 		deadline = time.Now().Add(afterUpdateWait)
 	}
 	for {
@@ -124,6 +125,16 @@ func main() {
 			os.Exit(0)
 		}
 		time.Sleep(200 * time.Millisecond)
+	}
+
+	// 启动时善后上一次更新：清临时文件与回滚副本，文件名变过的更新则确认
+	// 启动项与快捷方式已改指向后删除旧文件。
+	//
+	// 必须在取得单实例所有权之后：另一个实例正在运行时，本进程马上会退出，
+	// 这时去删旧文件、改启动项，等于替一个自己都不继续跑的进程动了全局状态
+	// （与 WebView 数据目录迁移同一个道理，见 CLAUDE.md 陷阱 #24）。
+	if installer != nil {
+		installer.cleanupPrevious()
 	}
 
 	// 固定 WebView2 数据目录，并在首次使用时迁入上一版的界面偏好（见 webviewdata.go）。

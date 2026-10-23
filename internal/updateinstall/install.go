@@ -20,7 +20,11 @@ import (
 
 const (
 	// BackupSuffix 是原地替换时旧文件的临时名。
-	BackupSuffix = ".old"
+	//
+	// 刻意不用 ".old"：那是用户自己也会用来做备份的名字，更新流程一旦把它
+	// 当成自己的回滚副本删掉，就等于删了用户的文件。带上产品名后，同目录里
+	// 出现它只可能是本程序的更新流程留下的。
+	BackupSuffix = ".agentdeck-backup"
 	// StagingSuffix 是写入中的新文件：只有完整写完并核对大小后才改名到位，
 	// 因此目录里不会出现「名字正确但内容不完整」的 exe。
 	StagingSuffix = ".new"
@@ -88,8 +92,11 @@ func Install(current, newPath, packagePath string) bool {
 			remove(staging)
 			return false
 		}
-		// 尽力而为：没写成的标记与改指向，新版本启动时还会再补一次。
-		_ = os.WriteFile(newPath+ReplacesSuffix, []byte(filepath.Base(current)), 0o600)
+		// 标记写不成不影响本次落地，但旧文件会因此永远留着；记在失败标记里，
+		// 让下次启动至少提示一次（清理逻辑没有标记就不敢删，见 Cleanup）。
+		if err := os.WriteFile(newPath+ReplacesSuffix, []byte(filepath.Base(current)), 0o600); err != nil {
+			MarkFailed(newPath)
+		}
 		remove(packagePath)
 		return true
 	}
@@ -165,7 +172,7 @@ func ConsumeFailureMarker(current string) bool {
 	return true
 }
 
-// Cleanup 在启动时善后上一次更新：清掉遗留的临时文件与 .old，文件名变过的
+// Cleanup 在启动时善后上一次更新：清掉遗留的临时文件与回滚副本，文件名变过的
 // 更新则按标记删除旧文件。
 //
 // retarget 是「把指向旧路径的启动项与快捷方式改指向新路径」，可为 nil。它在这里
@@ -177,8 +184,12 @@ func Cleanup(current string, retarget func(oldPath, newPath string)) {
 	marker := current + ReplacesSuffix
 	raw, err := os.ReadFile(marker)
 	if err != nil {
+		// 没有标记时也可能残留 side-by-side 落地留下的 <新版本名>.new
+		// （在写 staging 之后、改名之前崩溃）。按发布产物命名清一遍。
+		removeStaleStaging(current)
 		return
 	}
+	removeStaleStaging(current)
 	oldName := strings.TrimSpace(string(raw))
 	if !safePreviousName(oldName, filepath.Base(current)) {
 		// 标记内容不可信：什么都不动，只清掉标记。
@@ -194,6 +205,32 @@ func Cleanup(current string, retarget func(oldPath, newPath string)) {
 		return
 	}
 	remove(marker)
+}
+
+// removeStaleStaging 清掉同目录下「发布产物名 + .new」的残留。
+//
+// side-by-side 落地时 staging 用的是目标版本名（AgentDeck-v0.15.0-win-x64.exe.new），
+// 与 current 不同名，Cleanup 开头那两行清不到它。只认发布产物命名，且只删
+// .new 这一种后缀，不碰用户放在同目录的其他文件。
+func removeStaleStaging(current string) {
+	dir := filepath.Dir(current)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, StagingSuffix) {
+			continue
+		}
+		if !ReleaseArtifact.MatchString(strings.TrimSuffix(name, StagingSuffix)) {
+			continue
+		}
+		remove(filepath.Join(dir, name))
+	}
 }
 
 // safePreviousName 只接受「同目录下的发布产物名、且不是自己」。

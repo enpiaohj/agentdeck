@@ -67,9 +67,12 @@ export function UpdateControl({ id }: { id: string }) {
       </div>
       {view.notes ? <pre className="ad-update-notes">{view.notes}</pre> : null}
       <div className="ad-update-actions">
-        <Button size="small" appearance="primary" icon={<ArrowDownloadRegular />} disabled={busy || !view.downloadable} onClick={() => void settings.download()}>{view.can_install ? '下载并准备安装' : '下载到本地'}</Button>
-        <Button size="small" appearance="subtle" icon={<OpenRegular />} onClick={() => void Browser.OpenURL(view.page_url || view.release_page_url)}>打开发布页面</Button>
+        {view.can_install
+          ? <Button size="small" appearance="primary" icon={<ArrowDownloadRegular />} disabled={busy || !view.downloadable} onClick={() => void settings.download()}>下载并准备安装</Button>
+          : <Button size="small" appearance="primary" icon={<OpenRegular />} onClick={() => void Browser.OpenURL(view.page_url || view.release_page_url)}>到发布页下载</Button>}
+        {view.can_install ? <Button size="small" appearance="subtle" icon={<OpenRegular />} onClick={() => void Browser.OpenURL(view.page_url || view.release_page_url)}>打开发布页面</Button> : null}
       </div>
+      {view.can_install ? null : <p className="ad-settings-note">当前运行方式无法在应用内安装（例如通过 go run 或测试二进制启动），请到发布页手动下载。</p>}
     </div> : null}
 
     {view?.ready_to_restart ? <div className="ad-update-downloaded">

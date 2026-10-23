@@ -139,6 +139,37 @@ func shortcutTarget(t *testing.T, link string) string {
 	return out
 }
 
+// comOutcome 判定 CoInitializeEx 的结果：COM 是否可用，以及本次是否增加了
+// 引用计数（只有增加过才该调 CoUninitialize）。
+//
+// S_FALSE 与 RPC_E_CHANGED_MODE 都表示「线程已初始化过」，本次没有增加计数：
+// 前者是重复初始化，后者是线程已被初始化成另一种单元模型（WebView2 会把主线程
+// 初始化成 MTA，这是 AgentDeck 里的常态）。两种情况都必须返回 counted=false，
+// 否则调用方一执行 uninit 就减掉别人的计数。
+func TestComOutcome(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		hr      uintptr
+		counted bool
+		ok      bool
+	}{
+		{"成功初始化", 0, true, true},
+		{"S_FALSE 重复初始化", 0x00000001, false, true},
+		{"RPC_E_CHANGED_MODE 单元模型不符", 0x80010106, false, true},
+		{"其他失败", 0x80004005, false, false},
+	} {
+		var err error
+		if c.hr != 0 {
+			err = ole.NewError(c.hr)
+		}
+		counted, ok := comOutcome(err)
+		if counted != c.counted || ok != c.ok {
+			t.Fatalf("%s：counted=%v ok=%v，期望 counted=%v ok=%v",
+				c.name, counted, ok, c.counted, c.ok)
+		}
+	}
+}
+
 func samePath(a, b string) bool {
 	if a == "" || b == "" {
 		return false

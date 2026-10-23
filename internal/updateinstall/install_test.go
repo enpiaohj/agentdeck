@@ -76,13 +76,38 @@ func TestInstallInPlace(t *testing.T) {
 	if b, err := os.ReadFile(current); err != nil || string(b) != "new content" {
 		t.Fatalf("原地替换内容 = %q %v", b, err)
 	}
-	// .old 是回滚副本：保留到下次启动的善后，不是落地时删。
+	// 回滚副本保留到下次启动的善后，不是落地时删。
 	if b, err := os.ReadFile(current + BackupSuffix); err != nil || string(b) != "old" {
 		t.Fatalf("回滚副本 = %q %v", b, err)
 	}
 	Cleanup(current, nil)
 	if _, err := os.Stat(current + BackupSuffix); !os.IsNotExist(err) {
 		t.Fatal("启动善后应当清掉回滚副本")
+	}
+}
+
+// 用户自己用 ".old" 做的备份不能被更新流程当成回滚副本删掉。
+//
+// 这是 .old 不能当回滚副本名的原因：同目录出现 AgentDeck.exe.old 的常见原因
+// 恰恰是用户手动备份，而更新流程一旦认领这个名字就会覆盖它。
+func TestInstallInPlaceKeepsUserOldBackup(t *testing.T) {
+	dir := t.TempDir()
+	current := writeExe(t, dir, "AgentDeck.exe", "old")
+	pkg := writeExe(t, dir, "download.part", "new content")
+	userBackup := current + ".old"
+	if err := os.WriteFile(userBackup, []byte("USER BACKUP"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !Install(current, current, pkg) {
+		t.Fatal("落地失败")
+	}
+	if b, err := os.ReadFile(userBackup); err != nil || string(b) != "USER BACKUP" {
+		t.Fatalf("用户自己的 .old 备份被改动：%q %v", b, err)
+	}
+	// 善后也不能碰它。
+	Cleanup(current, nil)
+	if b, err := os.ReadFile(userBackup); err != nil || string(b) != "USER BACKUP" {
+		t.Fatalf("善后删掉了用户的 .old 备份：%q %v", b, err)
 	}
 }
 
@@ -200,5 +225,27 @@ func TestSafePreviousName(t *testing.T) {
 		if got := safePreviousName(c.name, c.current); got != c.want {
 			t.Fatalf("safePreviousName(%q, %q) = %v，期望 %v", c.name, c.current, got, c.want)
 		}
+	}
+}
+
+// side-by-side 落地在写 staging 之后、改名之前崩溃时，残留的 <新版本名>.new
+// 不会被 current+".new" 那条清理命中。它必须在下一次启动时被清掉。
+func TestCleanupRemovesStaleSideBySideStaging(t *testing.T) {
+	dir := t.TempDir()
+	current := writeExe(t, dir, "AgentDeck-v0.14.0-win-x64.exe", "old")
+	residue := writeExe(t, dir, "AgentDeck-v0.15.0-win-x64.exe"+StagingSuffix, "partial")
+	// 用户放在同目录、名字不像发布产物的 .new 不能碰。
+	userFile := writeExe(t, dir, "notes.new", "keep me")
+
+	Cleanup(current, nil)
+
+	if _, err := os.Stat(residue); !os.IsNotExist(err) {
+		t.Fatal("side-by-side 的 .new 残留应当被清掉")
+	}
+	if b, err := os.ReadFile(userFile); err != nil || string(b) != "keep me" {
+		t.Fatalf("误删了同目录的普通 .new 文件：%q %v", b, err)
+	}
+	if b, err := os.ReadFile(current); err != nil || string(b) != "old" {
+		t.Fatalf("当前程序被改动：%q %v", b, err)
 	}
 }
