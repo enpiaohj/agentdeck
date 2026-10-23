@@ -43,6 +43,7 @@ import { AgentMark } from '../icons/AgentMark'
 import { PromptRail } from './PromptRail'
 import { currentPrompt } from '../promptRail'
 import { highlight } from '../highlight'
+import { clearFindHighlight, paintFindHighlight } from '../findHighlight'
 import { useTheme } from '../hooks/useTheme'
 import { foldedContent, isLongCode, markdownCodeText, transcriptGroups, processSummary, type FoldedContent } from '../transcriptPresentation'
 import type { ComponentProps, ReactNode } from 'react'
@@ -273,6 +274,8 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
   const findOrigin = useRef<ReadingPosition | null>(null)
   const lastJump = useRef(`${jumpPart}:${jumpToken}`)
   const request = useRef(0)
+  const autoJumped = useRef('')
+  const viewPartRef = useRef(0)
   const [tr, setTr] = useState<TranscriptView | null>(null)
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(false)
@@ -303,6 +306,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
   // 视口顶部是全文第几段：决定提问导航「当前第几问」；载入新窗口前沿用窗口起点
   const [viewPart, setViewPart] = useState<number | null>(null)
   const prompts = tr?.prompts ?? []
+  viewPartRef.current = viewPart ?? destination.focus ?? tr?.start ?? 0
   const promptAt = currentPrompt(prompts, viewPart ?? destination.focus ?? tr?.start ?? 0)
   // 跳到某一问：已在当前窗口里就直接滚过去，否则从那一问起载入新窗口
   const jumpToPrompt = (index: number) => {
@@ -315,6 +319,9 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
   useEffect(() => () => { readingPositions.set(session.key, position.current) }, [session.key])
   const openFind = useCallback(() => {
     if (!findOrigin.current) findOrigin.current = { ...position.current }
+    // 与浏览器一致：正文里选中了文字时，Ctrl+F 直接拿它当关键词（单行、不过长才用）。
+    const picked = window.getSelection()?.toString().trim() ?? ''
+    if (picked && picked.length <= 80 && !/\n/.test(picked) && !document.activeElement?.closest('.ad-find')) setFindQuery(picked)
     setFindOpen(true)
     requestAnimationFrame(() => { findInput.current?.focus(); findInput.current?.select() })
   }, [])
@@ -342,7 +349,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
   useEffect(() => {
     let active = true
     setFindHits([]); setFindIndex(-1); setFindError('')
-    if (!findOpen || !findQuery.trim()) { setFindBusy(false); return }
+    if (!findOpen || !findQuery.trim()) { autoJumped.current = ''; setFindBusy(false); return }
     setFindBusy(true)
     const timer = setTimeout(() => {
       sessionService.SearchInAll(session.key, findQuery).then(hits => {
@@ -350,10 +357,27 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
         const indexes = hits.map(hit => Number(hit.part.slice(hit.part.lastIndexOf('#') + 1))).filter(Number.isSafeInteger)
         setFindHits(indexes)
         setFindSnippets(hits.map(hit => hit.snippet))
+        // 输入即定位：关键词变了就跳到当前位置之后的第一处命中（没有就回到第一处）；
+        // 仅因会话内容刷新而重查时不动阅读位置。
+        if (indexes.length && autoJumped.current !== findQuery) {
+          autoJumped.current = findQuery
+          const from = viewPartRef.current
+          const first = Math.max(0, indexes.findIndex(index => index >= from))
+          setFindIndex(first); restoreScroll.current = null
+          setDestination(previous => ({ at: indexes[first], before: false, focus: indexes[first], revision: previous.revision + 1 }))
+        }
       }).catch(reason => { if (active) setFindError(String(reason)) }).finally(() => { if (active) setFindBusy(false) })
     }, 180)
     return () => { active = false; clearTimeout(timer) }
   }, [session.key, findQuery, findOpen, sourceVersion])
+  // 把关键词在正文里标出来：全部命中淡色，当前这一处加深。
+  useEffect(() => {
+    const body = bodyRef.current
+    if (!findOpen || !findQuery.trim() || !body || loading || !tr) { clearFindHighlight(); return }
+    const frame = requestAnimationFrame(() => paintFindHighlight(body, findQuery, findIndex >= 0 ? findHits[findIndex] ?? -1 : -1))
+    return () => cancelAnimationFrame(frame)
+  }, [findOpen, findQuery, findHits, findIndex, tr, loading])
+  useEffect(() => clearFindHighlight, [])
   const moveFind = (step: number) => {
     if (!findHits.length) return
     const next = findIndex < 0 ? (step < 0 ? findHits.length - 1 : 0) : (findIndex + step + findHits.length) % findHits.length
@@ -475,7 +499,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
           <SearchRegular className="ad-find-glyph" aria-hidden="true" />
           <input ref={findInput} className="ad-find-input" aria-label="查找当前会话" placeholder="查找当前会话…" value={findQuery} onChange={event => setFindQuery(event.target.value)} onKeyDown={event => { if (event.nativeEvent.isComposing) return; if (event.key === 'Enter') { event.preventDefault(); moveFind(event.shiftKey ? -1 : 1) } }} />
           {findQuery ? <Tooltip content="清除关键词" relationship="label"><Button size="small" appearance="subtle" icon={<DismissCircleRegular />} aria-label="清除关键词" onClick={clearFind} /></Tooltip> : null}
-          <span className="ad-find-count" role="status">{findBusy ? '查找中…' : findError ? '查找失败' : !findQuery.trim() ? '' : !findHits.length ? '无匹配' : findIndex < 0 ? `${findHits.length} 处` : `${findIndex + 1} / ${findHits.length}`}</span>
+          <span className="ad-find-count" role="status">{findBusy ? '查找中…' : findError ? '查找失败' : !findQuery.trim() ? '' : !findHits.length ? '无匹配' : findIndex < 0 ? `${findHits.length} 段` : `${findIndex + 1} / ${findHits.length}`}</span>
           <Tooltip content="上一处 (Shift+Enter)" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronUpRegular />} aria-label="上一处匹配" disabled={!findHits.length} onClick={() => moveFind(-1)} /></Tooltip>
           <Tooltip content="下一处 (Enter)" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronDownRegular />} aria-label="下一处匹配" disabled={!findHits.length} onClick={() => moveFind(1)} /></Tooltip>
           <Tooltip content="收起查找，回到查找前的位置 (Esc)" relationship="label"><Button size="small" appearance="subtle" icon={<DismissRegular />} aria-label="收起查找" onClick={closeFind} /></Tooltip>

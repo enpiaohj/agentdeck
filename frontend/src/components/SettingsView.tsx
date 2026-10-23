@@ -1,5 +1,5 @@
 import { Button, Input, Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions } from '@fluentui/react-components'
-import { ArrowLeftRegular, ArrowResetRegular, ArrowSyncRegular, SearchRegular, PaintBrushRegular, TextFontRegular, DatabaseRegular, KeyboardRegular, CheckmarkCircleRegular, SettingsRegular, WindowNewRegular, DismissRegular, ArrowDownloadRegular, PulseRegular } from '@fluentui/react-icons'
+import { ArrowLeftRegular, ArrowResetRegular, ArrowSyncRegular, SearchRegular, PaintBrushRegular, TextFontRegular, DatabaseRegular, KeyboardRegular, CheckmarkCircleRegular, SettingsRegular, WindowNewRegular, DismissRegular, ArrowDownloadRegular, PulseRegular, InfoRegular } from '@fluentui/react-icons'
 import { useId, useRef, useState, type ReactNode } from 'react'
 import { usePreferences } from '../hooks/usePreferences'
 import { matchesSetting, settingSearchKeywords } from '../settingsSearch'
@@ -9,6 +9,7 @@ import { AgentSelect } from './AgentSelect'
 import { TerminalShellControl } from './TerminalShellControl'
 import { DesktopSettingsControl, matchesDesktopSettings } from './DesktopSettingsControl'
 import { UpdateControl, matchesUpdateSettings } from './UpdateControl'
+import { AboutView, matchesAboutSettings } from './AboutView'
 import { SettingRow } from './SettingRow'
 
 const categories = [
@@ -21,6 +22,7 @@ const categories = [
   { id: 'diagnostics', label: '诊断', description: '检查智能体状态与搜索索引。', icon: <PulseRegular /> },
   { id: 'updates', label: '更新', description: '检查新版本，下载并校验到本地。', icon: <ArrowSyncRegular /> },
   { id: 'shortcuts', label: '快捷键', description: '查看导航、会话管理与阅读操作的键盘快捷键。', icon: <KeyboardRegular /> },
+  { id: 'about', label: '关于', description: '版本、开发者、源码仓库、许可证，以及隐私与数据说明。', icon: <InfoRegular /> },
 ] as const
 
 type SettingGroup = { id: string; category: string; title: string; rows: { key: string; title: string; description: string; control: (id: string) => ReactNode }[] }
@@ -80,7 +82,8 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
   if (matches('diagnostics', '诊断 搜索索引 全文索引 重建 检索')) dataSections.push('index')
   const shortcuts = matches('shortcuts', '快捷键 键盘 搜索 Ctrl 选择 Shift 阅读 设置 F2 重命名 Delete 删除 F5 刷新')
   const updates = q ? matchesUpdateSettings(q) : category === 'updates'
-  const empty = !shown.length && !desktop && !dataSections.length && !shortcuts && !updates
+  const about = q ? matchesAboutSettings(q) : category === 'about'
+  const empty = !shown.length && !desktop && !dataSections.length && !shortcuts && !updates && !about
   const chooseCategory = (id: string) => { setCategory(id); setQuery(''); contentRef.current?.scrollTo({ top: 0 }) }
   return <section className="ad-settings" aria-label="应用设置">
     <div className="ad-settings-layout">
@@ -110,6 +113,7 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
             <h2 id={`${baseId}-update-heading`}>{q ? '更新 · 版本' : '版本与更新'}</h2>
             <UpdateControl id={`${baseId}-update`} />
           </section> : null}
+          {about ? <section className="ad-settings-section" aria-labelledby={`${baseId}-about-heading`}><h2 id={`${baseId}-about-heading`}>{q ? '关于 · AgentDeck' : '关于 AgentDeck'}</h2><AboutView /></section> : null}
           {shortcuts ? <section className="ad-settings-section"><h2>快捷键列表</h2><dl className="ad-shortcuts">{[
             ['搜索所有会话','Ctrl + K'],['刷新会话列表','F5'],['新建会话','Ctrl + N'],['新建项目','Ctrl + Shift + N'],['打开设置','Ctrl + ,'],['调整栏宽','拖拽分隔条 / 方向键'],['打开操作菜单','Shift + F10 / 菜单键'],['重命名所选会话','F2'],['删除所选会话','Delete'],['查找当前会话','Ctrl + F'],['下一 / 上一处匹配','Enter / Shift + Enter'],['全选当前列表','Ctrl + A'],['多选 / 连选智能体（侧栏）','Ctrl + 单击 / Shift + 单击'],['追加 / 取消选择','Ctrl + 单击'],['连续选择','Shift + 单击'],['追加连续范围','Ctrl + Shift + 单击'],['清空选择','Esc'],['移动焦点 / 扩展选择','方向键 / Shift + 方向键'],['保存备注','Ctrl + Enter'],
           ].map(([label, key]) => <div key={label}><dt>{label}</dt><dd><kbd>{key}</kbd></dd></div>)}</dl><p className="ad-settings-note">全选仅作用于筛选后当前展开的会话。删除操作会先显示确认窗口。</p></section> : null}

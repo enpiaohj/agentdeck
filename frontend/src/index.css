@@ -57,6 +57,8 @@ button:focus-visible, select:focus-visible, [role='button']:focus-visible, [role
 .ad-find-glyph { flex-shrink: 0; margin-inline-end: 2px; color: var(--ad-muted); font-size: 16px; }
 .ad-find-input { width: 200px; min-width: 90px; background: var(--ad-canvas); color: var(--ad-text); border: 1px solid var(--ad-line); border-radius: 4px; padding: 4px 6px; }
 .ad-find-count { flex-shrink: 0; min-width: 44px; text-align: right; color: var(--ad-muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+::highlight(ad-find-match) { background-color: rgba(255, 200, 0, .38); color: inherit; }
+::highlight(ad-find-current) { background-color: rgba(255, 140, 0, .72); color: inherit; }
 .ad-find-note { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin: 0; padding: 2px 2px 0; color: var(--ad-muted); font-size: 11px; overflow-wrap: anywhere; }
 .ad-reading-context { display: flex; gap: 8px; align-items: center; min-width: 0; font-size: 11px; color: var(--ad-muted); }
 .ad-reading-context > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -391,8 +393,9 @@ button:focus-visible, select:focus-visible, [role='button']:focus-visible, [role
   .ad-setting-row:has(.ad-terminal-shell) { grid-template-columns: minmax(0, 1fr); }
   .ad-terminal-shell { width: 100%; align-items: flex-start; }
   .ad-terminal-shell-path { justify-content: flex-start; }
-  .ad-update-live-row { grid-template-columns: minmax(0, 1fr); gap: 10px; }
-  .ad-update-actions { justify-content: flex-start; }
+  .ad-update-head { grid-template-columns: auto minmax(0, 1fr); }
+  .ad-update-actions { grid-column: 1 / -1; justify-content: flex-start; }
+  .ad-info-list > div { grid-template-columns: 80px minmax(0, 1fr); gap: 10px; }
   .ad-settings-footer { flex-wrap: wrap; }
 }
 @media (max-width: 480px) {
@@ -400,15 +403,40 @@ button:focus-visible, select:focus-visible, [role='button']:focus-visible, [role
   .ad-setting-control { justify-content: flex-start; }
   .ad-setting-control > .fui-Select, .ad-setting-control > select { width: 100%; }
 }
-.ad-update-current { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--ad-text); }
-/* 状态行：左状态文字、右按钮，始终同一行；进度条与更新说明依次贴在下面。
-   切换状态只换这一行，版式不动（照 RemoteFlow 的「软件更新」区）。 */
-.ad-update-live { padding: 14px 22px 16px; border-bottom: 1px solid var(--ad-line); }
-.ad-update-live-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; }
-.ad-update-state { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12px; line-height: 1.7; color: var(--ad-muted); overflow-wrap: anywhere; }
-.ad-update-state-error { color: var(--colorPaletteRedForeground1); }
-.ad-update-live .fui-ProgressBar { margin-top: 10px; }
-.ad-update-notes { margin: 10px 0 0; max-height: 180px; overflow: auto; padding: 12px 14px; border: 1px solid var(--ad-line); border-radius: 8px; background: var(--ad-soft); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.75; color: var(--ad-muted); user-select: text; }
-.ad-update-confirm-intro { margin: 0 0 4px; font-size: 13px; line-height: 1.7; }
+/* 更新页：顶部状态头（图标 + 结论 + 按钮），其下键值信息列表，再往下更新内容与自动检查。
+   「关于」页共用 .ad-info-list / .ad-link。 */
+.ad-update-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 20px 22px; border-bottom: 1px solid var(--ad-line); }
+.ad-update-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--ad-soft); color: var(--ad-muted); font-size: 22px; }
+.ad-update-head[data-tone='ok'] .ad-update-icon { background: color-mix(in srgb, var(--colorPaletteGreenForeground1) 14%, transparent); color: var(--colorPaletteGreenForeground1); }
+.ad-update-head[data-tone='accent'] .ad-update-icon { background: color-mix(in srgb, var(--ad-accent) 14%, transparent); color: var(--ad-accent); }
+.ad-update-head[data-tone='error'] .ad-update-icon { background: color-mix(in srgb, var(--colorPaletteRedForeground1) 14%, transparent); color: var(--colorPaletteRedForeground1); }
+.ad-update-headline h3 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.5; }
+.ad-update-headline p { margin: 2px 0 0; font-size: 12px; line-height: 1.7; color: var(--ad-muted); overflow-wrap: anywhere; }
 .ad-update-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
-.ad-update-path { margin: 8px 0 0; font-size: 12px; line-height: 1.7; color: var(--ad-muted); overflow-wrap: anywhere; user-select: text; }
+.ad-update-progress { padding: 0 22px 14px; margin-top: -6px; border-bottom: 1px solid var(--ad-line); }
+.ad-update-alert, .ad-update-aside { margin: 0; padding: 10px 22px; border-bottom: 1px solid var(--ad-line); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.ad-update-alert { color: var(--colorPaletteRedForeground1); background: color-mix(in srgb, var(--colorPaletteRedForeground1) 7%, transparent); }
+.ad-update-aside { color: var(--ad-muted); }
+.ad-info-list { margin: 0; padding: 6px 22px; border-bottom: 1px solid var(--ad-line); }
+.ad-info-list > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 16px; padding: 8px 0; font-size: 13px; line-height: 1.7; }
+.ad-info-list dt { color: var(--ad-muted); }
+.ad-info-list dd { margin: 0; overflow-wrap: anywhere; user-select: text; font-variant-numeric: tabular-nums; }
+.ad-info-sub { margin-inline-start: 10px; color: var(--ad-muted); font-size: 12px; }
+.ad-info-path { font-size: 12px; }
+.ad-link { padding: 0; border: 0; background: none; color: var(--ad-accent); font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.ad-link:hover { text-decoration: underline; }
+.ad-link:focus-visible { outline: 2px solid var(--ad-accent); outline-offset: 2px; border-radius: 2px; }
+.ad-update-notes-wrap { padding: 14px 22px 16px; border-bottom: 1px solid var(--ad-line); }
+.ad-update-notes-wrap h4 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+.ad-update-notes { max-height: 200px; overflow: auto; padding: 12px 14px; border: 1px solid var(--ad-line); border-radius: 8px; background: var(--ad-soft); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.75; color: var(--ad-muted); user-select: text; }
+.ad-update-confirm-intro { margin: 0 0 4px; font-size: 13px; line-height: 1.7; }
+/* 「关于」页 */
+.ad-about-brand { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; padding: 20px 22px 6px; }
+.ad-about-brand h3 { margin: 0; font-size: 22px; font-weight: 600; }
+.ad-about-brand span { color: var(--ad-muted); font-size: 12px; }
+.ad-about-card .ad-info-list { border-bottom: 0; padding-bottom: 8px; }
+.ad-about-note { margin: 0; padding: 0 22px 16px; font-size: 12px; line-height: 1.7; color: var(--ad-muted); }
+.ad-about-privacy { padding: 14px 22px 18px; border-top: 1px solid var(--ad-line); }
+.ad-about-privacy h4 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+.ad-about-privacy p { margin: 0 0 6px; font-size: 12px; line-height: 1.8; color: var(--ad-muted); }
+.ad-about-privacy p:last-child { margin-bottom: 0; }
