@@ -61,7 +61,8 @@ const useStyles = makeStyles({
     flexShrink: 0,
   },
   snippet: { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', fontSize: '12px', lineHeight: '1.6', color: tokens.colorNeutralForeground2, overflowWrap: 'anywhere' },
-  mark: { color: tokens.colorBrandForeground1, fontWeight: 600 },
+  // 与会话内查找的正文高亮同色（index.css 的 ::highlight(ad-find-match)），两处看起来是同一种标记。
+  mark: { backgroundColor: 'rgba(255, 200, 0, 0.38)', color: 'inherit', borderRadius: '2px', padding: '0 1px' },
   empty: { padding: '24px', textAlign: 'center', color: tokens.colorNeutralForeground3 },
 })
 
@@ -70,7 +71,7 @@ type Props = {
   revision: number
   selectedKey: string | null
   onFocusSearch: () => void
-  onJump: (key: string, partIndex: number) => void
+  onJump: (key: string, partIndex: number, match: string) => void
 }
 
 export function SearchResults({ query: q, revision, selectedKey, onFocusSearch, onJump }: Props) {
@@ -131,7 +132,7 @@ export function SearchResults({ query: q, revision, selectedKey, onFocusSearch, 
                 <div className={styles.empty}>未找到与「{q}」相关的会话内容</div>
               ) : (
                 reply.hits.map((h, i) => (
-                  <button title={h.title || '未命名会话'} key={h.part + i} ref={element => { resultRefs.current[i] = element }} className={mergeClasses(styles.hit, selectedKey === h.key && styles.active)} aria-current={selectedKey === h.key ? 'true' : undefined} onClick={() => onJump(h.key, partIndexOf(h.part))}
+                  <button title={h.title || '未命名会话'} key={h.part + i} ref={element => { resultRefs.current[i] = element }} className={mergeClasses(styles.hit, selectedKey === h.key && styles.active)} aria-current={selectedKey === h.key ? 'true' : undefined} onClick={() => onJump(h.key, partIndexOf(h.part), h.match)}
                     onKeyDown={event => {
                       if (event.key === 'ArrowDown') { event.preventDefault(); resultRefs.current[(i + 1) % reply.hits.length]?.focus() }
                       if (event.key === 'ArrowUp') { event.preventDefault(); if (i === 0) onFocusSearch(); else resultRefs.current[i - 1]?.focus() }

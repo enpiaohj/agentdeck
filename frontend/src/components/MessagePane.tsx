@@ -231,10 +231,11 @@ type Props = {
   infoOpen: boolean
   onToggleInfo: () => void
   jumpPart: number // 搜索命中定位到 transcript 第 n 段(-1 = 不定位)
+  jumpMatch: string // 全局搜索命中的原文：带进会话内查找，正文里同样高亮
   onOpenInfo: () => void
 }
 
-export function MessagePane({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggleInfo, onOpenInfo }: Props) {
+export function MessagePane({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOpen, onToggleInfo, onOpenInfo }: Props) {
   const styles = useStyles()
   if (!session) {
     // 注意:此前用 `flex:1` 的 flex 容器做居中,该容器内的子元素在本项目
@@ -249,10 +250,10 @@ export function MessagePane({ session, sourceVersion, jumpPart, jumpToken, infoO
       </div>
     )
   }
-  return <Loaded key={session.key} session={session} sourceVersion={sourceVersion} jumpPart={jumpPart} jumpToken={jumpToken} infoOpen={infoOpen} onToggleInfo={onToggleInfo} onOpenInfo={onOpenInfo} />
+  return <Loaded key={session.key} session={session} sourceVersion={sourceVersion} jumpPart={jumpPart} jumpMatch={jumpMatch} jumpToken={jumpToken} infoOpen={infoOpen} onToggleInfo={onToggleInfo} onOpenInfo={onOpenInfo} />
 }
 
-function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggleInfo, onOpenInfo }: { session: SessionView; sourceVersion: number; jumpPart: number; jumpToken: number; infoOpen: boolean; onToggleInfo: () => void; onOpenInfo: () => void }) {
+function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOpen, onToggleInfo, onOpenInfo }: { session: SessionView; sourceVersion: number; jumpPart: number; jumpMatch: string; jumpToken: number; infoOpen: boolean; onToggleInfo: () => void; onOpenInfo: () => void }) {
   const styles = useStyles()
   const theme = useTheme()
   const m = agentMeta(session.agent)
@@ -263,8 +264,10 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
   const restoreScroll = useRef<number | null>(explicitJump.current ? null : savedPosition.current?.scroll ?? null)
   const [destination, setDestination] = useState(() => ({ at:explicitJump.current?jumpPart:savedPosition.current?.at ?? (preferences.readingStart==='latest'?-1:0), before:explicitJump.current?false:savedPosition.current?.before ?? false, focus:explicitJump.current?jumpPart:null as number|null, revision:0 }))
   useEffect(() => { if (explicitJump.current) consumedJumps.set(session.key, jumpToken) }, [])
-  const [findOpen, setFindOpen] = useState(false)
-  const [findQuery, setFindQuery] = useState('')
+  // 从全局搜索点进来时直接带着命中词打开查找：正文里高亮、可在本会话内逐处跳转。
+  const seeded = explicitJump.current && !!jumpMatch.trim()
+  const [findOpen, setFindOpen] = useState(seeded)
+  const [findQuery, setFindQuery] = useState(seeded ? jumpMatch : '')
   const [findHits, setFindHits] = useState<number[]>([])
   const [findSnippets, setFindSnippets] = useState<string[]>([])
   const [findIndex, setFindIndex] = useState(-1)
@@ -274,7 +277,9 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
   const findOrigin = useRef<ReadingPosition | null>(null)
   const lastJump = useRef(`${jumpPart}:${jumpToken}`)
   const request = useRef(0)
-  const autoJumped = useRef('')
+  const autoJumped = useRef(seeded ? jumpMatch : '')
+  // 待选中的命中段：查找结果回来后把「第几处」对到用户点的那一段。
+  const pendingPart = useRef(seeded ? jumpPart : -1)
   const viewPartRef = useRef(0)
   const [tr, setTr] = useState<TranscriptView | null>(null)
   const [err, setErr] = useState('')
@@ -293,7 +298,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
     const value=`${jumpPart}:${jumpToken}`
     if(lastJump.current===value)return
     lastJump.current=value
-    if(jumpPart>=0) { consumedJumps.set(session.key, jumpToken); restoreAnchor.current=null; restoreScroll.current=null; findOrigin.current=null; setFindOpen(false); setDestination(previous=>({at:jumpPart,before:false,focus:jumpPart,revision:previous.revision+1})) }
+    if(jumpPart>=0) { consumedJumps.set(session.key, jumpToken); restoreAnchor.current=null; restoreScroll.current=null; findOrigin.current=null; if(jumpMatch.trim()){ autoJumped.current=jumpMatch; pendingPart.current=jumpPart; setFindQuery(jumpMatch); setFindOpen(true) } else setFindOpen(false); setDestination(previous=>({at:jumpPart,before:false,focus:jumpPart,revision:previous.revision+1})) }
   },[jumpPart,jumpToken])
 
   const [pageContext, setPageContext] = useState('')
@@ -359,7 +364,11 @@ function Loaded({ session, sourceVersion, jumpPart, jumpToken, infoOpen, onToggl
         setFindSnippets(hits.map(hit => hit.snippet))
         // 输入即定位：关键词变了就跳到当前位置之后的第一处命中（没有就回到第一处）；
         // 仅因会话内容刷新而重查时不动阅读位置。
-        if (indexes.length && autoJumped.current !== findQuery) {
+        if (pendingPart.current >= 0 && autoJumped.current === findQuery) {
+          const at = indexes.indexOf(pendingPart.current)
+          pendingPart.current = -1
+          if (at >= 0) setFindIndex(at)
+        } else if (indexes.length && autoJumped.current !== findQuery) {
           autoJumped.current = findQuery
           const from = viewPartRef.current
           const first = Math.max(0, indexes.findIndex(index => index >= from))
