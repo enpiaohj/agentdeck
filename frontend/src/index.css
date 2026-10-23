@@ -52,14 +52,15 @@ button:focus-visible, select:focus-visible, [role='button']:focus-visible, [role
 .ad-page-context small { display: block; margin-bottom: 4px; }
 /* 会话内查找：浮在正文右上角，不占一行也不推动正文；右侧留 44px 与提问导航条错开。
    收起用最右的 × 或 Esc（都回到查找前的阅读位置），关键词用输入框内的 ⊗ 清空。 */
-.ad-find { position: absolute; top: 10px; right: 44px; z-index: 3; display: flex; flex-direction: column; gap: 2px; max-width: min(420px, calc(100% - 72px)); padding: 6px 8px; border: 1px solid var(--ad-line); border-radius: 8px; background: var(--ad-surface); box-shadow: 0 8px 24px rgba(0, 0, 0, .18); }
+/* 查找条固定在正文上方的一条窄行（像浏览器的查找栏）：打开时正文整体下移一次，之后每次跳转都不会被它盖住。 */
+.ad-find { flex-shrink: 0; display: flex; align-items: center; gap: 12px; min-width: 0; padding: 6px 16px; border-bottom: 1px solid var(--ad-line); background: var(--ad-surface); }
 .ad-find-row { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .ad-find-glyph { flex-shrink: 0; margin-inline-end: 2px; color: var(--ad-muted); font-size: 16px; }
 .ad-find-input { width: 200px; min-width: 90px; background: var(--ad-canvas); color: var(--ad-text); border: 1px solid var(--ad-line); border-radius: 4px; padding: 4px 6px; }
 .ad-find-count { flex-shrink: 0; min-width: 44px; text-align: right; color: var(--ad-muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 ::highlight(ad-find-match) { background-color: rgba(255, 200, 0, .38); color: inherit; }
 ::highlight(ad-find-current) { background-color: rgba(255, 140, 0, .72); color: inherit; }
-.ad-find-note { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin: 0; padding: 2px 2px 0; color: var(--ad-muted); font-size: 11px; overflow-wrap: anywhere; }
+.ad-find-note { flex: 1; min-width: 0; overflow: hidden; margin: 0; color: var(--ad-muted); font-size: 11px; white-space: nowrap; text-overflow: ellipsis; }
 .ad-reading-context { display: flex; gap: 8px; align-items: center; min-width: 0; font-size: 11px; color: var(--ad-muted); }
 .ad-reading-context > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ad-reading-context > span:last-child { flex-shrink: 0; }
