@@ -215,6 +215,7 @@ func (r *progressReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// DownloadTimeout 是整次下载的上限。20 MB 的包在慢网络上也能完成，同时
-// 避免请求无限期挂着。
-const DownloadTimeout = 10 * time.Minute
+// DownloadTimeout 是整次下载的兜底上限，真正判断「卡住」的是 stallTimeout。
+// 20 MB 的包按 30 分钟算，只有持续低于约 12 KB/s 的链路才会触顶；之前的 10 分钟
+// 会把 35 KB/s 以下但一直有数据的慢链路在下载中途砍掉，与「慢而稳定不误杀」矛盾。
+const DownloadTimeout = 30 * time.Minute

@@ -6,8 +6,10 @@ import { pickOpenPath } from '../nativeDialogs'
 import { FormDialog } from './FormDialog'
 import { executeLocation, performResume } from '../projectLocation'
 
-type Request = { original: string; directory: string; notice?: string; action: 'resume' | 'copy' | 'save'; key?: string; resolve: (value: boolean) => void }
+type Request = { original: string; directory: string; notice?: string; action: 'resume' | 'copy' | 'save'; key?: string; remember?: boolean; resolve: (value: boolean) => void }
 const eventName = 'agentdeck:project-location'
+// 后端错误经桥传来会带「RuntimeError: 」前缀，对话框里只留说明本身。
+const readable = (reason: unknown) => String(reason).replace(/^\w*Error:\s*/, '')
 
 function chooseLocation(request: Omit<Request, 'resolve'>): Promise<boolean> {
   return new Promise(resolve => window.dispatchEvent(new CustomEvent(eventName, { detail: { ...request, resolve } })))
@@ -20,6 +22,13 @@ export async function resumeWithLocation(key: string, action: 'resume' | 'copy')
     open: async key => { const result = await resumeService.OpenAtResult(key, ''); if (result.warning) throw new Error(result.warning) },
     copy: key => resumeService.CopyAt(key, ''),
   })
+}
+
+// 原目录好好的，只是想这一次换个目录继续（另一个检出、worktree、副本）：复用同一个对话框，
+// 但默认不保存位置关联——关联是整个项目的，不该被一次临时选择悄悄改掉。
+export function resumeInOtherDirectory(key: string, original: string): Promise<boolean> {
+  return chooseLocation({ original, directory: original, key, action: 'resume', remember: false,
+    notice: '仅本次在所选目录里继续此会话，不会修改会话记录，也不会移动文件。' })
 }
 
 export async function changeProjectLocation(original: string): Promise<boolean> {
@@ -52,7 +61,7 @@ export function ProjectLocationDialog() {
       // 「更改项目位置」预填当前有效位置：已有关联时它是关联目标。预填原目录会让
       // 「打开后直接保存」把输入值当成原目录而静默移除已有正确关联。恢复流程则
       // 预填原目录，用户要么确认它，要么另选一个。
-      active.current = next; setRequest(next); setPath(next.action === 'save' ? next.directory || next.original : next.original || next.directory); setRemember(!!next.original)
+      active.current = next; setRequest(next); setPath(next.action === 'save' ? next.directory || next.original : next.original || next.directory); setRemember(next.remember ?? !!next.original)
       setError(''); setSaved(''); setCompleted(false); setValidated(''); setDirectory(''); setCommand(''); setValidationError('')
     }
     window.addEventListener(eventName, listener)
@@ -77,7 +86,7 @@ export function ProjectLocationDialog() {
           }
           if (sequence !== generation.current) return
           setDirectory(resolved); setCommand(finalCommand); setValidated(trimmed)
-        } catch (reason) { if (sequence === generation.current) setValidationError(String(reason)) }
+        } catch (reason) { if (sequence === generation.current) setValidationError(readable(reason)) }
         finally { if (sequence === generation.current) setChecking(false) }
       })()
     }, 250)
@@ -91,7 +100,7 @@ export function ProjectLocationDialog() {
     try {
       const selected = await pickOpenPath({ CanChooseDirectories: true, CanChooseFiles: false, CanCreateDirectories: false, Title: '选择项目目录', ButtonText: '选择目录' })
       if (active.current === current && typeof selected === 'string' && selected) setPath(selected)
-    } catch (reason) { if (active.current === current) setError(String(reason)) }
+    } catch (reason) { if (active.current === current) setError(readable(reason)) }
     finally { pending.current = false; setBusy(false) }
   }
   const submit = async () => {
@@ -107,7 +116,7 @@ export function ProjectLocationDialog() {
       })
       if (warning) { setCompleted(true); setError(warning); return }
       close(true)
-    } catch (reason) { setError(String(reason)) }
+    } catch (reason) { setError(readable(reason)) }
     finally { pending.current = false; setBusy(false) }
   }
   const editing = request?.action === 'save'

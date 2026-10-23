@@ -34,7 +34,7 @@ import { Events } from '@wailsio/runtime'
 import type { SessionView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import * as markService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/markservice'
-import { resumeWithLocation } from './ProjectLocationDialog'
+import { resumeInOtherDirectory, resumeWithLocation } from './ProjectLocationDialog'
 import { agentMeta, fmtTime, relTime } from '../util'
 import { pickOpenPath } from '../nativeDialogs'
 import { AgentMark } from '../icons/AgentMark'
@@ -399,6 +399,9 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
         // 这条路径的错误消息后端保证自解释（其中一条是「终端已打开、只是
         // 附带动作失败」），不再套「操作失败：」前缀，否则与事实相反。
         try { if (await resumeWithLocation(item.key, 'resume')) setActionMessage('已在终端中打开会话。') }
+        catch (reason) { setBulkError(String(reason).slice(0, 240)) }
+      } else if (action === 'resumeElsewhere') {
+        try { if (await resumeInOtherDirectory(item.key, item.cwd)) setActionMessage('已在所选目录的终端中打开会话。') }
         catch (reason) { setBulkError(String(reason).slice(0, 240)) }
       } else if (action === 'copyResume') {
         if (await resumeWithLocation(item.key, 'copy')) setActionMessage('恢复命令已复制。')

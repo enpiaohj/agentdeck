@@ -9,6 +9,12 @@ import {
   Button,
   Spinner,
   Tooltip,
+  Menu,
+  MenuTrigger,
+  MenuPopover,
+  MenuList,
+  MenuItem,
+  SplitButton,
 } from '@fluentui/react-components'
 import {
   PersonRegular,
@@ -30,13 +36,14 @@ import {
   SearchRegular,
   DismissRegular,
   DismissCircleRegular,
+  FolderArrowRightRegular,
   TextBulletListLtrRegular,
 } from '@fluentui/react-icons'
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Browser } from '@wailsio/runtime'
 import type { SessionView, TranscriptView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
-import { resumeWithLocation } from './ProjectLocationDialog'
+import { resumeInOtherDirectory, resumeWithLocation } from './ProjectLocationDialog'
 import { agentMeta, fmtTime } from '../util'
 import { pickOpenPath } from '../nativeDialogs'
 import { AgentMark } from '../icons/AgentMark'
@@ -597,10 +604,18 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOp
       <div className={`ad-message-actions ${styles.bottom}`}>
         {session.resume && !tr?.retained ? (
           <>
-            <Tooltip content={`在 ${m.label} 终端中继续此会话`} relationship="label">
-              <Button size="small" appearance="primary" icon={<OpenRegular />} disabled={actionBusy}
-                onClick={() => void runAction(async () => { await resumeWithLocation(session.key, 'resume') })}>{actionBusy ? '正在打开…' : '继续会话'}</Button>
-            </Tooltip>
+            <Menu positioning="above-start">
+              <MenuTrigger disableButtonEnhancement>
+                {(triggerProps) => <Tooltip content={`在 ${m.label} 终端中继续此会话；右侧箭头可换一个目录继续`} relationship="label">
+                  <SplitButton size="small" appearance="primary" disabled={actionBusy} icon={<OpenRegular />}
+                    menuButton={triggerProps} aria-label="继续会话选项"
+                    primaryActionButton={{ onClick: () => void runAction(async () => { await resumeWithLocation(session.key, 'resume') }) }}>{actionBusy ? '正在打开…' : '继续会话'}</SplitButton>
+                </Tooltip>}
+              </MenuTrigger>
+              <MenuPopover><MenuList>
+                <MenuItem icon={<FolderArrowRightRegular />} disabled={session.source === 'wsl'} onClick={() => void runAction(async () => { await resumeInOtherDirectory(session.key, session.cwd) })}>在其他目录继续…</MenuItem>
+              </MenuList></MenuPopover>
+            </Menu>
             <Button size="small" appearance="subtle" icon={<CopyRegular />} disabled={actionBusy}
               onClick={() => void runAction(async () => { await resumeWithLocation(session.key, 'copy') })}>复制恢复命令</Button>
           </>

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -220,13 +221,23 @@ func (c Client) Check(ctx context.Context, current string) (Result, error) {
 	// 点一个注定失败的下载。
 	exeAsset, hasExe := release.ExeAsset()
 	sumsAsset, hasSums := release.SumsAsset()
-	if hasExe && (hasSums || exeAsset.SHA256() != "") {
+	// 正式接口返回的下载地址必须是 github.com 的 https 地址；本机测试服务（APIURL 被替换）不受限。
+	trusted := c.APIURL != "" || (trustedAssetURL(exeAsset.URL) && (!hasSums || trustedAssetURL(sumsAsset.URL)))
+	if hasExe && trusted && (hasSums || exeAsset.SHA256() != "") {
 		result.ExeAsset = exeAsset
 		result.SumsAsset = sumsAsset
 	} else {
 		result.Available = false
 	}
 	return result, nil
+}
+
+// trustedAssetURL 判断资产地址是否为 GitHub 发布下载地址（https，主机 github.com）。
+// 接口响应里的地址不加校验就下载，等于让响应决定程序去哪里取可执行文件；
+// 重定向到 CDN 的那一跳由 HTTP 客户端处理，不在此限。
+func trustedAssetURL(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && u.Scheme == "https" && strings.EqualFold(u.Hostname(), "github.com")
 }
 
 func firstNonEmpty(values ...string) string {

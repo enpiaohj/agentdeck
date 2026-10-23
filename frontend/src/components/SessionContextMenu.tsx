@@ -1,10 +1,10 @@
 import { Menu, MenuPopover, MenuList, MenuItem, MenuDivider } from '@fluentui/react-components'
-import { OpenRegular, PanelRightRegular, EditRegular, StarRegular, ArchiveRegular, ArchiveArrowBackRegular, CopyRegular, ArrowDownloadRegular, CodeRegular, DeleteRegular, PinRegular, PinOffRegular } from '@fluentui/react-icons'
+import { OpenRegular, PanelRightRegular, EditRegular, StarRegular, ArchiveRegular, ArchiveArrowBackRegular, CopyRegular, ArrowDownloadRegular, CodeRegular, FolderArrowRightRegular, DeleteRegular, PinRegular, PinOffRegular } from '@fluentui/react-icons'
 import { useMemo } from 'react'
 import type { SessionView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import { deletionUnavailableReason } from '../sessionDeletion'
 
-export type SessionAction = 'open' | 'details' | 'rename' | 'resume' | 'copyResume' | 'copyTitle' | 'copyCwd' | 'export' | 'pin' | 'favorite' | 'archive' | 'delete'
+export type SessionAction = 'open' | 'details' | 'rename' | 'resume' | 'resumeElsewhere' | 'copyResume' | 'copyTitle' | 'copyCwd' | 'export' | 'pin' | 'favorite' | 'archive' | 'delete'
 
 export function SessionContextMenu({ items, point, pinned = false, onClose, onAction }: {
   items: SessionView[]; point: { x: number; y: number }; pinned?: boolean; onClose: () => void; onAction: (action: SessionAction) => void
@@ -28,6 +28,7 @@ export function SessionContextMenu({ items, point, pinned = false, onClose, onAc
           <MenuItem icon={<PanelRightRegular />} onClick={() => onAction('details')}>管理标签与备注</MenuItem>
           <MenuItem icon={<EditRegular />} secondaryContent="F2" onClick={() => onAction('rename')}>重命名</MenuItem>
           <MenuItem icon={<CodeRegular />} disabled={!canResume || items[0].source === 'wsl'} title={!canResume ? '该来源的会话暂不支持在终端中继续（仅可查看历史）' : items[0].source === 'wsl' ? 'WSL 会话需在 WSL 内继续' : undefined} onClick={() => onAction('resume')}>在终端中继续会话</MenuItem>
+          <MenuItem icon={<FolderArrowRightRegular />} disabled={!canResume || items[0].source === 'wsl'} title={!canResume ? '该来源的会话暂不支持在终端中继续（仅可查看历史）' : items[0].source === 'wsl' ? 'WSL 会话需在 WSL 内继续' : '仅本次换一个目录继续，不改动会话记录'} onClick={() => onAction('resumeElsewhere')}>在其他目录继续…</MenuItem>
           <MenuItem icon={<CopyRegular />} disabled={!canResume} title={!canResume ? '该来源的会话没有可用的恢复命令' : undefined} onClick={() => onAction('copyResume')}>复制恢复命令</MenuItem>
           <MenuDivider />
         </> : null}
