@@ -180,3 +180,35 @@ test('后端推送进度时不清掉本地错误', async () => {
   assert.match(settings.getSnapshot().error, /后端未就绪/)
   stop()
 })
+
+test('取消下载给出中性提示，而不是错误', async () => {
+  const settings = createUpdateSettings({
+    Status: async () => view({ checked: true, latest: '1.1.0', available: true, downloadable: true }),
+    CancelDownload: async () => view({ checked: true, latest: '1.1.0', available: true, downloadable: true }),
+  }, noEvents())
+  await settings.load()
+  await settings.cancelDownload()
+  assert.equal(settings.getSnapshot().error, '')
+  // 取消后后端只是回到「有新版本」，取消这件事靠这条提示说出来。
+  assert.match(settings.getSnapshot().notice, /已取消下载。v1\.1\.0 仍可随时下载/)
+})
+
+test('重新检查或下载都清掉取消提示', async () => {
+  const settings = createUpdateSettings({
+    Status: async () => view({ checked: true, latest: '1.1.0', available: true, downloadable: true }),
+    CancelDownload: async () => view({ checked: true, latest: '1.1.0', available: true, downloadable: true }),
+    Check: async () => view({ checked: true, latest: '1.1.0', available: true, downloadable: true }),
+    Download: async () => view({ checked: true, latest: '1.1.0', ready_to_restart: true }),
+  }, noEvents())
+  await settings.load()
+  await settings.cancelDownload()
+  assert.notEqual(settings.getSnapshot().notice, '')
+
+  await settings.check()
+  assert.equal(settings.getSnapshot().notice, '')
+
+  await settings.cancelDownload()
+  await settings.download()
+  assert.equal(settings.getSnapshot().notice, '')
+  assert.equal(settings.getSnapshot().view.ready_to_restart, true)
+})
