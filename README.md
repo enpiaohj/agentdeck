@@ -407,7 +407,7 @@ go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...   # 依赖与标准库漏�
 - 上游智能体可能自动清理历史记录；AgentDeck 保留成功读取的本地副本，但无法补回首次读取前已删除的记录。
 - Claude Desktop 会话无原生恢复入口；Desktop 聊天缓存只包含在 Desktop 里打开过的会话，其缓存格式属于 claude.ai 前端的内部结构，
   Desktop 升级后可能变化（读取失败会显示在诊断里）。
-- 搜索按原始 Markdown 文本的子串匹配；超长段落采用命中附近的 8000 字符窗口，中部窗口可能缺少围栏而影响 Markdown 排版。
+- 会话内查找按原始 Markdown 文本的子串匹配；超长段落采用命中附近的 8000 字符窗口，中部窗口可能缺少围栏而影响 Markdown 排版。
 - 当前正式产物为未签名的 Windows x64 单文件 EXE，尚无安装包。
 - 原生窗口在不同 DPI 下尚未完整走查，macOS / Linux 尚未构建和运行验证。
 - 「在其他目录继续」对 opencode、pi、cline、kimi 等智能体的跨目录行为尚未逐一验证。
