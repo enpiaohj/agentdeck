@@ -247,6 +247,15 @@ export function TranscriptWindow(key: string, at: number, before: boolean): $Can
     });
 }
 
+/**
+ * TranscriptWindowAt 在原始段内按 rune 偏移加载附近正文；不改动保留与导出内容。
+ */
+export function TranscriptWindowAt(key: string, at: number, before: boolean, offset: number): $CancellablePromise<$models.TranscriptView | null> {
+    return $Call.ByID(319783607, key, at, before, offset).then(($result: any) => {
+        return $$createType23($result);
+    });
+}
+
 // Private type creation functions
 const $$createType0 = $models.AgentView.createFrom;
 const $$createType1 = $Create.Array($$createType0);

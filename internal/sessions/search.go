@@ -32,6 +32,9 @@ type Hit struct {
 	Before string `json:"before"`
 	Match  string `json:"match"`
 	After  string `json:"after"`
+	// AgentDeck：原文 rune 区间用于读取超长段的命中窗口，不受摘要空白折叠影响。
+	Start int `json:"start"`
+	End   int `json:"end"`
 }
 
 const (
@@ -64,7 +67,27 @@ func hitIn(p Part, needle string) (Hit, bool) {
 	if needle == "" || p.Text == "" {
 		return Hit{}, false
 	}
-	text := []rune(strings.Join(strings.Fields(p.Text), " "))
+	// AgentDeck：保留规范化文本到原文 rune 的映射，以便命中定位。
+	var text []rune
+	var starts, ends []int
+	space := false
+	for i, r := range []rune(p.Text) {
+		if unicode.IsSpace(r) {
+			if len(text) > 0 {
+				space = true
+			}
+			continue
+		}
+		if space {
+			text = append(text, ' ')
+			starts = append(starts, ends[len(ends)-1])
+			ends = append(ends, i)
+			space = false
+		}
+		text = append(text, r)
+		starts = append(starts, i)
+		ends = append(ends, i+1)
+	}
 	low := fold(string(text))
 	i := strings.Index(low, needle)
 	if i < 0 {
@@ -73,7 +96,7 @@ func hitIn(p Part, needle string) (Hit, bool) {
 	at := utf8.RuneCountInString(low[:i])
 	n := utf8.RuneCountInString(needle)
 	from, to := max(0, at-hitBefore), min(len(text), at+n+hitAfter)
-	h := Hit{Role: p.Role, Kind: p.Kind, Before: string(text[from:at]), Match: string(text[at : at+n]), After: string(text[at+n : to])}
+	h := Hit{Role: p.Role, Kind: p.Kind, Before: string(text[from:at]), Match: string(text[at : at+n]), After: string(text[at+n : to]), Start: starts[at], End: ends[at+n-1]}
 	if from > 0 {
 		h.Before = "…" + strings.TrimLeft(h.Before, " ")
 	}

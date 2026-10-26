@@ -222,6 +222,7 @@ export function App() {
   const [jumpPart, setJumpPart] = useState(-1)
   const [jumpToken, setJumpToken] = useState(0)
   const [jumpMatch, setJumpMatch] = useState('')
+  const [jumpOffset, setJumpOffset] = useState(-1)
   const [maximised, setMaximised] = useState(false)
   // 新建弹窗由 App 持有：右键菜单、快捷键、侧栏按钮都走同一个入口，
   // 打开状态也只有一处。
@@ -354,10 +355,10 @@ export function App() {
     setListReset(value => value + 1)
   }
 
-  const onJump = useCallback((key: string, partIndex: number, match: string) => {
+  const onJump = useCallback((key: string, partIndex: number, match: string, offset: number) => {
     setView('sessions')
     const request = ++selectionRequest.current
-    sessionService.Get(key).then((v) => { if (v && request === selectionRequest.current) { setSelected(v); setJumpMatch(match); setJumpPart(partIndex); setJumpToken(value => value + 1) } }).catch(reason => setRefreshError(`打开搜索结果失败：${String(reason)}`))
+    sessionService.Get(key).then((v) => { if (v && request === selectionRequest.current) { setSelected(v); setJumpOffset(offset); setJumpMatch(match); setJumpPart(partIndex); setJumpToken(value => value + 1) } }).catch(reason => setRefreshError(`打开搜索结果失败：${String(reason)}`))
   }, [])
 
   const openNewSession = useCallback((project?: string, agent?: string) => {
@@ -570,7 +571,7 @@ export function App() {
                 resizer={list}
               /></div>
               {searchQuery.trim() ? <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}><Button size="small" onClick={() => setSearchQuery('')}>返回会话列表 · 保留筛选与位置</Button><SearchResults query={searchQuery} revision={listVersion + markVersion} selectedKey={selected?.key ?? null} onFocusSearch={() => searchRef.current?.focus()} onJump={onJump} /></div> : null}
-              <MessagePane session={selected} sourceVersion={sourceVersion} jumpPart={jumpPart} jumpToken={jumpToken} jumpMatch={jumpMatch} infoOpen={infoOpen} onToggleInfo={() => setInfoOpen(value => !value)} onOpenInfo={() => setInfoOpen(true)} />
+              <MessagePane session={selected} sourceVersion={sourceVersion} jumpPart={jumpPart} jumpToken={jumpToken} jumpMatch={jumpMatch} jumpOffset={jumpOffset} infoOpen={infoOpen} onToggleInfo={() => setInfoOpen(value => !value)} onOpenInfo={() => setInfoOpen(true)} />
               {infoOpen ? (
                 <InfoPane
                   session={selected}

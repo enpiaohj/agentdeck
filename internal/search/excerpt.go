@@ -55,7 +55,42 @@ func Anchor(text, query string) string {
 			best = tok
 		}
 	}
-	return best
+	if best == "" {
+		return ""
+	}
+	at := utf8.RuneCountInString(low[:strings.Index(low, best)])
+	return string([]rune(text)[at : at+utf8.RuneCountInString(best)])
+}
+
+// ExcerptLocation 返回原文 rune 区间与摘要 UTF-16 区间，前端无需再次猜测匹配规则。
+func ExcerptLocation(text, query string, before, after int) (snippet, match string, start, end, snippetStart, snippetEnd int) {
+	match = Anchor(text, query)
+	snippet = Excerpt(text, query, before, after)
+	if match == "" {
+		return snippet, match, -1, -1, -1, -1
+	}
+	at := strings.Index(text, match)
+	start = utf8.RuneCountInString(text[:at])
+	end = start + utf8.RuneCountInString(match)
+	i := strings.Index(snippet, match)
+	if i >= 0 {
+		snippetStart = utf16Length(snippet[:i])
+		snippetEnd = snippetStart + utf16Length(match)
+	} else {
+		snippetStart, snippetEnd = -1, -1
+	}
+	return
+}
+
+func utf16Length(s string) int {
+	n := 0
+	for _, r := range s {
+		n++
+		if r > 0xffff {
+			n++
+		}
+	}
+	return n
 }
 
 // foldRunes 逐 rune 小写，保持 rune 序号对齐，与 sessions 包同一做法。
@@ -63,6 +98,11 @@ func foldRunes(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	for _, r := range s {
+		if r >= 0xFF01 && r <= 0xFF5E {
+			r -= 0xFEE0
+		} else if r == 0x3000 {
+			r = ' '
+		}
 		b.WriteRune(unicode.ToLower(r))
 	}
 	return b.String()

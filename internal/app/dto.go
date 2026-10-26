@@ -90,13 +90,17 @@ type SearchReply struct {
 // SearchHitView 是一条命中：Snippet 从原文切取（Excerpt），Match 是
 // 高亮词（Anchor，与 Snippet 的锚同一规则）。
 type SearchHitView struct {
-	Key     string `json:"key"`  // 会话 key（agent:id），跳转用
-	Part    string `json:"part"` // 完整 doc key（agent:id#n）
-	Agent   string `json:"agent"`
-	Title   string `json:"title"`
-	Last    string `json:"last"` // RFC3339
-	Match   string `json:"match"`
-	Snippet string `json:"snippet"`
+	Start        int    `json:"start"` // 原文 rune 偏移
+	End          int    `json:"end"`
+	SnippetStart int    `json:"snippet_start"` // 摘要 UTF-16 偏移
+	SnippetEnd   int    `json:"snippet_end"`
+	Key          string `json:"key"`  // 会话 key（agent:id），跳转用
+	Part         string `json:"part"` // 完整 doc key（agent:id#n）
+	Agent        string `json:"agent"`
+	Title        string `json:"title"`
+	Last         string `json:"last"` // RFC3339
+	Match        string `json:"match"`
+	Snippet      string `json:"snippet"`
 }
 
 // ProjectView 是聚合出的项目一行。

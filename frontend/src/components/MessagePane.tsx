@@ -49,8 +49,9 @@ import { pickOpenPath } from '../nativeDialogs'
 import { AgentMark } from '../icons/AgentMark'
 import { PromptRail } from './PromptRail'
 import { currentPrompt } from '../promptRail'
+import { canReusePrompt, readingRevealPart, refreshPosition, type ReadingPosition } from '../readingPosition'
 import { highlight } from '../highlight'
-import { clearFindHighlight, paintFindHighlight } from '../findHighlight'
+import { clearFindHighlight, consumeFindJump, paintFindHighlight, scrollFindRange, type FindJump } from '../findHighlight'
 import { useTheme } from '../hooks/useTheme'
 import { foldedContent, isLongCode, markdownCodeText, transcriptGroups, processSummary, type FoldedContent } from '../transcriptPresentation'
 import type { ComponentProps, ReactNode } from 'react'
@@ -227,7 +228,11 @@ const useStyles = makeStyles({
   errRow: { display: 'flex', alignItems: 'flex-start', gap: '8px' },
 })
 
-type ReadingPosition = { at: number; before: boolean; scroll: number; anchor?: number; offset?: number }
+async function writeClipboard(text: string) {
+  if (!navigator.clipboard) throw new Error('剪贴板不可用')
+  await navigator.clipboard.writeText(text)
+}
+
 const consumedJumps = new Map<string, number>()
 const readingPositions = new Map<string, ReadingPosition>()
 
@@ -238,11 +243,12 @@ type Props = {
   infoOpen: boolean
   onToggleInfo: () => void
   jumpPart: number // 搜索命中定位到 transcript 第 n 段(-1 = 不定位)
+  jumpOffset: number
   jumpMatch: string // 全局搜索命中的原文：带进会话内查找，正文里同样高亮
   onOpenInfo: () => void
 }
 
-export function MessagePane({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOpen, onToggleInfo, onOpenInfo }: Props) {
+export function MessagePane({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpToken, infoOpen, onToggleInfo, onOpenInfo }: Props) {
   const styles = useStyles()
   if (!session) {
     // 注意:此前用 `flex:1` 的 flex 容器做居中,该容器内的子元素在本项目
@@ -257,10 +263,10 @@ export function MessagePane({ session, sourceVersion, jumpPart, jumpMatch, jumpT
       </div>
     )
   }
-  return <Loaded key={session.key} session={session} sourceVersion={sourceVersion} jumpPart={jumpPart} jumpMatch={jumpMatch} jumpToken={jumpToken} infoOpen={infoOpen} onToggleInfo={onToggleInfo} onOpenInfo={onOpenInfo} />
+  return <Loaded key={session.key} session={session} sourceVersion={sourceVersion} jumpPart={jumpPart} jumpMatch={jumpMatch} jumpOffset={jumpOffset} jumpToken={jumpToken} infoOpen={infoOpen} onToggleInfo={onToggleInfo} onOpenInfo={onOpenInfo} />
 }
 
-function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOpen, onToggleInfo, onOpenInfo }: { session: SessionView; sourceVersion: number; jumpPart: number; jumpMatch: string; jumpToken: number; infoOpen: boolean; onToggleInfo: () => void; onOpenInfo: () => void }) {
+function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpToken, infoOpen, onToggleInfo, onOpenInfo }: { session: SessionView; sourceVersion: number; jumpPart: number; jumpMatch: string; jumpOffset: number; jumpToken: number; infoOpen: boolean; onToggleInfo: () => void; onOpenInfo: () => void }) {
   const styles = useStyles()
   const theme = useTheme()
   const m = agentMeta(session.agent)
@@ -273,10 +279,16 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOp
   useEffect(() => { if (explicitJump.current) consumedJumps.set(session.key, jumpToken) }, [])
   // 从全局搜索点进来时直接带着命中词打开查找：正文里高亮、可在本会话内逐处跳转。
   const seeded = explicitJump.current && !!jumpMatch.trim()
+  const findJump = useRef<FindJump | null>(seeded ? { query: jumpMatch, part: jumpPart } : null)
   const [findOpen, setFindOpen] = useState(seeded)
   const [findQuery, setFindQuery] = useState(seeded ? jumpMatch : '')
   const [findHits, setFindHits] = useState<number[]>([])
   const [findSnippets, setFindSnippets] = useState<string[]>([])
+  const findOffsets = useRef<number[]>([])
+  const partOffset = useRef(explicitJump.current ? jumpOffset : savedPosition.current?.textOffset ?? -1)
+  const loadedVersion = useRef(sourceVersion)
+  const displayedDestination = useRef<typeof destination | null>(null)
+  const [exportPath, setExportPath] = useState('')
   const [findIndex, setFindIndex] = useState(-1)
   const [findBusy, setFindBusy] = useState(false)
   const [findError, setFindError] = useState('')
@@ -298,6 +310,8 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOp
   const latestRef = useRef<HTMLElement | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const hitPart = destination.focus ?? -1
+  const revealPart = readingRevealPart(restoreAnchor.current?.anchor, hitPart)
+  const cancelFindJump = () => { findJump.current = null; autoJumped.current = findQuery; pendingPart.current = -1 }
   let latestIndex = -1
   tr?.parts.forEach((part,index)=>{if((part.role==='assistant'||part.role==='user')&&part.kind==='text')latestIndex=index})
 
@@ -305,16 +319,21 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOp
     const value=`${jumpPart}:${jumpToken}`
     if(lastJump.current===value)return
     lastJump.current=value
-    if(jumpPart>=0) { consumedJumps.set(session.key, jumpToken); restoreAnchor.current=null; restoreScroll.current=null; findOrigin.current=null; if(jumpMatch.trim()){ autoJumped.current=jumpMatch; pendingPart.current=jumpPart; setFindQuery(jumpMatch); setFindOpen(true) } else setFindOpen(false); setDestination(previous=>({at:jumpPart,before:false,focus:jumpPart,revision:previous.revision+1})) }
+    // 同轮 sourceVersion 更新的 load 仍捕获旧 destination，先失效其刷新恢复资格。
+    displayedDestination.current = null
+    findJump.current = jumpPart >= 0 && jumpMatch.trim() ? { query: jumpMatch, part: jumpPart } : null
+    if(jumpPart>=0) { partOffset.current=jumpOffset; consumedJumps.set(session.key, jumpToken); restoreAnchor.current=null; restoreScroll.current=null; findOrigin.current=null; if(jumpMatch.trim()){ autoJumped.current=jumpMatch; pendingPart.current=jumpPart; setFindQuery(jumpMatch); setFindOpen(true) } else setFindOpen(false); setDestination(previous=>({at:jumpPart,before:false,focus:jumpPart,revision:previous.revision+1})) }
   },[jumpPart,jumpToken])
 
   const [pageContext, setPageContext] = useState('')
   const navigate = (at:number,before=false) => {
+    cancelFindJump()
     const neighbor = before ? tr?.parts[0] : tr?.parts.at(-1)
     setPageContext(tr && (before ? at === tr.start : at === tr.start + tr.parts.length) && neighbor ? `${before ? '后文' : '前文'}衔接 · ${neighbor.text.replace(/\s+/g, ' ').slice(before ? 0 : -180, before ? 180 : undefined)}` : '')
+    partOffset.current = -1; restoreAnchor.current = null
     restoreScroll.current=null; setDestination(previous=>({at,before,focus:null,revision:previous.revision+1}))
   }
-  const position = useRef<ReadingPosition>({ at: destination.at, before: destination.before, scroll: 0 })
+  const position = useRef<ReadingPosition>(savedPosition.current ?? { at: destination.at, before: destination.before, scroll: 0 })
   // 视口顶部是全文第几段：决定提问导航「当前第几问」；载入新窗口前沿用窗口起点
   const [viewPart, setViewPart] = useState<number | null>(null)
   const prompts = tr?.prompts ?? []
@@ -322,13 +341,19 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOp
   const promptAt = currentPrompt(prompts, viewPart ?? destination.focus ?? tr?.start ?? 0)
   // 跳到某一问：已在当前窗口里就直接滚过去，否则从那一问起载入新窗口
   const jumpToPrompt = (index: number) => {
+    cancelFindJump()
+    partOffset.current = -1; restoreAnchor.current = null; restoreScroll.current = null
     const element = bodyRef.current?.querySelector<HTMLElement>(`[data-part-index="${index}"]`)
-    if (element) { element.scrollIntoView({ block: 'start' }); setViewPart(index); return }
+    if (element && canReusePrompt(Number(element.dataset.textOffset))) { element.scrollIntoView({ block: 'start' }); setViewPart(index); return }
+    partOffset.current = 0
     setPageContext(''); restoreScroll.current = null; setViewPart(index)
     setDestination(previous => ({ at: index, before: false, focus: index, revision: previous.revision + 1 }))
   }
   position.current = { ...position.current, at: destination.at, before: destination.before }
-  useEffect(() => () => { readingPositions.set(session.key, position.current) }, [session.key])
+  useEffect(() => () => {
+    const value = position.current
+    readingPositions.set(session.key, value.anchor === undefined ? value : { ...value, at: value.anchor, before: false })
+  }, [session.key])
   const openFind = useCallback(() => {
     if (!findOrigin.current) findOrigin.current = { ...position.current }
     // 与浏览器一致：正文里选中了文字时，Ctrl+F 直接拿它当关键词（单行、不过长才用）。
@@ -341,11 +366,12 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOp
   // 查找条自己的 onKeyDown 也会拦 Esc，但焦点移到正文之后那一条就收不到了，所以
   // 这里在窗口级再兜一次。
   const closeFind = useCallback(() => {
+    findJump.current = null; pendingPart.current = -1
     const origin = findOrigin.current
     setFindOpen(false)
     findOrigin.current = null
     requestAnimationFrame(() => bodyRef.current?.focus({ preventScroll: true }))
-    if (origin) { restoreAnchor.current = origin; restoreScroll.current = origin.scroll; setDestination(previous => ({ at: origin.at, before: origin.before, focus: null, revision: previous.revision + 1 })) }
+    if (origin) { partOffset.current = origin.textOffset ?? -1; restoreAnchor.current = origin; restoreScroll.current = origin.scroll; setDestination(previous => ({ at: origin.anchor ?? origin.at, before: origin.anchor === undefined ? origin.before : false, focus: null, revision: previous.revision + 1 })) }
   }, [])
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -367,6 +393,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOp
       sessionService.SearchInAll(session.key, findQuery).then(hits => {
         if (!active) return
         const indexes = hits.map(hit => Number(hit.part.slice(hit.part.lastIndexOf('#') + 1))).filter(Number.isSafeInteger)
+        findOffsets.current = hits.map(hit => hit.start)
         setFindHits(indexes)
         setFindSnippets(hits.map(hit => hit.snippet))
         // 输入即定位：关键词变了就跳到当前位置之后的第一处命中（没有就回到第一处）；
@@ -379,7 +406,9 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOp
           autoJumped.current = findQuery
           const from = viewPartRef.current
           const first = Math.max(0, indexes.findIndex(index => index >= from))
-          setFindIndex(first); restoreScroll.current = null
+          findJump.current = { query: findQuery, part: indexes[first] }
+          partOffset.current = hits[first].start
+          setFindIndex(first); restoreScroll.current = null; restoreAnchor.current = null
           setDestination(previous => ({ at: indexes[first], before: false, focus: indexes[first], revision: previous.revision + 1 }))
         }
       }).catch(reason => { if (active) setFindError(String(reason)) }).finally(() => { if (active) setFindBusy(false) })
@@ -390,18 +419,40 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOp
   useEffect(() => {
     const body = bodyRef.current
     if (!findOpen || !findQuery.trim() || !body || loading || !tr) { clearFindHighlight(); return }
-    const frame = requestAnimationFrame(() => paintFindHighlight(body, findQuery, findIndex >= 0 ? findHits[findIndex] ?? -1 : -1))
-    return () => cancelAnimationFrame(frame)
-  }, [findOpen, findQuery, findHits, findIndex, tr, loading])
+    const version = request.current
+    const intent = findJump.current
+    let nextFrame = 0
+    const frame = requestAnimationFrame(() => {
+      if (version !== request.current || displayedDestination.current !== destination) return
+      const currentPart = intent?.query === findQuery ? intent.part : findIndex >= 0 ? findHits[findIndex] ?? -1 : hitPart
+      paintFindHighlight(body, findQuery, currentPart)
+      // 折叠子组件先完成展开，再量 Range；请求与意图身份必须仍是当前这一轮。
+      if (intent?.query === findQuery) nextFrame = requestAnimationFrame(() => {
+        if (version !== request.current || displayedDestination.current !== destination || restoreScroll.current !== null) return
+        consumeFindJump(findJump, intent, () => {
+          const { first } = paintFindHighlight(body, findQuery, intent.part)
+          if (first && scrollFindRange(body, first)) return true
+          const part = body.querySelector<HTMLElement>(`[data-part-index="${intent.part}"]`)
+          if (!part) return false
+          part.scrollIntoView({ block: 'start' })
+          return true
+        })
+      })
+    })
+    return () => { cancelAnimationFrame(frame); cancelAnimationFrame(nextFrame) }
+  }, [findOpen, findQuery, findHits, findIndex, tr, loading, destination, hitPart])
   useEffect(() => clearFindHighlight, [])
   const moveFind = (step: number) => {
     if (!findHits.length) return
     const next = findIndex < 0 ? (step < 0 ? findHits.length - 1 : 0) : (findIndex + step + findHits.length) % findHits.length
-    setFindIndex(next); restoreScroll.current = null
+    findJump.current = { query: findQuery, part: findHits[next] }
+    partOffset.current = findOffsets.current[next] ?? -1
+    setFindIndex(next); restoreScroll.current = null; restoreAnchor.current = null
     setDestination(previous => ({ at: findHits[next], before: false, focus: findHits[next], revision: previous.revision + 1 }))
   }
   // 清空关键词但不收起查找条：命中与计数归零，焦点留下继续输入
   const clearFind = () => {
+    cancelFindJump()
     setFindQuery(''); setFindHits([]); setFindSnippets([]); setFindIndex(-1); setFindError('')
     requestAnimationFrame(() => findInput.current?.focus())
   }
@@ -413,12 +464,25 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOp
   }
 
   const load = useCallback(() => {
+    const refresh = refreshPosition(loadedVersion.current, sourceVersion, displayedDestination.current === destination, position.current)
+    if (refresh) {
+      cancelFindJump()
+      restoreAnchor.current = refresh
+      restoreScroll.current = refresh.scroll
+      if (refresh.anchor !== undefined) {
+        loadedVersion.current = sourceVersion
+        partOffset.current = refresh.textOffset ?? -1
+        setDestination(previous => ({ at: refresh.anchor!, before: false, focus: null, revision: previous.revision + 1 }))
+        return
+      }
+    }
+    loadedVersion.current = sourceVersion
     const version=++request.current
     setLoading(true)
     setErr('')
     sessionService
-      .TranscriptWindow(session.key,destination.at,destination.before)
-      .then(value=>{if(version===request.current)setTr(value)})
+      .TranscriptWindowAt(session.key,destination.at,destination.before,partOffset.current)
+      .then(value=>{if(version===request.current){ displayedDestination.current=destination; setTr(value) }})
       .catch((e) => {if(version===request.current)setErr(String(e).slice(0, 300))})
       .finally(() => {if(version===request.current)setLoading(false)})
   }, [session.key, sourceVersion, destination.at, destination.before, destination.revision])
@@ -427,15 +491,19 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOp
 
   useEffect(() => {
     if (!tr || loading || err) return
+    const version = request.current
     const frame = requestAnimationFrame(() => {
+      if (version !== request.current || displayedDestination.current !== destination) return
       if(restoreScroll.current !== null && bodyRef.current) {
+        findJump.current = null
         const anchor = restoreAnchor.current
         const element = anchor?.anchor === undefined ? null : bodyRef.current.querySelector<HTMLElement>(`[data-part-index="${anchor.anchor}"]`)
         if (element) bodyRef.current.scrollTop += element.getBoundingClientRect().top - bodyRef.current.getBoundingClientRect().top - (anchor?.offset ?? 0)
         else bodyRef.current.scrollTop=restoreScroll.current
         restoreScroll.current=null; restoreAnchor.current=null
       }
-      else if(hitPart>=0)hitRef.current?.scrollIntoView({block:'center'})
+      else if(findJump.current) return
+      else if(hitPart>=0)hitRef.current?.scrollIntoView({block:'start'})
       else if(destination.at<0&&latestRef.current)latestRef.current.scrollIntoView({block:'end'})
       else if(bodyRef.current)bodyRef.current.scrollTop=destination.at<0?bodyRef.current.scrollHeight:0
     })
@@ -443,10 +511,11 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOp
   }, [hitPart, destination.at, destination.revision, tr, loading, err])
 
   const copy = (text: string, tag: string) => {
-    navigator.clipboard?.writeText(text).then(() => {
+    setActionError('')
+    writeClipboard(text).then(() => {
       setCopied(tag)
       setTimeout(() => setCopied(''), 1500)
-    }).catch(() => {})
+    }).catch(reason => setActionError(`复制失败：${String(reason)}`))
   }
 
   const exportMd = () => {
@@ -456,7 +525,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOp
       }).then((dir) => {
         if (!dir || typeof dir !== 'string') return
         sessionService.ExportMarkdown(session.key, dir).then(
-          (p) => copy(String(p), 'export'),
+          (p) => { setActionError(''); setExportPath(String(p)) },
           (reason) => setActionError(`导出失败：${String(reason)}`),
         )
       }).catch(reason => setActionError(`导出失败：${String(reason)}`))
@@ -513,11 +582,11 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOp
       {findOpen ? <div className="ad-find" role="search" aria-label="会话内查找" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); closeFind() } }}>
         <div className="ad-find-row">
           <SearchRegular className="ad-find-glyph" aria-hidden="true" />
-          <input ref={findInput} className="ad-find-input" aria-label="查找当前会话" placeholder="查找当前会话…" value={findQuery} onChange={event => setFindQuery(event.target.value)} onKeyDown={event => { if (event.nativeEvent.isComposing) return; if (event.key === 'Enter') { event.preventDefault(); moveFind(event.shiftKey ? -1 : 1) } }} />
+          <input ref={findInput} className="ad-find-input" aria-label="查找当前会话" placeholder="查找当前会话…" value={findQuery} onChange={event => { cancelFindJump(); setFindQuery(event.target.value) }} onKeyDown={event => { if (event.nativeEvent.isComposing) return; if (event.key === 'Enter') { event.preventDefault(); moveFind(event.shiftKey ? -1 : 1) } }} />
           {findQuery ? <Tooltip content="清除关键词" relationship="label"><Button size="small" appearance="subtle" icon={<DismissCircleRegular />} aria-label="清除关键词" onClick={clearFind} /></Tooltip> : null}
           <span className="ad-find-count" role="status">{findBusy ? '查找中…' : findError ? '查找失败' : !findQuery.trim() ? '' : !findHits.length ? '无匹配' : findIndex < 0 ? `${findHits.length} 段` : `${findIndex + 1} / ${findHits.length}`}</span>
-          <Tooltip content="上一处 (Shift+Enter)" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronUpRegular />} aria-label="上一处匹配" disabled={!findHits.length} onClick={() => moveFind(-1)} /></Tooltip>
-          <Tooltip content="下一处 (Enter)" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronDownRegular />} aria-label="下一处匹配" disabled={!findHits.length} onClick={() => moveFind(1)} /></Tooltip>
+          <Tooltip content="上一命中段 (Shift+Enter)" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronUpRegular />} aria-label="上一处匹配" disabled={!findHits.length} onClick={() => moveFind(-1)} /></Tooltip>
+          <Tooltip content="下一命中段 (Enter)" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronDownRegular />} aria-label="下一处匹配" disabled={!findHits.length} onClick={() => moveFind(1)} /></Tooltip>
           <Tooltip content="收起查找，回到查找前的位置 (Esc)" relationship="label"><Button size="small" appearance="subtle" icon={<DismissRegular />} aria-label="收起查找" onClick={closeFind} /></Tooltip>
         </div>
         {findError ? <p className="ad-find-note" role="alert">{findError}</p> : findIndex >= 0 ? <p className="ad-find-note" role="status" title={`第 ${findHits[findIndex] + 1} 段：${findSnippets[findIndex]}`}>第 {findHits[findIndex] + 1} 段：{findSnippets[findIndex]}</p> : null}
@@ -526,14 +595,14 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOp
         const body = event.currentTarget
         const top = body.getBoundingClientRect().top
         const anchor = [...body.querySelectorAll<HTMLElement>('[data-part-index]')].find(element => element.getClientRects().length > 0 && element.getBoundingClientRect().bottom >= top)
-        position.current = { ...position.current, scroll: body.scrollTop, anchor: anchor ? Number(anchor.dataset.partIndex) : undefined, offset: anchor ? anchor.getBoundingClientRect().top - top : undefined }
+        position.current = { ...position.current, scroll: body.scrollTop, anchor: anchor ? Number(anchor.dataset.partIndex) : undefined, offset: anchor ? anchor.getBoundingClientRect().top - top : undefined, textOffset: anchor ? Number(anchor.dataset.textOffset) + 2000 : partOffset.current }
         if (anchor) setViewPart(Number(anchor.dataset.partIndex))
       }} className={`ad-reading-body ${styles.body}`}>
         {pageContext && !loading ? <blockquote className="ad-page-context"><small>相邻窗口摘录 · 不计入当前段数</small>{pageContext}</blockquote> : null}
         {tr?.has_before && !loading ? <div className="ad-page-boundary"><Button size="small" onClick={() => navigate(tr.start, true)}>继续阅读更早内容</Button><span>当前从原始第 {tr.start + 1} 段开始；上一窗口紧接此处。</span></div> : null}
         {tr?.storage_warning ? <Text role="alert" size={200} block style={{ marginBottom: 12, color: tokens.colorPaletteRedForeground1 }}>{tr.storage_warning}</Text> : null}
         {tr?.retained ? <Text size={200} block style={{ marginBottom: 12, color: tokens.colorNeutralForeground3 }}>正在阅读 AgentDeck 永久保留的本地副本，上游原记录暂不可用。</Text> : null}
-        {tr && !loading && hitPart >= 0 && (hitPart < tr.start || hitPart >= tr.start+tr.parts.length || tr.parts[hitPart-tr.start]?.cut) ? <Text size={200} block style={{ marginBottom: 12, color: tokens.colorNeutralForeground3 }}>本段包含预览范围之外的内容，可导出完整 Markdown 查看。</Text> : null}
+        {tr && !loading && hitPart >= 0 && (hitPart < tr.start || hitPart >= tr.start+tr.parts.length || tr.parts[hitPart-tr.start]?.cut) ? <Text size={200} block style={{ marginBottom: 12, color: tokens.colorNeutralForeground3 }}>本段尚有未载入内容，可使用段内前文、后文按钮继续阅读，也可导出完整 Markdown。</Text> : null}
         {tr?.cut ? <Text size={200} block style={{ marginBottom: 12, color: tokens.colorNeutralForeground3 }}>会话预览达到读取上限，部分内容未载入。</Text> : null}
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: 24, color: tokens.colorNeutralForeground3 }}><Spinner size="tiny" /><Text size={200}>正在载入会话{session.messages ? `（约 ${session.messages} 条消息）` : ''}…</Text></div>
@@ -551,17 +620,18 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOp
             <Button size="small" icon={<ArrowClockwiseRegular />} onClick={load} style={{ flexShrink: 0 }}>重试</Button>
           </div>
         ) : tr ? (
-          transcriptGroups(tr.parts, tr.start).map(group => <ProcessGroup key={group.start} process={group.process} count={group.parts.length} summary={processSummary(group.parts)} reveal={hitPart >= group.start && hitPart < group.start + group.parts.length} revision={destination.revision} boundary={group.process && ((group.start === tr.start && tr.has_before) || (group.start + group.parts.length === tr.start + tr.parts.length && tr.has_after))}>
+          transcriptGroups(tr.parts, tr.start).map(group => <ProcessGroup key={group.start} process={group.process} count={group.parts.length} summary={processSummary(group.parts)} reveal={revealPart >= group.start && revealPart < group.start + group.parts.length} revision={destination.revision} boundary={group.process && ((group.start === tr.start && tr.has_before) || (group.start + group.parts.length === tr.start + tr.parts.length && tr.has_after))}>
           {group.parts.map((p, offset) => {
             const partIndex=group.start+offset
             const i=partIndex-tr.start
             const hit = partIndex === hitPart
+            const reveal = partIndex === revealPart
             const setHitRef = (el: HTMLElement | null) => { if (hit) hitRef.current = el; if(i===latestIndex)latestRef.current=el }
             const isUser = p.role === 'user'
             const folded = foldedContent(p)
             const time = (p as { at?: string }).at
             return (
-              <div key={partIndex} data-part-index={partIndex} ref={setHitRef} className={mergeClasses('ad-message', folded ? styles.processMsg : styles.msg, hit && styles.hit)}>
+              <div key={partIndex} data-part-index={partIndex} data-text-offset={p.omitted_before} ref={setHitRef} className={mergeClasses('ad-message', folded ? styles.processMsg : styles.msg, hit && styles.hit)}>
                   {!folded ? <div className={styles.avatarCol}>
                     {isUser ? (
                       <span className={styles.userAvatar}><PersonRegular fontSize={15} /></span>
@@ -581,11 +651,12 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOp
                       </button>
                     </div> : null}
                     {folded ? (
-                      <ProcessContent content={folded} reveal={hit} revealToken={destination.revision} cut={p.cut} styles={styles} meta={[p.role === 'tool' ? '工具' : m.label, time ? fmtTime(time) : '', p.model].filter(Boolean).join(' · ')}>
-                        {folded.monospace ? <CodeArea raw={p.text} styles={styles} theme={theme} head="" scroll foldLong={false} /> : renderRichText(p.text, styles, theme, hit, destination.revision)}
+                      <ProcessContent content={folded} reveal={reveal} revealToken={destination.revision} cut={p.cut} styles={styles} meta={[p.role === 'tool' ? '工具' : m.label, time ? fmtTime(time) : '', p.model].filter(Boolean).join(' · ')}>
+                        {folded.monospace ? <CodeArea raw={p.text} styles={styles} theme={theme} head="" scroll foldLong={false} /> : renderRichText(p.text, styles, theme, reveal, destination.revision)}
                       </ProcessContent>
-                    ) : renderRichText(p.text, styles, theme, hit, destination.revision)}
-                    {p.omitted_before ? <Text size={200} style={{color:tokens.colorNeutralForeground3}}>本段前 {p.omitted_before} 个字符未载入，当前展示末尾内容。</Text> : null}
+                    ) : renderRichText(p.text, styles, theme, reveal, destination.revision)}
+                    {p.omitted_before ? <div><Text size={200}>本段前 {p.omitted_before} 个字符未载入。</Text><Button size="small" onClick={() => { cancelFindJump(); partOffset.current = Math.max(0, p.omitted_before - 6000); restoreScroll.current = null; restoreAnchor.current = null; setDestination(previous => ({ at: partIndex, before: false, focus: partIndex, revision: previous.revision + 1 })) }}>读取本段前文</Button></div> : null}
+                    {p.cut ? <Button size="small" onClick={() => { cancelFindJump(); partOffset.current = p.omitted_before + Array.from(p.text).length; restoreScroll.current = null; restoreAnchor.current = null; setDestination(previous => ({ at: partIndex, before: false, focus: partIndex, revision: previous.revision + 1 })) }}>读取本段后文</Button> : null}
                     {!folded && p.cut ? <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>此段还有 {p.cut} 个字符未载入</Text> : null}
                   </div>
                   {folded ? <button className={styles.msgCopy} style={{ marginTop: 9 }} onClick={() => copy(p.text, String(i))} title="复制原文" aria-label={`复制${folded.label}原文`}>
@@ -600,6 +671,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpToken, infoOp
       {tr && prompts.length > 1 && preferences.promptRail ? <PromptRail prompts={prompts} total={tr.total} current={promptAt} onJump={jumpToPrompt} /> : null}
       </div>
 
+      {exportPath ? <div role="status" style={{ padding: '8px 24px', fontSize: 12, overflowWrap: 'anywhere' }}>Markdown 已保存：{exportPath} <Button size="small" onClick={() => copy(exportPath, 'export')}>{copied === 'export' ? '已复制路径' : '复制路径'}</Button></div> : null}
       {actionError ? <div role="alert" style={{ padding: '8px 24px', color: tokens.colorPaletteRedForeground1, fontSize: 12 }}>{actionError}</div> : null}
       <div className={`ad-message-actions ${styles.bottom}`}>
         {session.resume && !tr?.retained ? (
@@ -728,6 +800,7 @@ function CodeArea({ raw, styles, theme, head, scroll, reveal = false, revealToke
   foldLong?: boolean
 }) {
   const [copied, setCopied] = useState(false)
+  const [copyError, setCopyError] = useState('')
 
   const title = head ?? ''
   const body = raw
@@ -754,15 +827,16 @@ function CodeArea({ raw, styles, theme, head, scroll, reveal = false, revealToke
   const previewLines = long && !expanded ? lines.slice(0, 12) : lines
 
   const copy = () => {
-    navigator.clipboard?.writeText(body).then(() => {
+    setCopyError('')
+    writeClipboard(body).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
-    }).catch(() => {})
+    }).catch(reason => setCopyError(`复制失败：${String(reason)}`))
   }
 
   return (
     <div className={styles.codeBlock}>
-      <div className={styles.codeHead}>
+      <div className={styles.codeHead} data-find-ignore>
         {lang ? <span className={styles.langBadge}>{lang}</span> : null}
         {name ? <span className={styles.codeName} title={name}>{name}</span> : <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{head === '' ? '原始内容' : '代码'}</Text>}
         <span className={styles.foldCount}>{lines.length} 行</span>
@@ -774,13 +848,14 @@ function CodeArea({ raw, styles, theme, head, scroll, reveal = false, revealToke
         </button>
       </div>
       <div id={bodyId} hidden={!shown}>{shown ? <div className={styles.codeBody} style={(scroll || (long && expanded && !fullHeight)) ? { maxHeight: 360, overflowY: 'auto' } : undefined}>
-        <div className={styles.gutter}>
+        <div className={styles.gutter} data-find-ignore>
           {previewLines.map((_, i) => <div key={i}>{i + 1}</div>)}
         </div>
-        <div className={styles.codeText}>
-          {previewLines.map((l, i) => <div key={i}>{l ? highlight(l, theme) : ' '}</div>)}
+        <div className={styles.codeText} data-find-code>
+          {previewLines.map((l, i) => <div key={i} data-code-line>{l ? highlight(l, theme) : ' '}</div>)}
         </div>
       </div> : null}</div>
+      {copyError ? <Text role="alert" size={200} style={{ color: tokens.colorPaletteRedForeground1 }}>{copyError}</Text> : null}
       {long && !expanded ? <div className="ad-source-note">显示前 12 / {lines.length} 行；复制包含完整已载入代码。</div> : null}
     </div>
   )

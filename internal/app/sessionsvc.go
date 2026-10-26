@@ -181,6 +181,8 @@ func (s *SessionService) SearchInAll(key, needle string) ([]SearchHitView, error
 				Key: key, Part: fmt.Sprintf("%s#%d", key, i), Agent: sess.Agent,
 				Title: displayTitle(sess, ms[sessionMarkKey(sess, key, ms)]), Last: lastString(sess.Last), Match: h.Match,
 				Snippet: h.Before + h.Match + h.After,
+				Start:   h.Start, End: h.End,
+				SnippetStart: utf16Count(h.Before), SnippetEnd: utf16Count(h.Before + h.Match),
 			})
 		}
 	}

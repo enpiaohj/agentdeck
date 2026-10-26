@@ -28,6 +28,9 @@ func TestSearchInAllKeepsOriginalPartIndexes(t *testing.T) {
 		if !ok || key != hit.Key {
 			t.Fatalf("invalid part %+v", hit)
 		}
+		if hit.Start != 0 || hit.End != 2 || hit.SnippetStart != 0 || hit.SnippetEnd != 2 {
+			t.Fatalf("服务返回的命中区间错误: %+v", hit)
+		}
 		window, err := svc.TranscriptWindow(key, index, false)
 		if err != nil || window.Parts[index-window.Start].Text == "middle" {
 			t.Fatalf("wrong location %+v %v", window, err)

@@ -15,6 +15,10 @@ const conversationPage = 80
 // Latest windows are filled backwards and clip long prose at its beginning,
 // ensuring the actual last words are visible without rendering an entire log.
 func conversationWindow(full sessions.Transcript, at int, before bool) *TranscriptView {
+	return conversationWindowAt(full, at, before, -1)
+}
+
+func conversationWindowAt(full sessions.Transcript, at int, before bool, offset int) *TranscriptView {
 	out := &TranscriptView{Parts: []TranscriptPart{}, Total: len(full.Parts), Cut: full.Cut, Prompts: promptMarks(full.Parts)}
 	if out.Total == 0 {
 		return out
@@ -30,11 +34,16 @@ func conversationWindow(full sessions.Transcript, at int, before bool) *Transcri
 		end = min(start+conversationPage, end)
 	}
 	size := 0
-	appendPart := func(p sessions.Part) {
+	appendPart := func(index int, p sessions.Part) {
 		view := TranscriptPart{Role: p.Role, Kind: p.Kind, Name: p.Name, Text: p.Text, Cut: p.Cut, Model: p.Model}
 		if n := utf8.RuneCountInString(p.Text); n > 8000 {
 			runes := []rune(p.Text)
-			if latest && p.Kind == "text" && (p.Role == "user" || p.Role == "assistant") {
+			if index == at && offset >= 0 {
+				from := min(max(0, offset-2000), n-8000)
+				view.Text = string(runes[from : from+8000])
+				view.OmittedBefore = from
+				view.Cut += n - from - 8000
+			} else if latest && p.Kind == "text" && (p.Role == "user" || p.Role == "assistant") {
 				view.Text = string(runes[n-8000:])
 				view.OmittedBefore = n - 8000
 			} else {
@@ -51,7 +60,7 @@ func conversationWindow(full sessions.Transcript, at int, before bool) *Transcri
 				start = i + 1
 				break
 			}
-			appendPart(full.Parts[i])
+			appendPart(i, full.Parts[i])
 		}
 		slices.Reverse(out.Parts)
 	} else {
@@ -60,7 +69,7 @@ func conversationWindow(full sessions.Transcript, at int, before bool) *Transcri
 				end = i
 				break
 			}
-			appendPart(full.Parts[i])
+			appendPart(i, full.Parts[i])
 		}
 	}
 	out.Start, out.HasBefore, out.HasAfter = start, start > 0, end < out.Total
@@ -100,6 +109,11 @@ func promptMarks(parts []sessions.Part) []PromptMark {
 // window beginning at a source part index. before reads backwards ending just
 // before at, so byte-limited pages remain adjacent. Saved history is unchanged.
 func (s *SessionService) TranscriptWindow(key string, at int, before bool) (*TranscriptView, error) {
+	return s.TranscriptWindowAt(key, at, before, -1)
+}
+
+// TranscriptWindowAt 在原始段内按 rune 偏移加载附近正文；不改动保留与导出内容。
+func (s *SessionService) TranscriptWindowAt(key string, at int, before bool, offset int) (*TranscriptView, error) {
 	_, byKey, _ := s.a.snapshot()
 	sess, ok := byKey[key]
 	if !ok {
@@ -112,7 +126,7 @@ func (s *SessionService) TranscriptWindow(key string, at int, before bool) (*Tra
 	if err != nil {
 		return nil, err
 	}
-	view := conversationWindow(full, at, before)
+	view := conversationWindowAt(full, at, before, offset)
 	view.Key, view.Retained, view.StorageWarning = key, retained, warning
 	return view, nil
 }

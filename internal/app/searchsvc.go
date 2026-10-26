@@ -129,14 +129,16 @@ func (s *SearchService) queryIndex(ix *search.Index, byKey map[string]sessions.S
 		if !exists {
 			continue
 		}
+		snippet, match, start, end, snippetStart, snippetEnd := search.ExcerptLocation(r.Text, q, 36, 120)
 		out = append(out, SearchHitView{
+			Start: start, End: end, SnippetStart: snippetStart, SnippetEnd: snippetEnd,
 			Key:     key,
 			Part:    r.Key,
 			Agent:   sess.Agent,
 			Title:   displayTitle(sess, ms[sessionMarkKey(sess, key, ms)]),
 			Last:    lastString(sess.Last),
-			Match:   search.Anchor(r.Text, q),
-			Snippet: search.Excerpt(r.Text, q, 36, 120),
+			Match:   match,
+			Snippet: snippet,
 		})
 	}
 	return &SearchReply{Mode: "index", Total: total, Hits: out}, nil
@@ -165,11 +167,23 @@ func (s *SearchService) queryScan(q string, limit int) (*SearchReply, error) {
 		if !found {
 			continue
 		}
+		partIndex := -1
+		for i, p := range tr.Parts {
+			if p.Role != h.Role || p.Kind != h.Kind {
+				continue
+			}
+			candidate, found := sessions.SearchRetainedTranscript(sessions.Transcript{Parts: []sessions.Part{p}}, needle)
+			if found && candidate.Start == h.Start && candidate.Match == h.Match {
+				partIndex = i
+				break
+			}
+		}
 		out = append(out, SearchHitView{
 			Key:   sess.Agent + ":" + sess.ID,
-			Part:  sess.Agent + ":" + sess.ID,
+			Part:  fmt.Sprintf("%s:%s#%d", sess.Agent, sess.ID, partIndex),
 			Agent: sess.Agent, Title: displayTitle(sess, ms[sessionMarkKey(sess, sess.Agent+":"+sess.ID, ms)]), Last: lastString(sess.Last),
 			Match: h.Match, Snippet: h.Before + h.Match + h.After,
+			Start: h.Start, End: h.End, SnippetStart: utf16Count(h.Before), SnippetEnd: utf16Count(h.Before + h.Match),
 		})
 	}
 	return &SearchReply{Mode: "scan", Total: len(out), Hits: out}, nil

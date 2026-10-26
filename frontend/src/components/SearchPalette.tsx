@@ -71,7 +71,7 @@ type Props = {
   revision: number
   selectedKey: string | null
   onFocusSearch: () => void
-  onJump: (key: string, partIndex: number, match: string) => void
+  onJump: (key: string, partIndex: number, match: string, offset: number) => void
 }
 
 export function SearchResults({ query: q, revision, selectedKey, onFocusSearch, onJump }: Props) {
@@ -97,15 +97,15 @@ export function SearchResults({ query: q, revision, selectedKey, onFocusSearch, 
     return () => { clearTimeout(timer); requestVersion.current++ }
   }, [q, revision])
 
-  const highlight = (hit: { match: string; snippet: string }) => {
+  const highlight = (hit: { match: string; snippet: string; snippet_start: number; snippet_end: number }) => {
     if (!hit.match) return <span className={styles.snippet}>{hit.snippet}</span>
-    const i = hit.snippet.indexOf(hit.match)
+    const i = hit.snippet_start
     if (i < 0) return <span className={styles.snippet}>{hit.snippet}</span>
     return (
       <span className={styles.snippet}>
         {hit.snippet.slice(0, i)}
-        <span className={styles.mark}>{hit.match}</span>
-        {hit.snippet.slice(i + hit.match.length)}
+        <span className={styles.mark}>{hit.snippet.slice(i, hit.snippet_end)}</span>
+        {hit.snippet.slice(hit.snippet_end)}
       </span>
     )
   }
@@ -132,7 +132,7 @@ export function SearchResults({ query: q, revision, selectedKey, onFocusSearch, 
                 <div className={styles.empty}>未找到与「{q}」相关的会话内容</div>
               ) : (
                 reply.hits.map((h, i) => (
-                  <button title={h.title || '未命名会话'} key={h.part + i} ref={element => { resultRefs.current[i] = element }} className={mergeClasses(styles.hit, selectedKey === h.key && styles.active)} aria-current={selectedKey === h.key ? 'true' : undefined} onClick={() => onJump(h.key, partIndexOf(h.part), h.match)}
+                  <button title={h.title || '未命名会话'} key={h.part + i} ref={element => { resultRefs.current[i] = element }} className={mergeClasses(styles.hit, selectedKey === h.key && styles.active)} aria-current={selectedKey === h.key ? 'true' : undefined} onClick={() => onJump(h.key, partIndexOf(h.part), h.match, h.start)}
                     onKeyDown={event => {
                       if (event.key === 'ArrowDown') { event.preventDefault(); resultRefs.current[(i + 1) % reply.hits.length]?.focus() }
                       if (event.key === 'ArrowUp') { event.preventDefault(); if (i === 0) onFocusSearch(); else resultRefs.current[i - 1]?.focus() }

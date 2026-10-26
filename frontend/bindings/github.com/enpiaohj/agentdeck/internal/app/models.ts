@@ -1110,6 +1110,18 @@ export class ScanProgress {
  */
 export class SearchHitView {
     /**
+     * 原文 rune 偏移
+     */
+    "start": number;
+    "end": number;
+
+    /**
+     * 摘要 UTF-16 偏移
+     */
+    "snippet_start": number;
+    "snippet_end": number;
+
+    /**
      * 会话 key（agent:id），跳转用
      */
     "key": string;
@@ -1130,6 +1142,18 @@ export class SearchHitView {
 
     /** Creates a new SearchHitView instance. */
     constructor($$source: Partial<SearchHitView> = {}) {
+        if (!("start" in $$source)) {
+            this["start"] = 0;
+        }
+        if (!("end" in $$source)) {
+            this["end"] = 0;
+        }
+        if (!("snippet_start" in $$source)) {
+            this["snippet_start"] = 0;
+        }
+        if (!("snippet_end" in $$source)) {
+            this["snippet_end"] = 0;
+        }
         if (!("key" in $$source)) {
             this["key"] = "";
         }
