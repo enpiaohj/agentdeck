@@ -1,0 +1,17 @@
+{
+	"fixed": {
+		"file_version": "0.16.0",
+		"product_version": "0.16.0"
+	},
+	"info": {
+		"0409": {
+			"ProductVersion": "0.16.0",
+			"FileVersion": "0.16.0.0",
+			"CompanyName": "AgentDeck",
+			"FileDescription": "跨 Agent 历史会话工作台",
+			"LegalCopyright": "© 2026 AgentDeck",
+			"ProductName": "AgentDeck",
+			"Comments": "All your coding agents. One deck."
+		}
+	}
+}
