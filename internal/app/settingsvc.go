@@ -22,7 +22,7 @@ var shellValues = []string{appconfig.ShellAuto, appconfig.ShellPowerShell, appco
 // TerminalShell 返回终端 shell 设置的当前状态，并探测各选项的版本。
 func (s *SettingsService) TerminalShell() TerminalShellView {
 	setting := s.a.terminalShellSetting()
-	view := TerminalShellView{Setting: setting, ResumeMaximized: s.a.resumeMaximized()}
+	view := TerminalShellView{Setting: setting, ResumeMaximized: s.a.resumeMaximized(), ResumeOpenMode: appconfig.NormalizeOpenMode(s.a.resumeOpenMode()), TabSupported: tabSupported()}
 	view.Exe, view.Version, view.Error = s.shellState(setting)
 	for _, value := range shellValues {
 		option := TerminalShellOption{Value: value}
@@ -186,6 +186,25 @@ func (s *SettingsService) saveTerminalShell(value string) error {
 // 与终端 shell 不同，这个取值没有可校验的东西：它只是一个显示偏好。但配置
 // 读取失败时同样拒绝写入，理由与 saveTerminalShell 一致。
 func (s *SettingsService) SetResumeMaximized(value bool) (TerminalShellView, error) {
+	return s.saveResume(func(cfg *appconfig.Config) { cfg.ResumeMaximized = value })
+}
+
+// SetResumeOpenMode 保存继续会话时终端的打开方式：window（新窗口）或 tab
+// （活动窗口的新标签）。
+//
+// 没有 Windows Terminal 时拒绝保存 tab：那样界面会显示一个永远不生效的选择。
+// 已保存的 tab 在缺少 wt.exe 的环境里由 terminalCommand 自动退回新窗口。
+func (s *SettingsService) SetResumeOpenMode(value string) (TerminalShellView, error) {
+	mode := appconfig.NormalizeOpenMode(value)
+	if mode == appconfig.TerminalTab && !tabSupported() {
+		return s.TerminalShell(), errors.New("未检测到 Windows Terminal（wt.exe），无法在已有终端窗口中打开新标签；可改用「新窗口」")
+	}
+	return s.saveResume(func(cfg *appconfig.Config) { cfg.ResumeOpenMode = mode })
+}
+
+// saveResume 是两项继续会话偏好的共同写路径：先写文件再更新内存，配置
+// 读不出来时拒绝写入（理由同 saveTerminalShell）。
+func (s *SettingsService) saveResume(mutate func(*appconfig.Config)) (TerminalShellView, error) {
 	a := s.a
 	a.settingsMu.Lock()
 	if a.settingsErr != nil {
@@ -193,7 +212,7 @@ func (s *SettingsService) SetResumeMaximized(value bool) (TerminalShellView, err
 		return s.TerminalShell(), fmt.Errorf("应用配置文件无法读取，未保存设置：%v", a.settingsErr)
 	}
 	cfg := a.settings
-	cfg.ResumeMaximized = value
+	mutate(&cfg)
 	if err := appconfig.Save(cfg); err != nil {
 		a.settingsMu.Unlock()
 		return s.TerminalShell(), fmt.Errorf("写入应用配置失败：%w", err)

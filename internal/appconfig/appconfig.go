@@ -31,6 +31,15 @@ const (
 	ShellPwsh = "pwsh"
 )
 
+// 终端打开方式的取值。只有 Windows Terminal（wt.exe）能复用已有窗口开标签；
+// 回退到直接启动 shell 时一律是新窗口，见 app.terminalCommand。
+const (
+	// TerminalWindow 每次都开一个新的终端窗口（默认，与引入本设置之前一致）。
+	TerminalWindow = "window"
+	// TerminalTab 有活动终端窗口时在其中开新标签，没有时开新窗口。
+	TerminalTab = "tab"
+)
+
 // Config 是应用级配置。DataRoot 为空表示使用默认位置
 // （%APPDATA%\AgentDeck 与 %LOCALAPPDATA%\AgentDeck 两处）。
 type Config struct {
@@ -43,6 +52,9 @@ type Config struct {
 	// ResumeMaximized 让「继续会话」打开的终端最大化显示。默认关闭：铺满
 	// 屏幕是需要用户明确要求的显示方式，不能作为默认行为。
 	ResumeMaximized bool `json:"resume_maximized"`
+	// ResumeOpenMode 决定继续会话时是开新终端窗口还是在活动窗口里开新标签。
+	// 空串按 TerminalWindow 处理，与引入本设置之前的行为一致。
+	ResumeOpenMode string `json:"resume_open_mode,omitempty"`
 	// AutoCheckUpdates 控制启动后的后台检查更新。与上面两项相反，它默认
 	// 开启，因此旧配置缺少该字段时按 Default() 的取值保留，而不是 false。
 	AutoCheckUpdates bool `json:"auto_check_updates"`
@@ -58,7 +70,16 @@ type Config struct {
 // Default 返回默认配置：默认数据位置，终端优先使用 PowerShell 7+，
 // 启动后检查更新。
 func Default() Config {
-	return Config{Version: Version, TerminalShell: ShellAuto, AutoCheckUpdates: true}
+	return Config{Version: Version, TerminalShell: ShellAuto, ResumeOpenMode: TerminalWindow, AutoCheckUpdates: true}
+}
+
+// NormalizeOpenMode 把终端打开方式归一化：空串与无法识别的取值回退到
+// 「新窗口」。
+func NormalizeOpenMode(value string) string {
+	if strings.TrimSpace(value) == TerminalTab {
+		return TerminalTab
+	}
+	return TerminalWindow
 }
 
 // NormalizeShell 把终端 shell 取值归一化：空串与无法识别的取值回退到
@@ -112,8 +133,9 @@ func LoadFrom(path string) (Config, error) {
 		return cfg, fmt.Errorf("应用配置文件不是有效的 JSON：%w", err)
 	}
 	for key, target := range map[string]*string{
-		"data_root":      &cfg.DataRoot,
-		"terminal_shell": &cfg.TerminalShell,
+		"data_root":        &cfg.DataRoot,
+		"terminal_shell":   &cfg.TerminalShell,
+		"resume_open_mode": &cfg.ResumeOpenMode,
 	} {
 		if value, ok := fields[key]; ok {
 			if err = json.Unmarshal(value, target); err != nil {
@@ -149,6 +171,7 @@ func LoadFrom(path string) (Config, error) {
 	}
 	cfg.DataRoot = strings.TrimSpace(cfg.DataRoot)
 	cfg.TerminalShell = NormalizeShell(cfg.TerminalShell)
+	cfg.ResumeOpenMode = NormalizeOpenMode(cfg.ResumeOpenMode)
 	cfg.extra = fields
 	return cfg, nil
 }
@@ -185,6 +208,8 @@ func SaveTo(path string, cfg Config) error {
 	fields["auto_check_updates"] = autoCheck
 	maximized, _ := json.Marshal(cfg.ResumeMaximized)
 	fields["resume_maximized"] = maximized
+	openMode, _ := json.Marshal(NormalizeOpenMode(cfg.ResumeOpenMode))
+	fields["resume_open_mode"] = openMode
 	if len(cfg.PreviousDirs) > 0 {
 		dirs := make([]string, 0, len(cfg.PreviousDirs))
 		for _, dir := range cfg.PreviousDirs {

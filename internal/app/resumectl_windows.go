@@ -45,7 +45,13 @@ import (
 // 回退那条路只有在窗口由 conhost 托管时才真的最大化:本机装了 Windows
 // Terminal 并把它设为默认终端时,CREATE_NEW_CONSOLE 建出的窗口会被系统
 // 转交给 Windows Terminal 托管,那时 -WindowStyle 不生效(实测仍是小窗口)。
-func terminalCommand(cwd, resumeCmd, shellExe string, maximize bool) (string, []string) {
+//
+// 七、inTab 用 wt 的 -w 0 把命令放进「当前活动窗口」的新标签(设置里的
+// resume_open_mode=tab)。实测:-w 0 复用最近使用的窗口,没有终端窗口时新建
+// 一个;3 次调用只多出 1 个窗口、窗口里 3 个标签。注意 -M 只在新建窗口时
+// 生效,复用已有窗口时被忽略——目标窗口的尺寸由用户自己决定,不去改它。
+// 回退路径(没有 wt.exe)没有等价能力,只能开新窗口,调用方据此如实提示。
+func terminalCommand(cwd, resumeCmd, shellExe string, maximize, inTab bool) (string, []string) {
 	script := encodedCommand(resumeCmd)
 	dir := projects.Normalize(cwd)
 	if dir != "" && filepath.IsAbs(dir) {
@@ -56,9 +62,14 @@ func terminalCommand(cwd, resumeCmd, shellExe string, maximize bool) (string, []
 		dir = ""
 	}
 	if wt, err := proc.LookPath("wt.exe"); err == nil && dir != "" {
-		args := make([]string, 0, 8)
+		// 顺序必须是 [全局选项] [命令]。wt 先吃全局选项,-w 与 -M 都在这一段;
+		// nt 之后的 -M 会被当成 new-tab 的参数而无效(实测)。
+		args := make([]string, 0, 10)
 		if maximize {
 			args = append(args, "-M")
+		}
+		if inTab {
+			args = append(args, "-w", "0", "nt")
 		}
 		return wt, append(args, "-d", dir, shellExe, "-NoExit", "-EncodedCommand", script)
 	}

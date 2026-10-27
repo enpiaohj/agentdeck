@@ -111,6 +111,19 @@ export function SetResumeMaximized(value: boolean): $CancellablePromise<$models.
 }
 
 /**
+ * SetResumeOpenMode 保存继续会话时终端的打开方式：window（新窗口）或 tab
+ * （活动窗口的新标签）。
+ * 
+ * 没有 Windows Terminal 时拒绝保存 tab：那样界面会显示一个永远不生效的选择。
+ * 已保存的 tab 在缺少 wt.exe 的环境里由 terminalCommand 自动退回新窗口。
+ */
+export function SetResumeOpenMode(value: string): $CancellablePromise<$models.TerminalShellView> {
+    return $Call.ByID(2532099537, value).then(($result: any) => {
+        return $$createType5($result);
+    });
+}
+
+/**
  * SetStartAtLogin 由显式用户操作改变系统注册，然后持久化配置。
  * 保存失败时恢复操作前的实际注册状态，避免缓存与系统状态不一致。
  */

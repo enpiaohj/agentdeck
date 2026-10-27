@@ -114,3 +114,37 @@ func TestResumeMaximizedDefaultOffAndRoundTrip(t *testing.T) {
 		t.Fatal("错误类型应返回配置错误")
 	}
 }
+
+// TestResumeOpenModeNormalizeAndRoundTrip 打开方式默认 window，tab 能原样读回，
+// 无法识别的取值按 window 处理（不把界面不认识的值留在文件里）。
+func TestResumeOpenModeNormalizeAndRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app-config.json")
+	cfg, err := LoadFrom(path)
+	if err != nil || cfg.ResumeOpenMode != TerminalWindow {
+		t.Fatalf("默认应为新窗口：%+v, %v", cfg, err)
+	}
+	for _, mode := range []string{TerminalTab, TerminalWindow} {
+		cfg.ResumeOpenMode = mode
+		if err := SaveTo(path, cfg); err != nil {
+			t.Fatal(err)
+		}
+		got, err := LoadFrom(path)
+		if err != nil || got.ResumeOpenMode != mode {
+			t.Fatalf("打开方式往返不一致：%+v, %v", got, err)
+		}
+	}
+	for _, bad := range []string{"", "bogus", "TAB"} {
+		if got := NormalizeOpenMode(bad); got != TerminalWindow {
+			t.Fatalf("%q 应归一化为新窗口，实际 %q", bad, got)
+		}
+	}
+	// 文件里写了无法识别的值时，读出来也要按新窗口处理
+	raw := []byte(`{"resume_open_mode":"bogus"}`)
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadFrom(path)
+	if err != nil || got.ResumeOpenMode != TerminalWindow {
+		t.Fatalf("无法识别的取值应按新窗口处理：%+v, %v", got, err)
+	}
+}

@@ -121,6 +121,27 @@ func (a *App) resumeMaximized() bool {
 	return a.settings.ResumeMaximized
 }
 
+// resumeOpenMode 返回继续会话时终端的打开方式取值（已归一化）。
+func (a *App) resumeOpenMode() string {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+	return appconfig.NormalizeOpenMode(a.settings.ResumeOpenMode)
+}
+
+// resumeOpenInTab 报告继续会话时是否在活动终端窗口里开新标签。
+func (a *App) resumeOpenInTab() bool {
+	return a.resumeOpenMode() == appconfig.TerminalTab
+}
+
+// tabSupported 报告当前环境能否把命令开进已有终端窗口的新标签。
+//
+// 只有 Windows Terminal（wt.exe）能复用窗口；没有它时回退路径只会开新窗口，
+// 所以设置页要把「新标签」选项置灰，而不是让用户选了却不生效。
+func tabSupported() bool {
+	_, err := proc.LookPath("wt.exe")
+	return err == nil
+}
+
 // shellVersionOf 返回 exe 的版本，成功结果在进程内缓存。失败不缓存：用户
 // 可能正在安装或修复 shell，缓存失败会让重试永远失败。
 func (a *App) shellVersionOf(exe string) (string, error) {

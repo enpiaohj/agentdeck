@@ -350,7 +350,7 @@ func (s *ResumeService) OpenAt(key, override string) error {
 	if _, err := existingDir(preview.Directory); err != nil {
 		return err
 	}
-	name, args := terminalCommand(preview.Directory, cmd, shellExe, s.a.resumeMaximized())
+	name, args := terminalCommand(preview.Directory, cmd, shellExe, s.a.resumeMaximized(), s.a.resumeOpenInTab())
 	run := s.a.cfg.Runner
 	if run == nil {
 		run = terminalLauncher()
@@ -396,7 +396,7 @@ func (s *ResumeService) launchInTerminal(dir, script string) error {
 	if _, err := existingDir(dir); err != nil {
 		return err
 	}
-	name, args := terminalCommand(dir, script, shellExe, false)
+	name, args := terminalCommand(dir, script, shellExe, false, false)
 	run := s.a.cfg.Runner
 	if run == nil {
 		run = terminalLauncher()

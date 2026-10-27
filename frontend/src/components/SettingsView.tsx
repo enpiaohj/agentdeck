@@ -6,7 +6,7 @@ import { matchesSetting, settingSearchKeywords } from '../settingsSearch'
 import { DiagnosticsView, type SettingsDataSection } from './DiagnosticsView'
 import { ReadingPreview } from './MessagePane'
 import { AgentSelect } from './AgentSelect'
-import { ResumeMaximizedControl, TerminalShellControl } from './TerminalShellControl'
+import { ResumeMaximizedControl, ResumeOpenModeControl, TerminalShellControl } from './TerminalShellControl'
 import { DesktopSettingsControl, matchesDesktopSettings } from './DesktopSettingsControl'
 import { UpdateControl, matchesUpdateSettings } from './UpdateControl'
 import { AboutView, matchesAboutSettings } from './AboutView'
@@ -70,7 +70,8 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
     ] },
     { id: 'shell', category: 'terminal', title: '终端环境', rows: [
       { key: 'terminalShell', title: '终端 PowerShell', description: '新建或继续会话时使用的终端。更改后对新打开的终端生效。', control: id => <TerminalShellControl id={id} /> },
-      { key: 'resumeMaximized', title: '继续会话时最大化打开终端', description: '继续会话打开的终端以最大化窗口显示。只影响继续会话，新建会话不受影响。', control: id => <ResumeMaximizedControl id={id} /> },
+      { key: 'resumeOpenMode', title: '继续会话时的打开方式', description: '「新标签」在活动的 Windows Terminal 窗口中打开，没有打开的终端窗口时新建一个。只影响继续会话。', control: id => <ResumeOpenModeControl id={id} /> },
+      { key: 'resumeMaximized', title: '继续会话时最大化打开终端', description: '新建终端窗口时以最大化显示。复用已有窗口开标签时不改变该窗口尺寸。', control: id => <ResumeMaximizedControl id={id} /> },
     ] },
   ]
   const shown = groups.map(group => ({ ...group, rows: group.rows.filter(row => matches(group.category, categories.find(item => item.id === group.category)?.label ?? '', group.title, row.title, row.description, settingSearchKeywords[row.key] ?? '')) })).filter(group => group.rows.length)

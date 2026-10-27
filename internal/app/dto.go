@@ -160,6 +160,11 @@ type TerminalShellView struct {
 	Options []TerminalShellOption `json:"options"`
 	// ResumeMaximized 是「继续会话时最大化打开终端」的当前取值，默认关闭。
 	ResumeMaximized bool `json:"resume_maximized"`
+	// ResumeOpenMode 是继续会话时终端的打开方式：window（默认）或 tab。
+	ResumeOpenMode string `json:"resume_open_mode"`
+	// TabSupported 表示当前环境能否真的开标签：需要 Windows Terminal。
+	// 为假时界面把「新标签」选项置灰并说明原因，而不是让用户选了却不生效。
+	TabSupported bool `json:"tab_supported"`
 }
 
 // StorageItem 是数据存储位置的一项占用。

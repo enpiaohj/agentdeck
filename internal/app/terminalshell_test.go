@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -63,10 +64,11 @@ func TestResolveShellExePresets(t *testing.T) {
 func TestTerminalCommandUsesChosenShell(t *testing.T) {
 	dir := t.TempDir()
 	exe := filepath.Join(dir, "pwsh.exe")
-	name, args := terminalCommand(dir, "claude --resume x", exe, false)
+	name, args := terminalCommand(dir, "claude --resume x", exe, false, false)
 	switch filepath.Base(name) {
 	case "wt.exe":
-		if args[2] != exe {
+		// wt 的参数形如 [-M] [-w 0 nt] -d <dir> <shell> ...，shell 的位置随选项浮动
+		if !slices.Contains(args, exe) {
 			t.Fatalf("wt 的内层 shell 未使用所选可执行文件: %v", args)
 		}
 	case "pwsh.exe":
@@ -167,7 +169,7 @@ func TestTerminalCommandMaximize(t *testing.T) {
 	dir := t.TempDir()
 	script := "Set-Location -LiteralPath '" + dir + "'; codex resume 01a13d4d-0000-7000-8000-000000000000"
 	for _, maximize := range []bool{false, true} {
-		name, args := terminalCommand(dir, script, powershellExe, maximize)
+		name, args := terminalCommand(dir, script, powershellExe, maximize, false)
 		joined := strings.Join(args, " ")
 		if !strings.Contains(joined, "-EncodedCommand") {
 			t.Fatalf("maximize=%v 必须用 -EncodedCommand: %v", maximize, args)
@@ -248,6 +250,96 @@ func TestSetResumeMaximizedRefusesWhenConfigUnreadable(t *testing.T) {
 		t.Fatal("配置不可读时应拒绝写入")
 	}
 	if a.resumeMaximized() {
+		t.Fatal("被拒绝的设置不应生效")
+	}
+}
+
+// TestTerminalCommandTabMode 新标签模式用 wt 的 -w 0 nt：-w 0 指向「当前活动
+// 窗口」，nt 是 new-tab。实测 3 次调用只多出 1 个窗口、窗口里 3 个标签。
+// 关键约束是参数顺序：wt 先吃全局选项，-M 必须在 nt 之前才生效。
+func TestTerminalCommandTabMode(t *testing.T) {
+	dir := t.TempDir()
+	script := "Set-Location -LiteralPath '" + dir + "'; claude --resume 01a13d4d-0000-7000-8000-000000000000"
+	name, args := terminalCommand(dir, script, powershellExe, false, true)
+	if filepath.Base(name) == "wt.exe" {
+		joined := strings.Join(args, " ")
+		if !strings.Contains(joined, "-w 0 nt") {
+			t.Fatalf("新标签模式应带 -w 0 nt: %v", args)
+		}
+		if idx := slices.Index(args, "nt"); idx < 0 || args[idx+1] != "-d" {
+			t.Fatalf("nt 之后应紧跟 -d: %v", args)
+		}
+	} else if filepath.Base(name) == "powershell.exe" {
+		// 没有 wt.exe 时只能开新窗口：不得出现任何「复用窗口」的痕迹
+		if slices.Contains(args, "nt") || slices.Contains(args, "-w") {
+			t.Fatalf("回退路径不应带 wt 专用参数: %v", args)
+		}
+	} else {
+		t.Fatalf("终端 = %s", name)
+	}
+	if got := args[len(args)-1]; got != encodedCommand(script) {
+		t.Fatal("新标签模式仍必须是不可拆的 -EncodedCommand")
+	}
+
+	// 最大化 + 新标签：-M 必须排在 nt 之前，否则 wt 把它当成 new-tab 的参数
+	name, args = terminalCommand(dir, script, powershellExe, true, true)
+	if filepath.Base(name) == "wt.exe" {
+		nt := slices.Index(args, "nt")
+		m := slices.Index(args, "-M")
+		if m < 0 || nt < 0 || m > nt {
+			t.Fatalf("-M 必须出现在 nt 之前: %v", args)
+		}
+	}
+}
+
+// TestResumeOpenModeDefaultWindow 打开方式默认是「新窗口」，与引入设置之前一致。
+func TestResumeOpenModeDefaultWindow(t *testing.T) {
+	a, _, _, _ := newTestApp(t)
+	if a.resumeOpenInTab() {
+		t.Fatal("默认应为新窗口")
+	}
+	view := a.NewSettingsService().TerminalShell()
+	if view.ResumeOpenMode != appconfig.TerminalWindow || !view.TabSupported {
+		t.Fatalf("视图 = %+v（本机有 wt.exe，TabSupported 应为真）", view)
+	}
+}
+
+// TestSetResumeOpenModePersists 保存后立即生效并写盘，非法取值回退到新窗口。
+func TestSetResumeOpenModePersists(t *testing.T) {
+	a, _, _, _ := newTestApp(t)
+	a.probeShell = fakeVersion("7.6.7")
+	svc := a.NewSettingsService()
+	view, err := svc.SetResumeOpenMode(appconfig.TerminalTab)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.ResumeOpenMode != appconfig.TerminalTab || !a.resumeOpenInTab() {
+		t.Fatalf("保存后未生效: %+v", view)
+	}
+	cfg, err := appconfig.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ResumeOpenMode != appconfig.TerminalTab {
+		t.Fatalf("配置文件 = %q", cfg.ResumeOpenMode)
+	}
+	// 无法识别的取值按「新窗口」处理，不写进一个界面不认识的值
+	if view, err = svc.SetResumeOpenMode("bogus"); err != nil || view.ResumeOpenMode != appconfig.TerminalWindow {
+		t.Fatalf("非法取值应回退新窗口: %+v, %v", view, err)
+	}
+}
+
+// TestSetResumeOpenModeRejectsTabWithoutWT 没有 Windows Terminal 时拒绝保存
+// 「新标签」：否则界面会显示一个永远不生效的选择。
+func TestSetResumeOpenModeRejectsTabWithoutWT(t *testing.T) {
+	a, _, _, _ := newTestApp(t)
+	a.probeShell = fakeVersion("7.6.7")
+	// 用一个不含 wt.exe 的 PATH 让 LookPath 找不到它
+	t.Setenv("PATH", t.TempDir())
+	if _, err := a.NewSettingsService().SetResumeOpenMode(appconfig.TerminalTab); err == nil {
+		t.Fatal("没有 wt.exe 时应拒绝保存新标签模式")
+	}
+	if a.resumeOpenInTab() {
 		t.Fatal("被拒绝的设置不应生效")
 	}
 }

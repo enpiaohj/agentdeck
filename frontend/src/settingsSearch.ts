@@ -15,6 +15,7 @@ export const settingSearchKeywords: Record<string, string> = {
   deleteBackup: '删除会话 备份 恢复备份 撤销 直接删除 不保留备份',
   terminalShell: 'Windows PowerShell 5.1 PowerShell 7+ 自动 自定义 可执行文件 pwsh.exe powershell.exe',
   resumeMaximized: '继续会话 最大化 全屏 终端窗口 铺满 放大',
+  resumeOpenMode: '继续会话 打开方式 新窗口 新标签 标签页 复用终端 活动 Windows Terminal',
 }
 
 export function matchesSetting(query: string, ...content: string[]): boolean {

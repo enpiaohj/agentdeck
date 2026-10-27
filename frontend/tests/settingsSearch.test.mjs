@@ -28,3 +28,10 @@ test('继续会话最大化选项可按名称与常见说法搜到', () => {
   // 与终端 shell 的关键词互不串味：搜「pwsh」不该命中最大化选项
   assert.equal(matchesSetting('pwsh', settingSearchKeywords.resumeMaximized), false)
 })
+
+test('继续会话打开方式选项可按名称与常见说法搜到', () => {
+  for (const query of ['打开方式', '新窗口', '新标签', '标签页', '复用终端', '活动']) {
+    assert.equal(matchesSetting(query, settingSearchKeywords.resumeOpenMode), true, query)
+  }
+  assert.equal(matchesSetting('备份', settingSearchKeywords.resumeOpenMode), false)
+})

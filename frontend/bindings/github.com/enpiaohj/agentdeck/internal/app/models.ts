@@ -1673,6 +1673,17 @@ export class TerminalShellView {
      */
     "resume_maximized": boolean;
 
+    /**
+     * ResumeOpenMode 是继续会话时终端的打开方式：window（默认）或 tab。
+     */
+    "resume_open_mode": string;
+
+    /**
+     * TabSupported 表示当前环境能否真的开标签：需要 Windows Terminal。
+     * 为假时界面把「新标签」选项置灰并说明原因，而不是让用户选了却不生效。
+     */
+    "tab_supported": boolean;
+
     /** Creates a new TerminalShellView instance. */
     constructor($$source: Partial<TerminalShellView> = {}) {
         if (!("setting" in $$source)) {
@@ -1692,6 +1703,12 @@ export class TerminalShellView {
         }
         if (!("resume_maximized" in $$source)) {
             this["resume_maximized"] = false;
+        }
+        if (!("resume_open_mode" in $$source)) {
+            this["resume_open_mode"] = "";
+        }
+        if (!("tab_supported" in $$source)) {
+            this["tab_supported"] = false;
         }
 
         Object.assign(this, $$source);
