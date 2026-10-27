@@ -39,6 +39,15 @@ const (
 // 只有当前文件与更新包都符合这个命名时才让文件名跟随版本。
 var ReleaseArtifact = regexp.MustCompile(`(?i)^AgentDeck-v\d+\.\d+\.\d+-win-x64\.exe$`)
 
+// releaseStem 匹配发布产物去掉扩展名后的部分（AgentDeck-v1.2.3-win-x64）。
+// 快捷方式按 exe 名命名时用它判断「这个名字是不是版本派生出来的」。
+var releaseStem = regexp.MustCompile(`(?i)^AgentDeck-v\d+\.\d+\.\d+-win-x64$`)
+
+// VersionedStem 报告 name（不含目录）是否是版本派生的产物名，不含扩展名。
+func VersionedStem(name string) bool {
+	return releaseStem.MatchString(name)
+}
+
 // ErrNotWritable 表示程序所在目录不可写，更新无法落地。
 var ErrNotWritable = errors.New("程序所在目录没有写入权限")
 

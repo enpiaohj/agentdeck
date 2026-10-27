@@ -3,6 +3,7 @@
 package updateinstall
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -45,6 +46,117 @@ func TestRetargetShortcutsReallyChangesTarget(t *testing.T) {
 	// 已经指向新文件时再跑一次不应改动任何东西。
 	if n := retargetShortcutsIn([]string{dir}, oldExe, newExe); n != 0 {
 		t.Fatalf("已指向新文件时不应再改，实际改了 %d 个", n)
+	}
+}
+
+// 开始菜单「所有应用」显示的是 .lnk 的文件名。只改目标会留下一个「指向
+// v0.15.0、名字还写着 v0.14.0」的条目，用户看到的就是版本没更新。
+func TestRetargetRenamesVersionedShortcut(t *testing.T) {
+	dir := t.TempDir()
+	oldExe := filepath.Join(dir, "AgentDeck-v0.14.0-win-x64.exe")
+	newExe := filepath.Join(dir, "AgentDeck-v0.15.0-win-x64.exe")
+	for _, p := range []string{oldExe, newExe} {
+		if err := os.WriteFile(p, []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	link := filepath.Join(dir, "AgentDeck-v0.14.0-win-x64.lnk")
+	if !createShortcut(t, link, oldExe) {
+		t.Skip("本机无法创建快捷方式（WScript.Shell 不可用），跳过")
+	}
+	if n := retargetShortcutsIn([]string{dir}, oldExe, newExe); n != 1 {
+		t.Fatalf("应当改指向 1 个快捷方式，实际 %d", n)
+	}
+	renamed := filepath.Join(dir, "AgentDeck-v0.15.0-win-x64.lnk")
+	if _, err := os.Stat(renamed); err != nil {
+		t.Fatalf("版本派生的快捷方式应改名为 %q: %v", filepath.Base(renamed), err)
+	}
+	if _, err := os.Stat(link); !os.IsNotExist(err) {
+		t.Fatalf("旧名字应当已经不存在: %v", err)
+	}
+	if got := shortcutTarget(t, renamed); !samePath(got, newExe) {
+		t.Fatalf("改名后目标是 %q，期望 %q", got, newExe)
+	}
+}
+
+// 用户自己起的名字不跟着版本改——那是他选的叫法。
+func TestRetargetKeepsCustomShortcutName(t *testing.T) {
+	dir := t.TempDir()
+	oldExe := filepath.Join(dir, "AgentDeck-v0.14.0-win-x64.exe")
+	newExe := filepath.Join(dir, "AgentDeck-v0.15.0-win-x64.exe")
+	for _, p := range []string{oldExe, newExe} {
+		if err := os.WriteFile(p, []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	link := filepath.Join(dir, "我的工作台.lnk")
+	if !createShortcut(t, link, oldExe) {
+		t.Skip("本机无法创建快捷方式，跳过")
+	}
+	if n := retargetShortcutsIn([]string{dir}, oldExe, newExe); n != 1 {
+		t.Fatalf("应当改指向 1 个快捷方式，实际 %d", n)
+	}
+	if _, err := os.Stat(link); err != nil {
+		t.Fatalf("自定义名字不应被改动: %v", err)
+	}
+	if got := shortcutTarget(t, link); !samePath(got, newExe) {
+		t.Fatalf("目标是 %q，期望 %q", got, newExe)
+	}
+}
+
+// 目标已是最新、名字还停在旧版本：改指向那条路匹配不到（oldPath 早不是
+// 「上一版」），只能靠启动时的名字对齐。
+func TestAlignShortcutNamesHealsStaleName(t *testing.T) {
+	dir := t.TempDir()
+	current := filepath.Join(dir, "AgentDeck-v0.16.0-win-x64.exe")
+	if err := os.WriteFile(current, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(dir, "AgentDeck-v0.15.3-win-x64.lnk")
+	if !createShortcut(t, stale, current) {
+		t.Skip("本机无法创建快捷方式，跳过")
+	}
+	if n := alignShortcutNamesIn([]string{dir}, current); n != 1 {
+		t.Fatalf("应当对齐 1 个快捷方式，实际 %d", n)
+	}
+	want := filepath.Join(dir, "AgentDeck-v0.16.0-win-x64.lnk")
+	if _, err := os.Stat(want); err != nil {
+		t.Fatalf("快捷方式应改名为 %q: %v", filepath.Base(want), err)
+	}
+	// 再跑一次不应再改动任何东西。
+	if n := alignShortcutNamesIn([]string{dir}, current); n != 0 {
+		t.Fatalf("已对齐时不应再改，实际改了 %d 个", n)
+	}
+}
+
+// 已存在同名快捷方式时不覆盖：那可能是用户自己又建的一个。
+func TestRenameShortcutDoesNotOverwriteExisting(t *testing.T) {
+	dir := t.TempDir()
+	current := filepath.Join(dir, "AgentDeck-v0.16.0-win-x64.exe")
+	if err := os.WriteFile(current, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	existing := filepath.Join(dir, "AgentDeck-v0.16.0-win-x64.lnk")
+	stale := filepath.Join(dir, "AgentDeck-v0.15.3-win-x64.lnk")
+	for _, link := range []string{existing, stale} {
+		if !createShortcut(t, link, current) {
+			t.Skip("本机无法创建快捷方式，跳过")
+		}
+	}
+	before, err := os.ReadFile(existing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	renameShortcutForVersion(stale, current)
+	if _, err := os.Stat(stale); err != nil {
+		t.Fatalf("目标名字被占用时不应改名: %v", err)
+	}
+	after, err := os.ReadFile(existing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("已存在的同名快捷方式被覆盖了")
 	}
 }
 

@@ -34,6 +34,39 @@ func ShortcutsPointingTo(targetPath string) bool {
 	return anyShortcutPointsTo(shortcutRoots(), targetPath)
 }
 
+// AlignShortcutNames 把指向 current 的版本派生快捷方式改成与 current 同名。
+//
+// 单独于改指向存在，因为「目标已是最新、名字还停在旧版本」是个会自己出现的
+// 状态：跨版本手工替换文件、或某次改名失败后重试，都会留下它，而那时 oldPath
+// 早就不是「上一版」了，retarget 永远匹配不到。启动时按当前 exe 名对齐一次，
+// 这类残留就能自愈，不必等下一次版本变化。
+func AlignShortcutNames(current string) int {
+	return alignShortcutNamesIn(shortcutRoots(), current)
+}
+
+// alignShortcutNamesIn 在给定目录列表里对齐名字。目录可注入，测试因此不碰
+// 用户真实的桌面与开始菜单。
+func alignShortcutNamesIn(roots []string, current string) int {
+	links := findShortcuts(roots)
+	if len(links) == 0 {
+		return 0
+	}
+	aligned := 0
+	_ = withShell(func(shell *ole.IDispatch) error {
+		for _, link := range links {
+			target, ok := shortcutTargetOf(shell, link)
+			if !ok || !strings.EqualFold(target, current) {
+				continue
+			}
+			if renameShortcutForVersion(link, current) {
+				aligned++
+			}
+		}
+		return nil
+	})
+	return aligned
+}
+
 // retargetShortcutsIn 在给定目录列表里改指向。目录可注入，测试因此不碰
 // 用户真实的桌面与开始菜单。
 func retargetShortcutsIn(roots []string, oldPath, newPath string) int {
@@ -174,6 +207,16 @@ func shortcutTargetOf(shell *ole.IDispatch, link string) (string, bool) {
 	return value, true
 }
 
+// retargetShortcut 把 link 从 oldPath 改指向 newPath；改成功（或本来就无需改）
+// 返回 true。
+//
+// 除目标与工作目录，还会把**文件名**一并跟随版本：开始菜单「所有应用」显示的是
+// .lnk 的文件名，不是它指向的 exe 名。只改目标会留下一个「指向 v0.16.0、名字
+// 却写着 v0.15.3」的条目，用户看到的就是版本没更新（实测如此）。
+//
+// 改名只在两种情况下做：旧名是版本派生的产物名（AgentDeck-v1.2.3-win-x64），
+// 且新名在同目录里没被占用。用户自己起的名字（AgentDeck.lnk、我的工作台.lnk）
+// 一概不动——那是他选的叫法。
 func retargetShortcut(shell *ole.IDispatch, link, oldPath, newPath string) bool {
 	shortcut, err := oleutil.CallMethod(shell, "CreateShortcut", link)
 	if err != nil {
@@ -198,8 +241,33 @@ func retargetShortcut(shell *ole.IDispatch, link, oldPath, newPath string) bool 
 		return false
 	}
 	_, _ = oleutil.PutProperty(dispatch, "WorkingDirectory", filepath.Dir(newPath))
-	_, err = oleutil.CallMethod(dispatch, "Save")
-	return err == nil
+	if _, err = oleutil.CallMethod(dispatch, "Save"); err != nil {
+		return false
+	}
+	renameShortcutForVersion(link, newPath)
+	return true
+}
+
+// renameShortcutForVersion 让版本派生的 .lnk 文件名跟上新版本，返回是否真的改了名。
+//
+// 失败一律忽略：改指向已经生效，文件名只是显示问题，不值得让整条更新路径
+// 因此判定为失败（那会导致旧 exe 永远删不掉）。占用检查与改名之间仍有极短的
+// 竞态，此时 os.Rename 自己会失败，同样落到忽略分支。
+func renameShortcutForVersion(link, newPath string) bool {
+	dir, oldStem := filepath.Dir(link), strings.TrimSuffix(filepath.Base(link), filepath.Ext(link))
+	if !VersionedStem(oldStem) {
+		return false
+	}
+	newStem := strings.TrimSuffix(filepath.Base(newPath), filepath.Ext(newPath))
+	if !VersionedStem(newStem) || strings.EqualFold(oldStem, newStem) {
+		return false
+	}
+	destination := filepath.Join(dir, newStem+filepath.Ext(link))
+	if _, err := os.Stat(destination); err == nil {
+		// 已有同名快捷方式（例如上一次改名成功、用户又手工建了一个）：不覆盖。
+		return false
+	}
+	return os.Rename(link, destination) == nil
 }
 
 // shortcutRoots 是可能出现本程序快捷方式的位置。

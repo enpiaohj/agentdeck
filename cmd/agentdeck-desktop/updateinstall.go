@@ -73,10 +73,16 @@ func (i *updateInstaller) Finish() string {
 
 // cleanupPrevious 在启动时善后上一次更新：清掉遗留的临时文件与回滚副本，
 // 文件名变过的更新则确认启动项与快捷方式已改指向后删除旧文件。
+//
+// 顺带对齐快捷方式名：目标已是最新、名字却还写着旧版本的条目会自己出现
+// （跨版本手工替换、改名失败后重试），而那时「上一个版本」早已不是它，改指向
+// 那条路匹配不到。这里按当前 exe 名对齐一次，让这类残留自愈。
 func (i *updateInstaller) cleanupPrevious() {
 	if i == nil {
 		return
 	}
+	healStaleTarget(i.current)
+	updateinstall.AlignShortcutNames(i.current)
 	updateinstall.Cleanup(i.current, i.handOver)
 }
 
