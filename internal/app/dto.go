@@ -158,6 +158,8 @@ type TerminalShellView struct {
 	Version string                `json:"version"`
 	Error   string                `json:"error"`
 	Options []TerminalShellOption `json:"options"`
+	// ResumeMaximized 是「继续会话时最大化打开终端」的当前取值，默认关闭。
+	ResumeMaximized bool `json:"resume_maximized"`
 }
 
 // StorageItem 是数据存储位置的一项占用。

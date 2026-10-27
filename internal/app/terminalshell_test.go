@@ -63,7 +63,7 @@ func TestResolveShellExePresets(t *testing.T) {
 func TestTerminalCommandUsesChosenShell(t *testing.T) {
 	dir := t.TempDir()
 	exe := filepath.Join(dir, "pwsh.exe")
-	name, args := terminalCommand(dir, "claude --resume x", exe)
+	name, args := terminalCommand(dir, "claude --resume x", exe, false)
 	switch filepath.Base(name) {
 	case "wt.exe":
 		if args[2] != exe {
@@ -156,6 +156,98 @@ func TestSetTerminalShellRefusesWhenConfigUnreadable(t *testing.T) {
 		t.Fatal("配置不可读时应拒绝写入")
 	}
 	if got := a.terminalShellSetting(); got == exe {
+		t.Fatal("被拒绝的设置不应生效")
+	}
+}
+
+// TestTerminalCommandMaximize 最大化只改显示方式，不改恢复命令本身：
+// 有 wt.exe 时交给它的 -M；回退到直接起 shell 时用 -WindowStyle Maximized。
+// 两条路都必须仍然带 -EncodedCommand，且脚本原文不泄漏。
+func TestTerminalCommandMaximize(t *testing.T) {
+	dir := t.TempDir()
+	script := "Set-Location -LiteralPath '" + dir + "'; codex resume 01a13d4d-0000-7000-8000-000000000000"
+	for _, maximize := range []bool{false, true} {
+		name, args := terminalCommand(dir, script, powershellExe, maximize)
+		joined := strings.Join(args, " ")
+		if !strings.Contains(joined, "-EncodedCommand") {
+			t.Fatalf("maximize=%v 必须用 -EncodedCommand: %v", maximize, args)
+		}
+		if got := args[len(args)-1]; got != encodedCommand(script) {
+			t.Fatalf("maximize=%v 编码不一致", maximize)
+		}
+		for _, a := range args {
+			if strings.Contains(a, ";") || strings.Contains(a, "resume") {
+				t.Fatalf("maximize=%v 脚本原文泄漏到终端参数: %q", maximize, a)
+			}
+		}
+		switch filepath.Base(name) {
+		case "wt.exe":
+			if maximize != (args[0] == "-M") {
+				t.Fatalf("maximize=%v 时 wt 参数 = %v", maximize, args)
+			}
+			if maximize && (args[1] != "-d" || args[2] != dir) {
+				t.Fatalf("-M 之后的 -d 必须紧跟目录: %v", args)
+			}
+		case "powershell.exe":
+			has := args[0] == "-WindowStyle" && args[1] == "Maximized"
+			if maximize != has {
+				t.Fatalf("maximize=%v 时回退 shell 参数 = %v", maximize, args)
+			}
+		default:
+			t.Fatalf("终端 = %s", name)
+		}
+	}
+}
+
+// TestResumeMaximizedDefaultOff 最大化默认关闭：旧配置没有该字段，新装的
+// 用户也不该被替用户铺满屏幕。
+func TestResumeMaximizedDefaultOff(t *testing.T) {
+	a, _, _, _ := newTestApp(t)
+	if a.resumeMaximized() {
+		t.Fatal("默认应为关闭")
+	}
+	if view := a.NewSettingsService().TerminalShell(); view.ResumeMaximized {
+		t.Fatal("视图里的默认值应为关闭")
+	}
+}
+
+// TestSetResumeMaximizedPersists 保存后立即生效并写盘，且不覆盖终端 shell
+// 等其它设置。
+func TestSetResumeMaximizedPersists(t *testing.T) {
+	a, _, _, _ := newTestApp(t)
+	a.probeShell = fakeVersion("7.6.7")
+	svc := a.NewSettingsService()
+	if _, err := svc.SetTerminalShell(appconfig.ShellPwsh); err != nil {
+		t.Fatal(err)
+	}
+	view, err := svc.SetResumeMaximized(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !view.ResumeMaximized || !a.resumeMaximized() {
+		t.Fatalf("保存后未生效: %+v", view)
+	}
+	cfg, err := appconfig.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ResumeMaximized || cfg.TerminalShell != appconfig.ShellPwsh {
+		t.Fatalf("配置文件 = %+v", cfg)
+	}
+	if view, err = svc.SetResumeMaximized(false); err != nil || view.ResumeMaximized {
+		t.Fatalf("关闭后 = %+v, %v", view, err)
+	}
+}
+
+// TestSetResumeMaximizedRefusesWhenConfigUnreadable 配置读不出来时不得
+// 回写，否则会用默认值覆盖用户还没修复的文件。
+func TestSetResumeMaximizedRefusesWhenConfigUnreadable(t *testing.T) {
+	a, _, _, _ := newTestApp(t)
+	a.settingsErr = errors.New("配置文件不是有效的 JSON")
+	if _, err := a.NewSettingsService().SetResumeMaximized(true); err == nil {
+		t.Fatal("配置不可读时应拒绝写入")
+	}
+	if a.resumeMaximized() {
 		t.Fatal("被拒绝的设置不应生效")
 	}
 }

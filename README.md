@@ -126,6 +126,8 @@ Windows x64 版本从 [Releases](https://github.com/enpiaohj/agentdeck/releases/
   Cursor 按目录查找会话，暂不支持跨目录恢复；WSL 恢复保持原有行为。关联目录不代表工具一定能找到原会话
 - 终端 PowerShell 可在设置中选择：自动（优先 PowerShell 7+，默认）、Windows PowerShell 5.1、PowerShell 7+ 或自定义
   可执行文件，并显示检测到的版本；已保存的选择保持不变
+- 「继续会话时最大化打开终端」默认关闭；开启后有 Windows Terminal 时用它的 `-M` 最大化，没有时给新控制台窗口
+  `-WindowStyle Maximized`（由 conhost 托管时生效）。该选项只作用于继续会话，新建会话仍按普通窗口打开
 - Codex 会话在恢复前会同步 AgentDeck 里设置的名称；Codex 自己的索引里已经是同名时跳过同步，不再等待 Codex 的
   app-server 启动
 - 恢复参数（会话 ID、工作目录）按白名单校验后才交给终端

@@ -99,6 +99,18 @@ export function SetCloseToTray(enabled: boolean): $CancellablePromise<$models.De
 }
 
 /**
+ * SetResumeMaximized 保存「继续会话时最大化打开终端」，立即对新打开的终端生效。
+ * 
+ * 与终端 shell 不同，这个取值没有可校验的东西：它只是一个显示偏好。但配置
+ * 读取失败时同样拒绝写入，理由与 saveTerminalShell 一致。
+ */
+export function SetResumeMaximized(value: boolean): $CancellablePromise<$models.TerminalShellView> {
+    return $Call.ByID(1913434964, value).then(($result: any) => {
+        return $$createType5($result);
+    });
+}
+
+/**
  * SetStartAtLogin 由显式用户操作改变系统注册，然后持久化配置。
  * 保存失败时恢复操作前的实际注册状态，避免缓存与系统状态不一致。
  */

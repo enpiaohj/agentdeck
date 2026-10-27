@@ -40,6 +40,9 @@ type Config struct {
 	// 桌面生命周期选项均为显式启用，旧配置缺少字段时默认关闭。
 	StartAtLogin bool `json:"start_at_login"`
 	CloseToTray  bool `json:"close_to_tray"`
+	// ResumeMaximized 让「继续会话」打开的终端最大化显示。默认关闭：铺满
+	// 屏幕是需要用户明确要求的显示方式，不能作为默认行为。
+	ResumeMaximized bool `json:"resume_maximized"`
 	// AutoCheckUpdates 控制启动后的后台检查更新。与上面两项相反，它默认
 	// 开启，因此旧配置缺少该字段时按 Default() 的取值保留，而不是 false。
 	AutoCheckUpdates bool `json:"auto_check_updates"`
@@ -123,6 +126,7 @@ func LoadFrom(path string) (Config, error) {
 		"start_at_login":     &cfg.StartAtLogin,
 		"close_to_tray":      &cfg.CloseToTray,
 		"auto_check_updates": &cfg.AutoCheckUpdates,
+		"resume_maximized":   &cfg.ResumeMaximized,
 	} {
 		if value, ok := fields[key]; ok {
 			if err = json.Unmarshal(value, target); err != nil {
@@ -179,6 +183,8 @@ func SaveTo(path string, cfg Config) error {
 	fields["close_to_tray"] = closeToTray
 	autoCheck, _ := json.Marshal(cfg.AutoCheckUpdates)
 	fields["auto_check_updates"] = autoCheck
+	maximized, _ := json.Marshal(cfg.ResumeMaximized)
+	fields["resume_maximized"] = maximized
 	if len(cfg.PreviousDirs) > 0 {
 		dirs := make([]string, 0, len(cfg.PreviousDirs))
 		for _, dir := range cfg.PreviousDirs {

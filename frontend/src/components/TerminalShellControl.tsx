@@ -97,3 +97,44 @@ export function TerminalShellControl({ id }: { id: string }) {
 function isCustom(setting: string): boolean {
   return !!setting && !(setting in SHELL_LABELS)
 }
+
+// ResumeMaximizedControl 是「继续会话时最大化打开终端」开关。
+//
+// 取值同样存在 Go 侧的 appconfig（resume_maximized），因为打开终端发生在
+// Go 侧，只有那里能把它交给 wt 的 -M 或回退 shell 的 -WindowStyle。默认关闭：
+// 铺满屏幕不能替用户默认做主。
+export function ResumeMaximizedControl({ id }: { id: string }) {
+  const [view, setView] = useState<TerminalShellView | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const load = useCallback((keepError = false) => {
+    return settingsService.TerminalShell().then(next => {
+      setView(next)
+      if (!keepError) setError('')
+    }).catch(reason => setError(`读取终端设置失败：${String(reason)}`))
+  }, [])
+  useEffect(() => { void load() }, [load])
+  const save = async (value: boolean) => {
+    if (saving || !view) return
+    setSaving(true)
+    setError('')
+    try {
+      setView(await settingsService.SetResumeMaximized(value))
+    } catch (reason) {
+      setError(String(reason))
+      // 保存失败时以实际生效的取值为准，避免界面显示一个并未生效的值。
+      await load(true)
+    } finally {
+      setSaving(false)
+    }
+  }
+  return <div className="ad-terminal-shell">
+    <input id={id} type="checkbox" role="switch" aria-label="继续会话时最大化打开终端"
+      aria-describedby={`${id}-description`} checked={view?.resume_maximized ?? false}
+      disabled={saving || !view} onChange={event => void save(event.target.checked)} />
+    {saving ? <Text block className="ad-terminal-shell-note" role="status"><Spinner size="extra-tiny" />正在保存…</Text> : null}
+    {error ? <Text block className="ad-terminal-shell-note ad-terminal-shell-note-error" role="alert">{error}
+      {!view ? <Button size="small" onClick={() => void load()}>重试读取终端设置</Button> : null}
+    </Text> : null}
+  </div>
+}

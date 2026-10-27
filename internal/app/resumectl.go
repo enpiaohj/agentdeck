@@ -350,7 +350,7 @@ func (s *ResumeService) OpenAt(key, override string) error {
 	if _, err := existingDir(preview.Directory); err != nil {
 		return err
 	}
-	name, args := terminalCommand(preview.Directory, cmd, shellExe)
+	name, args := terminalCommand(preview.Directory, cmd, shellExe, s.a.resumeMaximized())
 	run := s.a.cfg.Runner
 	if run == nil {
 		run = terminalLauncher()
@@ -385,6 +385,9 @@ func terminalLauncher() func(name string, args ...string) error {
 
 // launchInTerminal 在 dir 里执行 script。NewSession 与 OpenInTerminal 的
 // 后半段共用它——终端选谁、命令怎么交付、失败怎么措辞，只有一处。
+//
+// 最大化是「继续会话」的偏好，不作用于新建会话：那条路径打开的终端是用来
+// 敲新命令的，没有理由替用户铺满屏幕。
 func (s *ResumeService) launchInTerminal(dir, script string) error {
 	shellExe, err := s.a.shellExe()
 	if err != nil {
@@ -393,7 +396,7 @@ func (s *ResumeService) launchInTerminal(dir, script string) error {
 	if _, err := existingDir(dir); err != nil {
 		return err
 	}
-	name, args := terminalCommand(dir, script, shellExe)
+	name, args := terminalCommand(dir, script, shellExe, false)
 	run := s.a.cfg.Runner
 	if run == nil {
 		run = terminalLauncher()

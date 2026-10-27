@@ -1668,6 +1668,11 @@ export class TerminalShellView {
     "error": string;
     "options": TerminalShellOption[];
 
+    /**
+     * ResumeMaximized 是「继续会话时最大化打开终端」的当前取值，默认关闭。
+     */
+    "resume_maximized": boolean;
+
     /** Creates a new TerminalShellView instance. */
     constructor($$source: Partial<TerminalShellView> = {}) {
         if (!("setting" in $$source)) {
@@ -1684,6 +1689,9 @@ export class TerminalShellView {
         }
         if (!("options" in $$source)) {
             this["options"] = [];
+        }
+        if (!("resume_maximized" in $$source)) {
+            this["resume_maximized"] = false;
         }
 
         Object.assign(this, $$source);

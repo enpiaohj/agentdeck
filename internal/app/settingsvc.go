@@ -22,7 +22,7 @@ var shellValues = []string{appconfig.ShellAuto, appconfig.ShellPowerShell, appco
 // TerminalShell 返回终端 shell 设置的当前状态，并探测各选项的版本。
 func (s *SettingsService) TerminalShell() TerminalShellView {
 	setting := s.a.terminalShellSetting()
-	view := TerminalShellView{Setting: setting}
+	view := TerminalShellView{Setting: setting, ResumeMaximized: s.a.resumeMaximized()}
 	view.Exe, view.Version, view.Error = s.shellState(setting)
 	for _, value := range shellValues {
 		option := TerminalShellOption{Value: value}
@@ -179,4 +179,26 @@ func (s *SettingsService) saveTerminalShell(value string) error {
 	}
 	a.settings = cfg
 	return nil
+}
+
+// SetResumeMaximized 保存「继续会话时最大化打开终端」，立即对新打开的终端生效。
+//
+// 与终端 shell 不同，这个取值没有可校验的东西：它只是一个显示偏好。但配置
+// 读取失败时同样拒绝写入，理由与 saveTerminalShell 一致。
+func (s *SettingsService) SetResumeMaximized(value bool) (TerminalShellView, error) {
+	a := s.a
+	a.settingsMu.Lock()
+	if a.settingsErr != nil {
+		a.settingsMu.Unlock()
+		return s.TerminalShell(), fmt.Errorf("应用配置文件无法读取，未保存设置：%v", a.settingsErr)
+	}
+	cfg := a.settings
+	cfg.ResumeMaximized = value
+	if err := appconfig.Save(cfg); err != nil {
+		a.settingsMu.Unlock()
+		return s.TerminalShell(), fmt.Errorf("写入应用配置失败：%w", err)
+	}
+	a.settings = cfg
+	a.settingsMu.Unlock()
+	return s.TerminalShell(), nil
 }

@@ -20,3 +20,11 @@ test('终端与主题选项可按实际名称搜索，不依赖精简后的说�
   }
   assert.equal(matchesSetting('深色', settingSearchKeywords.theme), true)
 })
+
+test('继续会话最大化选项可按名称与常见说法搜到', () => {
+  for (const query of ['最大化', '铺满', '继续会话 最大化', '全屏']) {
+    assert.equal(matchesSetting(query, settingSearchKeywords.resumeMaximized), true, query)
+  }
+  // 与终端 shell 的关键词互不串味：搜「pwsh」不该命中最大化选项
+  assert.equal(matchesSetting('pwsh', settingSearchKeywords.resumeMaximized), false)
+})

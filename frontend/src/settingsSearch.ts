@@ -14,6 +14,7 @@ export const settingSearchKeywords: Record<string, string> = {
   spacing: '舒适 紧凑 正文行距',
   deleteBackup: '删除会话 备份 恢复备份 撤销 直接删除 不保留备份',
   terminalShell: 'Windows PowerShell 5.1 PowerShell 7+ 自动 自定义 可执行文件 pwsh.exe powershell.exe',
+  resumeMaximized: '继续会话 最大化 全屏 终端窗口 铺满 放大',
 }
 
 export function matchesSetting(query: string, ...content: string[]): boolean {

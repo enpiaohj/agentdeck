@@ -75,3 +75,42 @@ func TestDesktopSettingsPreservedWithOtherAndUnknownFields(t *testing.T) {
 		t.Fatalf("未知字段丢失：%s, %v", got.extra["future"], err)
 	}
 }
+
+// TestResumeMaximizedDefaultOffAndRoundTrip 最大化偏好默认关闭，保存后能原样
+// 读回；字段必须显式写入，避免降级运行时读不到而按默认处理。
+func TestResumeMaximizedDefaultOffAndRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app-config.json")
+	cfg, err := LoadFrom(path)
+	if err != nil || cfg.ResumeMaximized {
+		t.Fatalf("默认应为关闭：%+v, %v", cfg, err)
+	}
+	for _, enabled := range []bool{true, false} {
+		cfg.ResumeMaximized = enabled
+		if err := SaveTo(path, cfg); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err = LoadFrom(path)
+		if err != nil || cfg.ResumeMaximized != enabled {
+			t.Fatalf("最大化偏好往返不一致：%+v, %v", cfg, err)
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var fields map[string]json.RawMessage
+		if err = json.Unmarshal(raw, &fields); err != nil {
+			t.Fatal(err)
+		}
+		if string(fields["resume_maximized"]) != map[bool]string{true: "true", false: "false"}[enabled] {
+			t.Fatalf("resume_maximized 应明确保存当前布尔值：%s", raw)
+		}
+	}
+	// 类型不对的取值要报配置错误，而不是静默当成 false
+	bad := filepath.Join(t.TempDir(), "app-config.json")
+	if err := os.WriteFile(bad, []byte(`{"resume_maximized":"true"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadFrom(bad); err == nil {
+		t.Fatal("错误类型应返回配置错误")
+	}
+}

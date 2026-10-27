@@ -38,7 +38,14 @@ import (
 // 五、shell 由设置决定(见 terminalshell):默认 Windows PowerShell 5.1,
 // 可选 PowerShell 7+ 或自定义可执行文件。wt 的内层命令与回退进程都用
 // 解析出的同一个可执行文件。
-func terminalCommand(cwd, resumeCmd, shellExe string) (string, []string) {
+//
+// 六、maximize 只对「继续会话」生效(设置里的 resume_maximized,默认关闭)。
+// 有 wt.exe 时交给它自己的 -M(实测窗口铺到 -8,-8..2568,1400,即最大化而
+// 非 -F 的全屏);回退到直接起 shell 时没有等价开关,用 -WindowStyle Maximized。
+// 回退那条路只有在窗口由 conhost 托管时才真的最大化:本机装了 Windows
+// Terminal 并把它设为默认终端时,CREATE_NEW_CONSOLE 建出的窗口会被系统
+// 转交给 Windows Terminal 托管,那时 -WindowStyle 不生效(实测仍是小窗口)。
+func terminalCommand(cwd, resumeCmd, shellExe string, maximize bool) (string, []string) {
 	script := encodedCommand(resumeCmd)
 	dir := projects.Normalize(cwd)
 	if dir != "" && filepath.IsAbs(dir) {
@@ -49,9 +56,17 @@ func terminalCommand(cwd, resumeCmd, shellExe string) (string, []string) {
 		dir = ""
 	}
 	if wt, err := proc.LookPath("wt.exe"); err == nil && dir != "" {
-		return wt, []string{"-d", dir, shellExe, "-NoExit", "-EncodedCommand", script}
+		args := make([]string, 0, 8)
+		if maximize {
+			args = append(args, "-M")
+		}
+		return wt, append(args, "-d", dir, shellExe, "-NoExit", "-EncodedCommand", script)
 	}
-	return shellExe, []string{"-NoExit", "-EncodedCommand", script}
+	args := make([]string, 0, 6)
+	if maximize {
+		args = append(args, "-WindowStyle", "Maximized")
+	}
+	return shellExe, append(args, "-NoExit", "-EncodedCommand", script)
 }
 
 // encodedCommand 把整条恢复命令编码成 powershell -EncodedCommand 收的

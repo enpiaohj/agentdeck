@@ -111,6 +111,16 @@ func (a *App) shellExe() (string, error) {
 	return resolveShellExe(a.terminalShellSetting())
 }
 
+// resumeMaximized 报告「继续会话」是否让终端最大化打开。
+//
+// 取值随应用配置一起由 settingsMu 保护；配置读取失败时 settings 是 Default()，
+// 这里得到 false——降级状态下不擅自替用户把窗口铺满。
+func (a *App) resumeMaximized() bool {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+	return a.settings.ResumeMaximized
+}
+
 // shellVersionOf 返回 exe 的版本，成功结果在进程内缓存。失败不缓存：用户
 // 可能正在安装或修复 shell，缓存失败会让重试永远失败。
 func (a *App) shellVersionOf(exe string) (string, error) {
