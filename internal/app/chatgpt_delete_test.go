@@ -33,7 +33,7 @@ func importBoth(t *testing.T, svc *SessionService) (key string, copies int) {
 	t.Helper()
 	first, second := chatgptTwoExports(t)
 	for _, p := range []string{first, second} {
-		if _, err := svc.ImportChatGPT(p, "个人", nil, false); err != nil {
+		if _, err := svc.ImportChatGPT(p, "个人", nil, false, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -148,7 +148,7 @@ func TestDeletedImportDoesNotComeBack(t *testing.T) {
 	if err := os.WriteFile(again, []byte(data), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.ImportChatGPT(again, "个人", nil, false); err != nil {
+	if _, err := svc.ImportChatGPT(again, "个人", nil, false, nil); err != nil {
 		t.Fatal(err)
 	}
 	if titlesNow(svc)["整理发票"] {

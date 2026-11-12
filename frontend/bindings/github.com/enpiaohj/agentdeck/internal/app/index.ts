@@ -24,6 +24,7 @@ export {
     BrowserOption,
     BrowserSettingsView,
     ChatGPTAccountMatch,
+    ChatGPTDeleted,
     ChatGPTImportReport,
     ChatGPTPreview,
     ChatGPTProject,

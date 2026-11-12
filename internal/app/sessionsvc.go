@@ -55,13 +55,17 @@ func (s *SessionService) ImportClaudeHistory(path, account string) (ClaudeImport
 // PreviewChatGPT 读一遍 ChatGPT 官方导出（ZIP 或 conversations JSON），告诉前端
 // 有多少会话、有哪些项目，什么都不写。account 用来回显该账号已起好的项目名。
 func (s *SessionService) PreviewChatGPT(path, account string) (ChatGPTPreview, error) {
-	res, err := chatgpthistory.Preview(s.a.chatgptDir(), path, account)
+	res, err := chatgpthistory.Preview(s.a.chatgptDir(), path, account, s.a.deletedImport)
 	if err != nil {
 		return ChatGPTPreview{}, err
 	}
 	// 导出里没有项目名；本机的 ChatGPT 桌面应用把项目列表连名字一起记着，只读取，作为命名建议
 	chatgpthistory.ApplySuggestions(&res, chatgpthistory.LocalProjectNames(sessions.CodexDir()))
-	out := ChatGPTPreview{Accounts: make([]ChatGPTAccountMatch, 0, len(res.Accounts)), Conversations: res.Conversations, Images: res.Images, ImageBytes: res.ImageBytes, Projects: make([]ChatGPTProject, 0, len(res.Projects))}
+	deleted := make([]ChatGPTDeleted, 0, len(res.Deleted))
+	for _, d := range res.Deleted {
+		deleted = append(deleted, ChatGPTDeleted{ID: d.ID, Title: d.Title, Updated: d.Updated})
+	}
+	out := ChatGPTPreview{Deleted: deleted, Accounts: make([]ChatGPTAccountMatch, 0, len(res.Accounts)), Conversations: res.Conversations, Images: res.Images, ImageBytes: res.ImageBytes, Projects: make([]ChatGPTProject, 0, len(res.Projects))}
 	for _, acc := range res.Accounts {
 		out.Accounts = append(out.Accounts, ChatGPTAccountMatch{Name: acc.Name, Overlap: acc.Overlap, Missing: acc.Missing})
 	}
@@ -74,12 +78,18 @@ func (s *SessionService) PreviewChatGPT(path, account string) (ChatGPTPreview, e
 // ImportChatGPT 把 ChatGPT 官方导出复制进 AgentDeck 自己的存储。names 是
 // 项目 id → 用户起的名字；images 为真时把会话里的图片一并拷进来。导出文件与
 // 账号凭据都不会被写入或读取。
-func (s *SessionService) ImportChatGPT(path, account string, names map[string]string, images bool) (ChatGPTImportReport, error) {
+func (s *SessionService) ImportChatGPT(path, account string, names map[string]string, images bool, restore []string) (ChatGPTImportReport, error) {
 	s.a.dataMu.Lock()
 	defer s.a.dataMu.Unlock()
-	report, err := chatgpthistory.Import(s.a.chatgptDir(), path, account, chatgpthistory.Options{Names: names, Images: images, FreeSpace: diskFree})
+	report, err := chatgpthistory.Import(s.a.chatgptDir(), path, account, chatgpthistory.Options{Names: names, Images: images, FreeSpace: diskFree, Deleted: s.a.deletedImport, Restore: s.a.restorableImports(restore)})
 	if err != nil {
 		return ChatGPTImportReport{}, err
+	}
+	// 恢复的会话已经写回，此时才解除对它们的屏蔽；没写成功的保持删除状态
+	if len(report.Restored) > 0 {
+		if err := s.a.unblockDeletedImports(report.Restored); err != nil {
+			return ChatGPTImportReport{}, fmt.Errorf("会话已重新导入，但解除删除标记失败，它们暂时还不会显示：%w", err)
+		}
 	}
 	s.Refresh()
 	s.a.mu.Lock()
@@ -88,7 +98,7 @@ func (s *SessionService) ImportChatGPT(path, account string, names map[string]st
 	if loadError != "" {
 		return ChatGPTImportReport{}, fmt.Errorf("文件已保存，但读取 ChatGPT 导入库失败: %s", loadError)
 	}
-	return ChatGPTImportReport{Conversations: report.Conversations, Projects: report.Projects, Account: report.Account, AlreadyImported: report.AlreadyImported, SkippedBlocks: report.SkippedBlocks, Images: report.Images, Reclaimed: report.Reclaimed, ReclaimedBytes: report.ReclaimedBytes}, nil
+	return ChatGPTImportReport{Conversations: report.Conversations, Projects: report.Projects, Account: report.Account, AlreadyImported: report.AlreadyImported, SkippedBlocks: report.SkippedBlocks, Images: report.Images, Reclaimed: report.Reclaimed, ReclaimedBytes: report.ReclaimedBytes, SkippedDeleted: report.SkippedDeleted, Restored: len(report.Restored)}, nil
 }
 
 // SetChatGPTProjectNames 给已导入账号的项目改名，不需要重新导入。

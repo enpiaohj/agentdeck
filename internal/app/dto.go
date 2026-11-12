@@ -60,6 +60,13 @@ type ChatGPTProject struct {
 	Samples          []string `json:"samples"`
 }
 
+// ChatGPTDeleted 是这份导出里、你之前从 AgentDeck 删除过的会话。
+type ChatGPTDeleted struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Updated string `json:"updated"`
+}
+
 // ChatGPTAccountMatch 是已导入的、与这份导出共有会话的账号。同一个 ChatGPT 账号用两个
 // 账号名导入会把每个会话存两份（收藏与标签也不互通），所以导入页要提示。
 type ChatGPTAccountMatch struct {
@@ -69,6 +76,8 @@ type ChatGPTAccountMatch struct {
 }
 
 type ChatGPTPreview struct {
+	// Deleted 是这份导出里你删除过的会话：导入时默认不再写入，可以勾选其中误删的恢复
+	Deleted       []ChatGPTDeleted      `json:"deleted"`
 	Accounts      []ChatGPTAccountMatch `json:"accounts"`
 	Conversations int                   `json:"conversations"`
 	Projects      []ChatGPTProject      `json:"projects"`
@@ -87,6 +96,9 @@ type ChatGPTImportReport struct {
 	// ReclaimedBytes 是释放的字节数。
 	Reclaimed      int   `json:"reclaimed"`
 	ReclaimedBytes int64 `json:"reclaimed_bytes"`
+	// SkippedDeleted 是因为你删除过而没有写入的会话数；Restored 是按你的选择恢复的会话数
+	SkippedDeleted int `json:"skipped_deleted"`
+	Restored       int `json:"restored"`
 }
 
 // TranscriptView 是会话详情：全文按序。Cut 说明会话层按上限截断了。

@@ -35,7 +35,7 @@ func TestImportChatGPTEndToEnd(t *testing.T) {
 		pre.Projects[0].Samples[0] != "整理发票" || pre.Projects[0].Default != "ChatGPT 项目 123456" {
 		t.Fatalf("preview: %+v %v", pre, err)
 	}
-	report, err := svc.ImportChatGPT(source, "个人", map[string]string{"g-p-1234567890abcdef": "财务资料"}, false)
+	report, err := svc.ImportChatGPT(source, "个人", map[string]string{"g-p-1234567890abcdef": "财务资料"}, false, nil)
 	if err != nil || report.Conversations != 2 || report.Projects != 1 {
 		t.Fatalf("import: %+v %v", report, err)
 	}
@@ -96,7 +96,7 @@ func TestImportChatGPTEndToEnd(t *testing.T) {
 		t.Fatalf("改名后: %d", len(got))
 	}
 	// 再导入同一份：不重复
-	if again, err := svc.ImportChatGPT(source, "个人", nil, false); err != nil || !again.AlreadyImported {
+	if again, err := svc.ImportChatGPT(source, "个人", nil, false, nil); err != nil || !again.AlreadyImported {
 		t.Fatalf("重复导入: %+v %v", again, err)
 	}
 	if rows := svc.List(Filter{Agent: "chatgpt"}); len(rows) != 2 {
@@ -130,7 +130,7 @@ func TestChatGPTImagesImportAndExport(t *testing.T) {
 	if err != nil || pre.Images != 1 || pre.ImageBytes != int64(len(png)) {
 		t.Fatalf("preview: %+v %v", pre, err)
 	}
-	rep, err := svc.ImportChatGPT(zp, "个人", nil, true)
+	rep, err := svc.ImportChatGPT(zp, "个人", nil, true, nil)
 	if err != nil || rep.Images != 1 {
 		t.Fatalf("import: %+v %v", rep, err)
 	}

@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,6 +60,10 @@ type Report struct {
 	// conversation in them has a newer or richer copy elsewhere) and removed.
 	Reclaimed      int   `json:"reclaimed"`
 	ReclaimedBytes int64 `json:"reclaimed_bytes"`
+	// SkippedDeleted counts conversations of the export left out because they were
+	// deleted; Restored lists the deleted ones written again at the user's request.
+	SkippedDeleted int      `json:"skipped_deleted"`
+	Restored       []string `json:"restored"`
 }
 
 // Options are what the user chose for one import.
@@ -69,6 +74,12 @@ type Options struct {
 	// Images also copies the images the conversations show (and the ones
 	// ChatGPT drew) into the store, so they can be read in place.
 	Images bool
+	// Deleted names conversation ids (as stored: "gpt_…") the user deleted from
+	// AgentDeck. Such a conversation is not written again: deleting it was meant to
+	// clear its private copy from the disk, and an export holds every conversation
+	// still in ChatGPT. Restore lists the ones to write anyway.
+	Deleted func(id string) bool
+	Restore []string
 	// FreeSpace reports the free bytes of the volume holding dir. When set, an
 	// import that copies images first checks there is room for them.
 	FreeSpace func(dir string) (int64, error)
@@ -94,6 +105,9 @@ type ProjectInfo struct {
 	RecommendedBasis string `json:"recommended_basis"`
 }
 
+// maxDeletedListed bounds how many deleted conversations the preview lists.
+const maxDeletedListed = 1000
+
 // maxTitlesPerProject bounds the titles kept per project to work a name out of.
 const maxTitlesPerProject = 500
 
@@ -107,7 +121,18 @@ type ExistingAccount struct {
 	Missing int `json:"missing"`
 }
 
+// DeletedConversation is a conversation of the export that the user deleted from
+// AgentDeck earlier. The import page offers to bring back the ones deleted by mistake.
+type DeletedConversation struct {
+	ID      string `json:"id"` // as stored: "gpt_…"
+	Title   string `json:"title"`
+	Updated string `json:"updated"` // when it last changed in ChatGPT (RFC 3339), "" if unknown
+}
+
 type PreviewResult struct {
+	// Deleted lists the conversations of the export the user deleted from AgentDeck,
+	// newest first. Importing leaves them out unless they are chosen to be restored.
+	Deleted []DeletedConversation `json:"deleted"`
 	// Accounts lists the already-imported accounts that share conversations with the
 	// export, most shared first. A second account name for the same ChatGPT account
 	// would store every conversation twice, so the import page points it out.
@@ -810,14 +835,28 @@ func Import(root, source, account string, opts Options) (Report, error) {
 			return report, err
 		}
 	}
+	restore := map[string]bool{}
+	for _, id := range opts.Restore {
+		if validID.MatchString(id) {
+			restore[id] = true
+		}
+	}
+	// The export was imported before. Normally that is all there is to do; but when
+	// deleted conversations are to be brought back, their files are gone from that
+	// batch, so a small batch of just those is written next to it.
+	restoring := false
 	if data, err := os.ReadFile(filepath.Join(batch, "manifest.json")); err == nil {
 		var prior manifest
 		if json.Unmarshal(data, &prior) != nil || prior.Version != 1 {
 			return report, errors.New("已有的导入记录已损坏，原有文件已保留")
 		}
-		report.Conversations, report.AlreadyImported, report.SkippedBlocks = len(prior.Entries), true, prior.SkippedBlocks
-		report.Projects, report.Images = countProjects(prior.Entries), prior.Images
-		return report, nil
+		if len(restore) == 0 {
+			report.Conversations, report.AlreadyImported, report.SkippedBlocks = len(prior.Entries), true, prior.SkippedBlocks
+			report.Projects, report.Images = countProjects(prior.Entries), prior.Images
+			return report, nil
+		}
+		restoring = true
+		batch += "-restore-" + strconv.FormatInt(time.Now().UnixMilli(), 10)
 	}
 	if err := os.MkdirAll(accountRoot, 0o700); err != nil {
 		return report, err
@@ -892,6 +931,13 @@ func Import(root, source, account string, opts Options) (Report, error) {
 			return errors.New("导出文件中有重复的会话 ID，未导入任何内容")
 		}
 		seen[id] = true
+		if restoring && !restore[id] {
+			return nil // a restore batch holds only what is being restored
+		}
+		if opts.Deleted != nil && opts.Deleted(id) && !restore[id] {
+			report.SkippedDeleted++
+			return nil
+		}
 		e, skipped, err := writeConversation(filepath.Join(stage, id+".jsonl"), id, c, imageURL)
 		if err != nil {
 			return err
@@ -902,6 +948,9 @@ func Import(root, source, account string, opts Options) (Report, error) {
 		}
 		m.Entries = append(m.Entries, e)
 		m.SkippedBlocks += skipped
+		if restore[id] {
+			report.Restored = append(report.Restored, id)
+		}
 		return nil
 	})
 	if err == nil && storeErr != nil {
@@ -911,6 +960,13 @@ func Import(root, source, account string, opts Options) (Report, error) {
 		return report, err
 	}
 	if len(m.Entries) == 0 {
+		switch {
+		case len(restore) > 0:
+			return report, errors.New("在这份导出里没有找到要恢复的会话")
+		case report.SkippedDeleted > 0:
+			// everything in it was deleted on purpose: nothing to import, and not an error
+			return report, nil
+		}
 		return report, errors.New("导出文件中没有会话")
 	}
 	m.Images = len(distinct)
@@ -1033,7 +1089,7 @@ func writeConversation(file, id string, c conversation, imageURL func(string) st
 
 // Preview reads an export without storing anything: how many conversations it
 // holds and which ChatGPT Projects they belong to, so the user can name them.
-func Preview(root, source, account string) (PreviewResult, error) {
+func Preview(root, source, account string, deleted func(id string) bool) (PreviewResult, error) {
 	res := PreviewResult{}
 	src, err := openSource(source)
 	if err != nil {
@@ -1058,10 +1114,24 @@ func Preview(root, source, account string) (PreviewResult, error) {
 	byID := map[string]*seenProject{}
 	images := map[string]bool{} // export members the conversations show as images
 	var convIDs []string
+	// ids are worked out the way Import does, from the account name typed
+	accountID := ""
+	if acct := strings.TrimSpace(account); acct != "" && deleted != nil {
+		accountID = digest(strings.ToLower(acct))
+	}
 	err = eachConversation(shards, func(c conversation) error {
 		res.Conversations++
 		if id := c.id(); id != "" {
 			convIDs = append(convIDs, id)
+			if accountID != "" && len(res.Deleted) < maxDeletedListed {
+				if stored := "gpt_" + digest(accountID+":"+id); deleted(stored) {
+					d := DeletedConversation{ID: stored, Title: truncateRunes(oneLine(c.Title), maxTitleRunes)}
+					if t := seconds(c.Updated); !t.IsZero() {
+						d.Updated = t.Format(time.RFC3339)
+					}
+					res.Deleted = append(res.Deleted, d)
+				}
+			}
 		}
 		n, size := src.countImages(c, images)
 		res.Images += n
@@ -1091,6 +1161,7 @@ func Preview(root, source, account string) (PreviewResult, error) {
 	if err != nil {
 		return res, err
 	}
+	sort.SliceStable(res.Deleted, func(i, j int) bool { return res.Deleted[i].Updated > res.Deleted[j].Updated })
 	res.Accounts = existingAccounts(root, convIDs)
 	files := src.projectFiles()
 	for id, p := range byID {
@@ -1256,6 +1327,14 @@ func List(root string, skip func(id string) bool) ([]sessions.Session, error) {
 		copy    copyInfo
 	}
 	var problems []error
+	// a copy whose file is gone is a problem only if no other copy of the same
+	// conversation shows (a deleted conversation brought back leaves such entries
+	// in the batches that held it before)
+	type lost struct {
+		key string
+		err error
+	}
+	var missing []lost
 	byID := map[string]stored{}
 	labels := map[string]string{}
 	projectNames := map[string]map[string]string{}
@@ -1292,11 +1371,11 @@ func List(root string, skip func(id string) bool) ([]sessions.Session, error) {
 				continue
 			}
 			file := filepath.Join(filepath.Dir(p), e.ID+".jsonl")
+			key := filepath.Base(accountRoot) + "/" + e.ID
 			if info, err := os.Stat(file); err != nil || !info.Mode().IsRegular() {
-				problems = append(problems, fmt.Errorf("无法读取已导入的正文文件：%s", filepath.Base(file)))
+				missing = append(missing, lost{key, fmt.Errorf("无法读取已导入的正文文件：%s", filepath.Base(file))})
 				continue
 			}
-			key := filepath.Base(accountRoot) + "/" + e.ID
 			c := copyInfo{updated: e.Updated, importedAt: m.ImportedAt, images: m.WithImages}
 			if prior, exists := byID[key]; exists && !c.beats(prior.copy) {
 				continue
@@ -1315,6 +1394,11 @@ func List(root string, skip func(id string) bool) ([]sessions.Session, error) {
 			}
 			byID[key] = stored{session: sessions.Session{Agent: Agent, ID: e.ID, Title: e.Title, Cwd: cwd, Account: label, Imported: true, MessageCount: e.Messages,
 				Start: e.Created, Last: e.Updated, ReadOnly: true, Transcript: true, Path: file, Models: models}, copy: c}
+		}
+	}
+	for _, l := range missing {
+		if _, shown := byID[l.key]; !shown {
+			problems = append(problems, l.err)
 		}
 	}
 	out := make([]sessions.Session, 0, len(byID))

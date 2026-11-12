@@ -267,7 +267,7 @@ func TestPreview(t *testing.T) {
 	dir := t.TempDir()
 	zp := writeExport(t, dir, fixtureShards())
 	root := filepath.Join(dir, "store")
-	res, err := Preview(root, zp, "A")
+	res, err := Preview(root, zp, "A", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +281,7 @@ func TestPreview(t *testing.T) {
 	if _, err := Import(root, zp, "A", Options{Names: map[string]string{"g-p-aaaaaaaa11112222": "已命名"}}); err != nil {
 		t.Fatal(err)
 	}
-	res, _ = Preview(root, zp, "A")
+	res, _ = Preview(root, zp, "A", nil)
 	if res.Projects[0].Name != "已命名" {
 		t.Fatalf("已起的名字应回显: %+v", res.Projects[0])
 	}

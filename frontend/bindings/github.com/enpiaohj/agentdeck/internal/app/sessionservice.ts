@@ -100,8 +100,8 @@ export function Get(key: string): $CancellablePromise<$models.SessionView | null
  * 项目 id → 用户起的名字；images 为真时把会话里的图片一并拷进来。导出文件与
  * 账号凭据都不会被写入或读取。
  */
-export function ImportChatGPT(path: string, account: string, names: { [_ in string]?: string }, images: boolean): $CancellablePromise<$models.ChatGPTImportReport> {
-    return $Call.ByID(2477264188, path, account, names, images).then(($result: any) => {
+export function ImportChatGPT(path: string, account: string, names: { [_ in string]?: string }, images: boolean, restore: string[]): $CancellablePromise<$models.ChatGPTImportReport> {
+    return $Call.ByID(2477264188, path, account, names, images, restore).then(($result: any) => {
         return $$createType9($result);
     });
 }

@@ -20,6 +20,7 @@ const useStyles = makeStyles({
   label: { fontSize: '13px', fontWeight: 600 },
   file: { display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', border: `1px dashed ${tokens.colorNeutralStroke1}`, borderRadius: '6px', minWidth: 0 },
   fileName: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '13px' },
+  deletedList: { display: 'flex', flexDirection: 'column', gap: '2px', maxHeight: '220px', overflowY: 'auto', padding: '6px 8px', border: `1px solid ${tokens.colorNeutralStroke2}`, borderRadius: '6px' },
   note: { fontSize: '12px', lineHeight: 1.8, color: tokens.colorNeutralForeground3 },
   warning: { fontSize: '13px', lineHeight: 1.7, padding: '10px 12px', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start', backgroundColor: tokens.colorPaletteYellowBackground1, border: `1px solid ${tokens.colorPaletteYellowBorder1}`, color: tokens.colorNeutralForeground1 },
   footer: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '14px', flexWrap: 'wrap' },
@@ -49,6 +50,8 @@ export function ChatGPTHistoryImport({ onImported }: { onImported: (report: Chat
   const [file, setFile] = useState('')
   const [preview, setPreview] = useState<ChatGPTPreview | null>(null)
   const [names, setNames] = useState<Record<string, string>>({})
+  // 这份导出里你删除过的会话中，勾选要恢复的（默认一个都不选）
+  const [restore, setRestore] = useState<Set<string>>(new Set())
   // 图片默认一并导入：没有图片的对话往往看不懂；磁盘空间紧张的用户可以取消选中
   const [withImages, setWithImages] = useState(true)
   const [reading, setReading] = useState(false)
@@ -74,7 +77,7 @@ export function ChatGPTHistoryImport({ onImported }: { onImported: (report: Chat
   // 读一遍导出文件，给出会话数、项目与已有账号的重叠情况。账号名变了要重读：
   // 已为该账号命名的项目会随之带回。
   const readExport = async (path: string, accountName: string) => {
-    setError(''); setMessage(''); setPreview(null); setNames({})
+    setError(''); setMessage(''); setPreview(null); setNames({}); setRestore(new Set())
     setReading(true)
     try {
       const result = await sessionService.PreviewChatGPT(path, accountName)
@@ -88,6 +91,9 @@ export function ChatGPTHistoryImport({ onImported }: { onImported: (report: Chat
   const typed = account.trim().toLowerCase()
   const sameName = (preview?.accounts ?? []).find(item => item.name.toLowerCase() === typed)
   const otherAccount = sameName ? undefined : (preview?.accounts ?? [])[0]
+  const deleted = preview?.deleted ?? []
+  const toggleRestore = (id: string, on: boolean) => setRestore(prev => { const next = new Set(prev); if (on) next.add(id); else next.delete(id); return next })
+  const when = (iso: string) => { const date = new Date(iso); return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('zh-CN') }
   const useAccount = (name: string) => { setAccount(name); if (file) void readExport(file, name) }
 
   const openProject = async (id: string) => {
@@ -110,10 +116,12 @@ export function ChatGPTHistoryImport({ onImported }: { onImported: (report: Chat
         const value = (names[project.id] ?? '').trim()
         if (value || project.name) chosen[project.id] = value
       }
-      const result = await sessionService.ImportChatGPT(file, account.trim(), chosen, withImages && (preview.images ?? 0) > 0)
+      const result = await sessionService.ImportChatGPT(file, account.trim(), chosen, withImages && (preview.images ?? 0) > 0, [...restore])
       saved = true
-      const prefix = result.already_imported ? '此导出文件已导入过，已更新项目名' : `已导入 ${result.conversations} 个会话（${result.projects} 个项目）`
-      setMessage(`${prefix}${result.images ? `；${result.images} 张图片` : ''}${result.skipped_blocks ? `；${result.skipped_blocks} 处图片或音频内容未导入` : ''}${result.reclaimed ? `；已清理 ${result.reclaimed} 个被取代的旧批次，释放 ${fmtBytes(result.reclaimed_bytes)}` : ''}`)
+      const prefix = result.already_imported ? '此导出文件已导入过，已更新项目名'
+        : result.conversations === 0 && result.skipped_deleted > 0 ? '没有新的内容：这份导出里的会话都是你删除过的'
+        : `已导入 ${result.conversations} 个会话（${result.projects} 个项目）`
+      setMessage(`${prefix}${result.images ? `；${result.images} 张图片` : ''}${result.skipped_blocks ? `；${result.skipped_blocks} 处图片或音频内容未导入` : ''}${result.reclaimed ? `；已清理 ${result.reclaimed} 个被取代的旧批次，释放 ${fmtBytes(result.reclaimed_bytes)}` : ''}${result.restored ? `；已恢复 ${result.restored} 个你删除过的会话` : ''}${result.skipped_deleted && result.conversations > 0 ? `；${result.skipped_deleted} 个你删除过的会话未导入` : ''}`)
       await onImported(result)
     } catch (reason) { setError(`${saved ? '数据已保存，但界面刷新失败：' : ''}${String(reason)}`.slice(0, 400)) }
     finally { setBusy(false) }
@@ -183,6 +191,19 @@ export function ChatGPTHistoryImport({ onImported }: { onImported: (report: Chat
                 {project.files.length ? <div>项目文件：{project.files.join('、')}</div> : null}
               </div>
             </div>)}
+          </div>
+        </div> : null}
+        {deleted.length > 0 ? <div className={styles.field}>
+          <Text weight="semibold">恢复误删的会话（可选）</Text>
+          <div className={styles.note}>这份导出里有 {deleted.length} 个会话是你之前从 AgentDeck 删除的，导入时默认不会再写入。如果其中有误删的，勾选后会重新导入（原来的收藏、标签和备注不会恢复）。</div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Button size="small" appearance="subtle" disabled={busy} onClick={() => setRestore(new Set(deleted.map(item => item.id)))}>全选</Button>
+            <Button size="small" appearance="subtle" disabled={busy || restore.size === 0} onClick={() => setRestore(new Set())}>全不选</Button>
+            <span className={styles.note}>已选 {restore.size} / {deleted.length}</span>
+          </div>
+          <div className={styles.deletedList} role="group" aria-label="你删除过的会话">
+            {deleted.map(item => <Checkbox key={item.id} checked={restore.has(item.id)} disabled={busy} onChange={(_, data) => toggleRestore(item.id, data.checked === true)}
+              label={`${item.title || '未命名会话'}${item.updated && when(item.updated) ? ` · ${when(item.updated)}` : ''}`} />)}
           </div>
         </div> : null}
         {error ? <div role="alert" style={{ color: tokens.colorPaletteRedForeground1, fontSize: 13, overflowWrap: 'anywhere' }}>{error}</div> : null}

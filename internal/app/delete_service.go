@@ -471,3 +471,124 @@ func (s *SessionService) RestoreDeletedSessions(token string) (string, error) {
 	s.refreshAfterDelete()
 	return fmt.Sprintf("已恢复 %d 个会话的原始记录与本地内容。", len(job.keys)), nil
 }
+
+// ---- 已删除的导入会话：不再写入，也可以恢复 ----
+
+// deletedImport 报告一个导入的 ChatGPT 会话（"gpt_…"）是否被用户删除过。
+func (a *App) deletedImport(id string) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.deleted[chatgpthistory.Agent+":"+id]
+}
+
+// restorableImports 把用户要恢复的会话限定在「确实被删除过」的范围里：别的 ID 一律忽略，
+// 免得这个入口被用来写入任意内容。
+func (a *App) restorableImports(ids []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if len(out) >= 5000 {
+			break
+		}
+		if !seen[id] && a.deletedImport(id) {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// unblockDeletedImports 让被删除过、现在已重新导入的会话重新显示：从删除恢复记录
+// （deletions/delete-*/operation.json）里去掉它们的 key；一条记录的 key 全部去掉后，
+// 状态改为 restored。只动状态为 deleted 的记录，进行中或待恢复的不碰；改写是
+// 「同目录临时文件 + 原子改名」，中途失败不会留下半截记录。
+func (a *App) unblockDeletedImports(ids []string) error {
+	want := map[string]bool{}
+	for _, id := range ids {
+		want[chatgpthistory.Agent+":"+id] = true
+	}
+	root := deletionDir(a.cfg.LibraryPath)
+	entries, err := os.ReadDir(root)
+	if os.IsNotExist(err) {
+		a.blockDeleted(keysOf(want), false)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, entry := range entries {
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), "delete-") {
+			continue
+		}
+		path := filepath.Join(root, entry.Name(), "operation.json")
+		info, err := os.Lstat(path)
+		if err != nil || !info.Mode().IsRegular() || info.Size() > 1<<20 {
+			continue
+		}
+		data, err := os.ReadFile(path)
+		var record deletionRecord
+		if err != nil || json.Unmarshal(data, &record) != nil || record.Version != 1 || record.State != "deleted" {
+			continue
+		}
+		keep := func(keys []string) []string {
+			var out []string
+			for _, key := range keys {
+				if !want[key] {
+					out = append(out, key)
+				}
+			}
+			return out
+		}
+		keys, owned := keep(record.Keys), keep(record.Owned)
+		if len(keys) == len(record.Keys) && len(owned) == len(record.Owned) {
+			continue
+		}
+		record.Keys, record.Owned = keys, owned
+		if len(keys) == 0 && len(owned) == 0 {
+			record.State = "restored"
+		}
+		out, err := json.MarshalIndent(record, "", "  ")
+		if err == nil {
+			err = writeFileAtomic(path, out)
+		}
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if err := errors.Join(errs...); err != nil {
+		return err
+	}
+	a.blockDeleted(keysOf(want), false)
+	return nil
+}
+
+func keysOf(set map[string]bool) []string {
+	out := make([]string, 0, len(set))
+	for key := range set {
+		out = append(out, key)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// writeFileAtomic 在 path 所在目录写临时文件、落盘后改名覆盖。
+func writeFileAtomic(path string, data []byte) error {
+	f, err := os.CreateTemp(filepath.Dir(path), ".operation-*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if _, err = f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), path)
+}

@@ -20,7 +20,7 @@ func TestRealExport(t *testing.T) {
 	}
 	root := filepath.Join(t.TempDir(), "store")
 	start := time.Now()
-	pre, err := Preview(root, src, "real")
+	pre, err := Preview(root, src, "real", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

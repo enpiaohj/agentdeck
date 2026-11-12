@@ -77,7 +77,7 @@ func TestImportImages(t *testing.T) {
 	zp := writeImageExport(t, dir)
 	root := filepath.Join(dir, "store")
 
-	pre, err := Preview(root, zp, "A")
+	pre, err := Preview(root, zp, "A", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

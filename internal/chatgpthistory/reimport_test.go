@@ -135,22 +135,22 @@ func TestPreviewFindsAccountsSharingConversations(t *testing.T) {
 		t.Fatal(err)
 	}
 	// the same export previewed under whatever name: one stored account shares all three
-	res, err := Preview(root, exp("p1", c1, c2, c3), "个人账号")
+	res, err := Preview(root, exp("p1", c1, c2, c3), "个人账号", nil)
 	if err != nil || len(res.Accounts) != 1 || res.Accounts[0].Name != "个人" || res.Accounts[0].Overlap != 3 || res.Accounts[0].Missing != 0 {
 		t.Fatalf("%+v %v", res.Accounts, err)
 	}
 	// a newer export without 乙: two shared, one the export no longer holds
-	res, _ = Preview(root, exp("p2", c1, c3), "个人")
+	res, _ = Preview(root, exp("p2", c1, c3), "个人", nil)
 	if len(res.Accounts) != 1 || res.Accounts[0].Overlap != 2 || res.Accounts[0].Missing != 1 {
 		t.Fatalf("Missing 应是已导入却不在这份导出里的会话: %+v", res.Accounts)
 	}
 	// an export of something else shares nothing
 	other := chat("zz", "别的", "", 1_750_000_000)
-	if res, _ = Preview(root, exp("p3", other), "x"); len(res.Accounts) != 0 {
+	if res, _ = Preview(root, exp("p3", other), "x", nil); len(res.Accounts) != 0 {
 		t.Fatalf("没有重叠不该提示: %+v", res.Accounts)
 	}
 	// nothing stored yet
-	if res, _ = Preview(filepath.Join(dir, "empty"), exp("p4", c1), "x"); len(res.Accounts) != 0 {
+	if res, _ = Preview(filepath.Join(dir, "empty"), exp("p4", c1), "x", nil); len(res.Accounts) != 0 {
 		t.Fatal("还没有导入过任何账号")
 	}
 }

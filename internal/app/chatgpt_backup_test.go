@@ -40,7 +40,7 @@ func TestBackupCarriesChatGPTImportsAndImages(t *testing.T) {
 	src, _, _, _ := newTestApp(t)
 	zp, png := writeChatGPTImageExport(t, t.TempDir())
 	svc := src.NewSessionService()
-	if _, err := svc.ImportChatGPT(zp, "个人", map[string]string{"g-p-0123456789abcdef": "备份项目"}, true); err != nil {
+	if _, err := svc.ImportChatGPT(zp, "个人", map[string]string{"g-p-0123456789abcdef": "备份项目"}, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	backup, err := svc.BackupData(t.TempDir(), `{}`)
@@ -53,7 +53,7 @@ func TestBackupCarriesChatGPTImportsAndImages(t *testing.T) {
 	other := t.TempDir()
 	zp2, _ := writeChatGPTImageExport(t, other)
 	dstSvc := dst.NewSessionService()
-	if _, err := dstSvc.ImportChatGPT(zp2, "个人", map[string]string{"g-p-0123456789abcdef": "本机已有的名字"}, false); err != nil {
+	if _, err := dstSvc.ImportChatGPT(zp2, "个人", map[string]string{"g-p-0123456789abcdef": "本机已有的名字"}, false, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := dstSvc.RestoreData(backup, `{}`); err != nil {
@@ -91,7 +91,7 @@ func TestBackupArchiveContainsImageFiles(t *testing.T) {
 	a, _, _, _ := newTestApp(t)
 	zp, _ := writeChatGPTImageExport(t, t.TempDir())
 	svc := a.NewSessionService()
-	if _, err := svc.ImportChatGPT(zp, "个人", nil, true); err != nil {
+	if _, err := svc.ImportChatGPT(zp, "个人", nil, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	backup, err := svc.BackupData(t.TempDir(), `{}`)

@@ -93,7 +93,7 @@ func TestPreviewListsProjectFiles(t *testing.T) {
 	})
 	zw.Close()
 	f.Close()
-	res, err := Preview(filepath.Join(dir, "store"), zp, "A")
+	res, err := Preview(filepath.Join(dir, "store"), zp, "A", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
