@@ -37,7 +37,7 @@ import { usePreferences } from './hooks/usePreferences'
 import { useToasts } from './hooks/useToasts'
 import { useAgentAvailability } from './hooks/useAgentAvailability'
 import { WorkspaceStatus } from './components/WorkspaceStatus'
-import { ClaudeHistoryImport } from './components/ClaudeHistoryImport'
+import { ImportsView } from './components/ImportsView'
 import { DeleteSessionsDialog, DeletedSessionsNotice } from './components/DeleteSessionsDialog'
 import { useSessionDeletion } from './hooks/useSessionDeletion'
 import { deletedSessionKeys } from './sessionDeletion'
@@ -45,7 +45,7 @@ import { navWidthRange, listWidthRange, infoWidthRange, paneWidthCss, readerWidt
 import { usePaneResizer, readerMinWidth } from './hooks/usePaneResizer'
 import { PaneResizer } from './components/PaneResizer'
 import { platformLabel } from './agentOptions'
-import type { SessionView, ClaudeImportReport } from '../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
+import type { SessionView, ClaudeImportReport, ChatGPTImportReport } from '../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as searchService from '../bindings/github.com/enpiaohj/agentdeck/internal/app/searchservice'
 import * as sessionService from '../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import { eventKey } from './markPatch'
@@ -435,6 +435,18 @@ export function App() {
     else setView('sessions')
   }
 
+  const onChatGPTImported = async (report: ChatGPTImportReport) => {
+    setListVersion(value => value + 1)
+    setSourceVersion(value => value + 1)
+    await searchService.Rebuild()
+    const rows = await sessionService.List({ agent: 'chatgpt', favorites: false, archived: false, project: '', tag: '', search: '' })
+    const first = rows.find(row => row.source === 'import' && row.account === report.account)
+    notify(`${report.already_imported ? '此导出文件已导入过，未重复导入' : 'ChatGPT 聊天记录已导入'} · ${report.account} · ${report.conversations} 个会话，${report.projects} 个项目${report.images ? `；${report.images} 张图片` : ''}${report.skipped_blocks ? `；${report.skipped_blocks} 处图片或音频内容未导入` : ''}`, { tone: 'success' })
+    setFilter({ agents: ['chatgpt'] }); setSearchQuery('')
+    if (first) onSelect(first)
+    else setView('sessions')
+  }
+
   // 三栏宽度：导航、会话列表、会话详情都可用分隔条拖动，双击恢复自动宽度。
   // 没调过（0）时跟随布局默认，调过就固定，但始终给阅读区留下 readerMinWidth。
   // 量宽度直接查 DOM：列表的包装节点在搜索时是 display:contents，量不到宽度。
@@ -521,7 +533,7 @@ export function App() {
         </div>
         {crashed ? (
           <div className={styles.crashed}>
-            <span>检测到上次未正常退出。如界面显示异常，请前往“设置 → 数据与诊断”重建索引。</span>
+            <span>检测到上次未正常退出。如界面显示异常，请前往“设置”&gt;“数据与诊断”重建索引。</span>
             <button className={styles.crashedClose} onClick={() => setCrashed(false)} title="关闭提示">
               <DismissRegular fontSize={14} />
             </button>
@@ -550,7 +562,7 @@ export function App() {
           </div> : null}
           {view === 'diagnostics' || view === 'imports' ? (
             <div style={{ gridColumn: view === 'diagnostics' ? '1 / -1' : 'span 3', minWidth: 0, overflow: 'hidden' }}>
-              {view === 'imports' ? <ClaudeHistoryImport onImported={onImported} /> : <SettingsView revision={listVersion + markVersion} onBack={() => setView('sessions')} />}
+              {view === 'imports' ? <ImportsView onClaudeImported={onImported} onChatGPTImported={onChatGPTImported} /> : <SettingsView revision={listVersion + markVersion} onBack={() => setView('sessions')} />}
             </div>
           ) : (
             <>
@@ -611,7 +623,7 @@ export function App() {
             setFilter({ project: path })
             // 建完项目紧接着多半要开一个会话：给一条可以直接点的下一步，
             // 而不是让用户自己去找刚建出来的那一行。
-            notify(`项目「${path}」已就绪。`, { tone: 'success', action: { label: '新建会话', run: () => openNewSession(path, agent) } })
+            notify(`项目“${path}”已就绪。`, { tone: 'success', action: { label: '新建会话', run: () => openNewSession(path, agent) } })
           }}
           onChanged={() => setListVersion(value => value + 1)}
           onClose={() => setProjectDialog(null)}

@@ -10,6 +10,7 @@ package app
 import (
 	"fmt"
 	"maps"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/enpiaohj/agentdeck/internal/appconfig"
+	"github.com/enpiaohj/agentdeck/internal/chatgpthistory"
 	"github.com/enpiaohj/agentdeck/internal/claudecache"
 	"github.com/enpiaohj/agentdeck/internal/claudehistory"
 	"github.com/enpiaohj/agentdeck/internal/history"
@@ -100,16 +102,17 @@ type App struct {
 	probeShell   func(exe string) (string, error)           // 探测 shell 版本；测试替换成假的，不去起真进程
 	copyFileFn   func(src, dest string) (copyRecord, error) // 迁移复制单个文件；测试替换成会失败的那一个
 
-	mu          sync.Mutex
-	list        []sessions.Session // 装配缓存：sessions.List(All) 的快照
-	byKey       map[string]sessions.Session
-	marksAll    map[string]marks.Mark // 标注快照，MarkService 写后同步刷新
-	messages    map[string]int        // agent:id → 消息数，后台补齐
-	msgReady    bool
-	loaded      bool
-	crashed     bool // 上次进程未正常退出(启动时检测残留 lock)
-	importError string
-	cacheError  string // Claude Desktop 本机聊天缓存读取失败的原因
+	mu           sync.Mutex
+	list         []sessions.Session // 装配缓存：sessions.List(All) 的快照
+	byKey        map[string]sessions.Session
+	marksAll     map[string]marks.Mark // 标注快照，MarkService 写后同步刷新
+	messages     map[string]int        // agent:id → 消息数，后台补齐
+	msgReady     bool
+	loaded       bool
+	crashed      bool // 上次进程未正常退出(启动时检测残留 lock)
+	importError  string
+	cacheError   string // Claude Desktop 本机聊天缓存读取失败的原因
+	chatgptError string // 已导入的 ChatGPT 导出读取失败的原因
 
 	warmMu     sync.Mutex // serialize message scans across refreshed generations
 	generation uint64
@@ -270,6 +273,15 @@ func (a *App) emit(event string, data any) {
 	}
 }
 
+// ChatGPTAssets 让界面能显示已导入的 ChatGPT 图片：只服务存储目录里
+// 按内容哈希命名的图片文件，其余请求原样放行。
+func (a *App) ChatGPTAssets() func(http.Handler) http.Handler {
+	return chatgpthistory.AssetMiddleware(a.chatgptDir())
+}
+
+// chatgptDir 是 ChatGPT 导出副本的存放处，放在 ImportDir 之下。
+func (a *App) chatgptDir() string { return filepath.Join(a.cfg.ImportDir, "chatgpt") }
+
 // desktopDataDirs 是读取 Claude Desktop 聊天缓存的 userData 目录；测试替换它，
 // 免得扫到本机真实的 Desktop。
 var desktopDataDirs = sessions.DesktopDataDirs
@@ -291,6 +303,14 @@ func (a *App) ensure() {
 	} else {
 		list = append(list, imported...)
 	}
+	// ChatGPT 官方导出的副本（chatgpthistory）：与 Claude 导入同属 ImportDir，
+	// 备份、恢复与数据迁移因此不用另行处理。读失败不影响其他来源。
+	chatList, chatErr := chatgpthistory.List(a.chatgptDir())
+	a.chatgptError = ""
+	if chatErr != nil {
+		a.chatgptError = chatErr.Error()
+	}
+	list = append(list, chatList...) // 个别批次损坏时，读得出来的照常显示
 	// Claude Desktop 缓存的 claude.ai 聊天：只读上游 IndexedDB，副本写在
 	// 导入目录旁的自有目录里。读失败不影响其他来源。
 	cached, cacheErr := claudecache.Sync(desktopDataDirs(), filepath.Join(filepath.Dir(a.cfg.ImportDir), "claude-desktop-cache"))

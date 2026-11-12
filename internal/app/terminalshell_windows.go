@@ -45,7 +45,7 @@ func resolveShellExe(setting string) (string, error) {
 		if p := proc.FindTool("pwsh"); p != "" {
 			return p, nil
 		}
-		return "", fmt.Errorf("未找到 PowerShell 7（pwsh.exe）；可在「设置 → 新建与启动」中改用 Windows PowerShell 5.1 或指定可执行文件路径")
+		return "", fmt.Errorf("未找到 PowerShell 7（pwsh.exe）；可在“设置”>“新建与启动”中改用 Windows PowerShell 5.1 或指定可执行文件路径")
 	case appconfig.ShellAuto:
 		if p := proc.FindTool("pwsh"); p != "" {
 			return p, nil

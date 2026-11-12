@@ -80,7 +80,11 @@ func (s *SessionService) Diagnostics() []DiagRow {
 	s.a.mu.Lock()
 	importError := s.a.importError
 	cacheError := s.a.cacheError
+	chatgptError := s.a.chatgptError
 	s.a.mu.Unlock()
+	if chatgptError != "" {
+		out = append(out, DiagRow{Agent: "chatgpt", ResumeNote: "ChatGPT 导入库读取失败: " + chatgptError, Source: "import"})
+	}
 	if cacheError != "" {
 		out = append(out, DiagRow{Agent: "claude-desktop", ResumeNote: "Desktop 聊天缓存读取失败: " + cacheError, Source: "cache"})
 	}

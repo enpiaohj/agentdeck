@@ -34,4 +34,4 @@ export function presentSessions<T extends SessionSummary>(rows: readonly T[], qu
 }
 
 // 原 Agent 已删除、本机文件仍在的会话：列表与详情只做低调提示，不改变可读性。
-export const UPSTREAM_DELETED_HINT = '已在原 Agent 中删除；本机文件仍在，可照常阅读、检索和导出'
+export const UPSTREAM_DELETED_HINT = '已在原 Agent 中删除；本机文件仍在，可照常阅读、搜索和导出'

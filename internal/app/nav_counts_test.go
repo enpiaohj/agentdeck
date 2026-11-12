@@ -48,13 +48,13 @@ func TestNavCountsMatchWhatEachEntryLists(t *testing.T) {
 		t.Fatalf("默认视图应收起子会话剩 2 行（已归档的 2 条不在其中）: %+v", rows)
 	}
 	if rows := svc.List(Filter{Archived: true}); len(rows) != 2 {
-		t.Fatalf("「归档」应列出 2 行: %+v", rows)
+		t.Fatalf("“归档”应列出 2 行: %+v", rows)
 	}
 	// 「收藏」列表里 codex:c1 单独成行（它的主会话没被收藏、已被过滤掉），
 	// 所以列表长度比数字多一行——数字数的是收起后的行，而「收藏」是刻意给
 	// 子会话留的出口，不跟着主会话被过滤掉。
 	if rows := svc.List(Filter{Favorites: true}); len(rows) != 2 {
-		t.Fatalf("「收藏」应列出 m2 与单独成行的子会话 c1: %+v", rows)
+		t.Fatalf("“收藏”应列出 m2 与单独成行的子会话 c1: %+v", rows)
 	}
 
 	agents := svc.Agents()

@@ -58,7 +58,7 @@ export function UpdateControl({ id }: { id: string }) {
   let tone: Tone = 'neutral'
   let icon: ReactNode = <InfoFilled />
   let title: ReactNode = '尚未检查更新'
-  let detail = '点击「检查更新」，联网读取 GitHub 上的最新正式发布。'
+  let detail = '点击“检查更新”，联网读取 GitHub 上的最新正式发布。'
   if (stage === 'loading') { title = '正在读取更新状态…'; detail = '' }
   else if (stage === 'checking') { icon = <Spinner size="tiny" />; title = '正在检查更新…'; detail = '正在联网读取 GitHub 上的最新正式发布。' }
   else if (stage === 'downloading') {

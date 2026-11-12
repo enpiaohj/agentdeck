@@ -67,7 +67,7 @@ func resolveDataPaths() (dataPaths, error) {
 		if cfg.DataRoot == "" {
 			return r, ensureErr
 		}
-		r.note = fmt.Sprintf("配置的数据位置 %s 不可用（%v），本次临时使用默认位置；可在「设置 → 数据与诊断」中改回默认位置。", cfg.DataRoot, ensureErr)
+		r.note = fmt.Sprintf("配置的数据位置 %s 不可用（%v），本次临时使用默认位置；可在“设置”>“数据与诊断”中改回默认位置。", cfg.DataRoot, ensureErr)
 		fallback, fallbackErr := appconfig.DefaultPaths()
 		if fallbackErr != nil {
 			return r, fallbackErr

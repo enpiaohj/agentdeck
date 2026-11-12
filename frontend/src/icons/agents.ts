@@ -18,6 +18,8 @@ export const AGENT_LIST: AgentIdentity[] = [
   // Claude、Codex 的官方应用图标是「品牌色底板 + 白色图形」，按同样形态呈现；
   // 图形是 Lobe Icons 的单色 SVG，只着色、不改形。
   { key: 'claude', label: 'Claude Code', color: '#D97757', icon: null, background: '#D97757', mask: '/agents/claude.svg' },
+  // ChatGPT 网页版的官方导出（只读副本）。OpenAI 标志取 Lobe Icons（MIT）的单色 SVG。
+  { key: 'chatgpt', label: 'ChatGPT', color: '#10A37F', icon: '/agents/openai.svg', glyph: true, mono: true },
   { key: 'claude-desktop', label: 'Claude Desktop', color: '#D97757', icon: null, background: '#D97757', mask: '/agents/claude.svg' },
   // 品牌位图不再随包分发：它们提取自各产品的专有安装包，没有再分发授权。
   // 有 Lobe Icons（MIT）SVG 的用 SVG，其余留 null，由 AgentMark 回退到

@@ -24,7 +24,7 @@ export function AboutView() {
     return () => { active = false }
   }, [])
   return <div className="ad-setting-card ad-about-card">
-    <div className="ad-about-brand"><h3>AgentDeck</h3><span>跨 Agent 的历史会话检索与恢复工作台</span></div>
+    <div className="ad-about-brand"><h3>AgentDeck</h3><span>跨 Agent 的历史会话搜索与恢复工作台</span></div>
     <dl className="ad-info-list">
       <div><dt>版本</dt><dd>{version}</dd></div>
       <div><dt>开发者</dt><dd>enpiaohj<span className="ad-info-sub"><Link href={authorURL}>GitHub</Link></span></dd></div>
@@ -35,7 +35,7 @@ export function AboutView() {
     <section className="ad-about-privacy" aria-label="隐私与数据">
       <h4>隐私与数据</h4>
       <p>AgentDeck 不收集遥测、崩溃报告或使用统计，不需要账号。会话正文、索引、标注与偏好全部保存在本机，不会上传。</p>
-      <p>唯一的对外请求是「检查更新」：向 GitHub 发起一次只读请求以读取最新正式发布，只带产品名与版本号，不发送会话、路径或账号信息。可在「更新」设置中关闭启动后的自动检查；下载只在你点击「下载并更新」时发生。</p>
+      <p>唯一的对外请求是“检查更新”：向 GitHub 发起一次只读请求以读取最新正式发布，只带产品名与版本号，不发送会话、路径或账号信息。可在“更新”设置中关闭启动后的自动检查；下载只在你点击“下载并更新”时发生。</p>
     </section>
   </div>
 }

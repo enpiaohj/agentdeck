@@ -113,7 +113,7 @@ func TestLocalTitleAcrossViewsAndExport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(body), "# 本地会话名") || !strings.Contains(string(body), "- **Agent:** claude") {
+	if !strings.Contains(string(body), "# 本地会话名") || !strings.Contains(string(body), `agent: "claude"`) {
 		t.Fatalf("导出标题或 Agent 元数据错误：%s", body)
 	}
 	if err := marks.SetTitle(key, ""); err != nil {

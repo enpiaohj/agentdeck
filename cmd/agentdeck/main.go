@@ -36,7 +36,7 @@ func main() {
 		limit     = flag.Int("limit", 20, "最多列出多少条（0 表示全部）")
 		agent     = flag.String("agent", "", "只看某个 agent，如 claude、claude-desktop、codex")
 		all       = flag.Bool("all", false, "列出全部会话（等同 -limit 0）")
-		query     = flag.String("search", "", "对会话正文全文检索（范围随 -agent/-limit/-all），如 -search \"远程连接\"")
+		query     = flag.String("search", "", "对会话正文全文搜索（范围随 -agent/-limit/-all），如 -search \"远程连接\"")
 		indexPath = flag.String("index", "", "全文索引库路径；缺省用内存索引，会话多时建议落盘")
 	)
 	flag.Parse()
@@ -196,7 +196,7 @@ func runSearch(list []sessions.Session, query, path string) {
 
 	rs, err := ix.Search(context.Background(), query, 20)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "检索失败:", err)
+		fmt.Fprintln(os.Stderr, "搜索失败:", err)
 		os.Exit(1)
 	}
 	total, err := ix.Count(context.Background(), query)
@@ -207,7 +207,7 @@ func runSearch(list []sessions.Session, query, path string) {
 		fmt.Println("没有命中。")
 		return
 	}
-	fmt.Printf("「%s」命中 %d 处，按相关度显示前 %d 条：\n\n", query, total, len(rs))
+	fmt.Printf("“%s”命中 %d 处，按相关度显示前 %d 条：\n\n", query, total, len(rs))
 	for _, r := range rs {
 		title := ""
 		if i := strings.LastIndex(r.Key, "#"); i >= 0 {

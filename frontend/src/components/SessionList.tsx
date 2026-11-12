@@ -460,7 +460,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
         <span className={styles.headTitle} title={filter.project || listTitle}>{listTitle}</span>
         <span className={styles.count} aria-live="polite" title="子会话收在主会话下，不重复计入会话数量">{query || month || account ? `${hierarchy.roots.length} / ${allFamilies.roots.length}` : allFamilies.roots.length} 个会话{hierarchy.childKeys.size ? ` · ${hierarchy.childKeys.size} 个子会话` : ''}</span>
         {/* 全选与清空是同一个位置的一个图标：没有选中项时是全选，选中后是清空。
-            此前两个动作分在两端——头部是全选，底部批量条里才有「清空」，而且
+            此前两个动作分在两端——头部是全选，底部批量条里才有“清空”，而且
             只在多选时才出现，单选一项时反而没有清空的入口。 */}
         <Tooltip content={checked.size ? '清空选择 (Esc)' : '全选筛选后当前展开的会话（含已展开子会话）(Ctrl+A)'} relationship="label">
           <Button size="small" appearance="subtle"
@@ -531,7 +531,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
           {query || month || account ? <Button size="small" onClick={() => { setQuery(''); setMonth(''); setAccount('') }}>清除筛选</Button> : null}
           {!(query || month || account) && !filter.archived && !filter.favorites && onNewSession ? <>
             <Button size="small" appearance="primary" onClick={onNewSession}>新建会话</Button>
-            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>已有会话却没出现？到「设置 → 数据来源」检查智能体是否被检测到。</Text>
+            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>已有会话却没出现？到“设置”&gt;“数据来源”检查智能体是否被检测到。</Text>
           </> : null}
         </div>
       ) : (

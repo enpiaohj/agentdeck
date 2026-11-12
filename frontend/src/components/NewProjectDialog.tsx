@@ -143,7 +143,7 @@ export function NewProjectDialog({ open, current, initialAgent, availability, on
         <AgentSelect value={agent} onChange={setAgent} disabled={busy} availability={availability} />
       </Field>
       <Checkbox label="同时设为应用默认智能体" checked={makeDefault} disabled={busy} onChange={(_, data) => setMakeDefault(data.checked === true)} />
-      <p className="ad-form-note">项目列表中将显示为「{shownName}」。使用前请先安装所选智能体的命令行工具并完成登录。</p>
+      <p className="ad-form-note">项目列表中将显示为“{shownName}”。使用前请先安装所选智能体的命令行工具并完成登录。</p>
       {missing ? <MessageBar intent="warning">未在本机 PATH 中找到 {missing}。仍可创建项目，但需先安装 {platformLabel(agent)} 的命令行工具才能启动会话。</MessageBar> : null}
     </div>
   </FormDialog>

@@ -197,7 +197,7 @@ func (s *SettingsService) SetResumeMaximized(value bool) (TerminalShellView, err
 func (s *SettingsService) SetResumeOpenMode(value string) (TerminalShellView, error) {
 	mode := appconfig.NormalizeOpenMode(value)
 	if mode == appconfig.TerminalTab && !tabSupported() {
-		return s.TerminalShell(), errors.New("未检测到 Windows Terminal（wt.exe），无法在已有终端窗口中打开新标签；可改用「新窗口」")
+		return s.TerminalShell(), errors.New("未检测到 Windows Terminal（wt.exe），无法在已有终端窗口中打开新标签；可改用“新窗口”")
 	}
 	return s.saveResume(func(cfg *appconfig.Config) { cfg.ResumeOpenMode = mode })
 }

@@ -18,8 +18,11 @@ import (
 	"time"
 )
 
-const backupLimit int64 = 4 << 30
-const backupFileLimit = 20000
+// 备份的上限。导入 ChatGPT 的图片后，会话库加导入库很容易超过原先的 4 GiB
+// （本机永久库已近 2.5 GB），所以放宽到 16 GiB；文件数同样放宽，一份带图片的
+// 导出就有数千个文件。上限仍在，是为了让损坏或恶意的备份包撑不爆磁盘与内存。
+const backupLimit int64 = 16 << 30
+const backupFileLimit = 100000
 
 type BackupInfo struct {
 	CreatedAt   string `json:"created_at"`
@@ -90,7 +93,7 @@ func copyBackupFile(dest io.Writer, source string, limit int64) (int64, string, 
 	h := sha256.New()
 	n, err := io.Copy(io.MultiWriter(dest, h), io.LimitReader(f, limit+1))
 	if err == nil && n > limit {
-		err = fmt.Errorf("备份总大小超过 4 GiB")
+		err = fmt.Errorf("备份总大小超过 %d GiB 的上限", backupLimit>>30)
 	}
 	return n, hex.EncodeToString(h.Sum(nil)), err
 }
@@ -224,11 +227,11 @@ func (s *SessionService) backupData(destDir, preferences string) (result string,
 		}
 	}()
 	zw := zip.NewWriter(out)
-	manifest := backupManifest{FormatVersion: 1, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Scope: "AgentDeck 自有永久历史（含全部版本）、标注、Claude 导入库、偏好；不含原生 Agent 目录、凭据及可重建全文索引。"}
+	manifest := backupManifest{FormatVersion: 1, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Scope: "AgentDeck 自有永久历史（含全部版本）、标注、Claude 与 ChatGPT 导入库（含已导入的图片）、偏好；不含原生 Agent 目录、凭据及可重建全文索引。"}
 	var total int64
 	for name, p := range content {
 		if len(manifest.Files) >= backupFileLimit {
-			return "", fmt.Errorf("备份文件数量超限")
+			return "", fmt.Errorf("备份中的文件数量超过 %d 个的上限", backupFileLimit)
 		}
 		w, e := zw.Create(name)
 		if e != nil {
@@ -443,7 +446,8 @@ func (s *SessionService) RestoreData(src, currentPreferences string) (report Res
 		}
 		old, e := hashBackupFile(dest)
 		if e == nil {
-			if digest != old {
+			// projects.json 是 ChatGPT 项目名，可由用户改，已有的优先，不算冲突
+			if digest != old && filepath.Base(rel) != "projects.json" {
 				return fmt.Errorf("导入库存在冲突，未覆盖：%s", rel)
 			}
 			return nil

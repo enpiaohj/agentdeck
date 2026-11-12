@@ -290,7 +290,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
     try {
       await projectService.Rename(project.path, name)
       onRefresh(); setAction(null)
-      notify(`项目显示名称已改为「${name.trim()}」，会话列表同步生效。`, {
+      notify(`项目显示名称已改为“${name.trim()}”，会话列表同步生效。`, {
         tone: 'success',
         action: { label: '撤销', run: () => void undoRename(project, project.name) },
       })
@@ -302,7 +302,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
     try {
       await projectService.Rename(project.path, name)
       onRefresh()
-      notify(`已恢复为「${name}」。`, { tone: 'success' })
+      notify(`已恢复为“${name}”。`, { tone: 'success' })
     } catch (reason) { notify(`撤销失败：${String(reason)}`, { tone: 'error' }) }
   }
   const removeProject = async (project: Project) => {
@@ -312,7 +312,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
       await projectService.Remove(project.path)
       if (filter.project === project.path) onFilter({ ...filter, project: undefined })
       onRefresh(); setAction(null)
-      notify(`已从项目列表移除「${project.name}」，目录、文件与会话均已保留。`, { tone: 'success' })
+      notify(`已从项目列表移除“${project.name}”，目录、文件与会话均已保留。`, { tone: 'success' })
     } catch (reason) { setActionError(String(reason)) }
     finally { pending.current = false; setBusy(false) }
   }
@@ -323,7 +323,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
 
   const renameError = (() => {
     const value = renameDraft.trim()
-    if (!value) return '显示名称不能为空；可用「使用目录名」恢复为目录名称。'
+    if (!value) return '显示名称不能为空；可用“使用目录名”恢复为目录名称。'
     if (value.length > 200) return '显示名称不能超过 200 个字符。'
     if (/[\u0000-\u001f\u007f]/.test(renameDraft)) return '显示名称不能包含换行等控制字符。'
     return ''
@@ -361,7 +361,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
       onSubmit={() => { if (renamed && !renameError) void saveRename(renamed, renameDraft) }}
       onClose={closeAction}
     >
-      <Field label="项目显示名称" required validationMessage={renameError || `当前为「${renamed?.name ?? ''}」。`} validationState={renameError ? 'error' : 'none'}>
+      <Field label="项目显示名称" required validationMessage={renameError || `当前为“${renamed?.name ?? ''}”。`} validationState={renameError ? 'error' : 'none'}>
         <div className="ad-form-row">
           <Input autoFocus aria-label="项目显示名称" value={renameDraft} disabled={busy} onChange={(_, data) => setRenameDraft(data.value)} style={{ flex: 1, minWidth: 0 }} />
           <Button disabled={busy} onClick={() => setRenameDraft(folderName(renamed?.path ?? ''))}>使用目录名</Button>
@@ -372,7 +372,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
     <FormDialog
       open={!!removed}
       title="从项目列表移除"
-      intro={<p className="ad-form-note">移除「{removed?.name}」在 AgentDeck 中的项目设置，包括显示名称和默认智能体。目录、文件和会话均会保留{removed?.declared ? '' : '；该目录已有会话，移除后仍会显示在列表中'}。此操作不会删除任何数据。</p>}
+      intro={<p className="ad-form-note">移除“{removed?.name}”在 AgentDeck 中的项目设置，包括显示名称和默认智能体。目录、文件和会话均会保留{removed?.declared ? '' : '；该目录已有会话，移除后仍会显示在列表中'}。此操作不会删除任何数据。</p>}
       submitLabel="从项目列表移除" busyLabel="移除中…" busy={busy} error={actionError}
       submitAppearance="destructive"
       onSubmit={() => { if (removed) void removeProject(removed) }}
@@ -535,7 +535,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
       {projectsOpen ? <div id="sidebar-projects" className={styles.projectList} role="group" aria-labelledby="sidebar-projects-heading">
         {shownProjects.map((p) => {
           const active = filter.project === p.path
-          const detail = `${p.name}\n${p.path}\n${p.count} 个会话 · ${p.favorites} 个收藏${p.archived ? ` · ${p.archived} 个归档（在「归档」中查看）` : ''}${p.agent ? `\n默认智能体：${platformLabel(p.agent)}` : ''}\nCtrl+单击：与当前筛选叠加\n右键：新建会话 / 修改设置`
+          const detail = `${p.name}\n${p.path}\n${p.count} 个会话 · ${p.favorites} 个收藏${p.archived ? ` · ${p.archived} 个归档（在“归档”中查看）` : ''}${p.agent ? `\n默认智能体：${platformLabel(p.agent)}` : ''}\nCtrl+单击：与当前筛选叠加\n右键：新建会话 / 修改设置`
           return (
             <div key={p.path} className="ad-project-row">
               <button
@@ -554,8 +554,8 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
               </button>
               <button
                 className="ad-project-add"
-                title={`在「${p.name}」新建会话`}
-                aria-label={`在「${p.name}」新建会话`}
+                title={`在“${p.name}”新建会话`}
+                aria-label={`在“${p.name}”新建会话`}
                 onClick={() => onNewSession(p.path, p.agent || undefined)}
               >
                 <AddRegular fontSize={14} />
@@ -564,7 +564,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
           )
         })}
         {projects.length === 0 ? <EmptyState icon={<FolderRegular fontSize={22} />} title="暂无项目" compact>
-          点「＋」新建项目并指定默认智能体；已有会话的目录会自动出现在这里。
+          点“＋”新建项目并指定默认智能体；已有会话的目录会自动出现在这里。
         </EmptyState> : null}
       </div> : null}
       {projectsOpen && projects.length > PROJECT_PREVIEW + 2 ? (

@@ -31,7 +31,9 @@ var ErrNoTranscript = errors.New("this agent's conversations can't be shown")
 // transcript.
 func HasTranscript(agent string) bool {
 	switch agent {
-	case "claude", "claude-desktop", "qoder", "qoder-cn", "codex", "pi", "omp",
+	// AgentDeck: "chatgpt" is an imported ChatGPT export stored as Claude-shaped
+	// lines (internal/chatgpthistory), read by the same default branch.
+	case "claude", "claude-desktop", "chatgpt", "qoder", "qoder-cn", "codex", "pi", "omp",
 		"cursor", "opencode", "zcode", "workbuddy", "workbuddy-ai", "hermes", "kimi", "dsh":
 		return true
 	}

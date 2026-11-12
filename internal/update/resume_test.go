@@ -291,7 +291,7 @@ func TestCheckFlagsNewerReleaseWithoutAsset(t *testing.T) {
 		t.Fatalf("Check: %v", err)
 	}
 	if result.Available || !result.AssetMissing || result.Latest != "1.1.0" {
-		t.Fatalf("应为「更新但暂无可下载文件」：%+v", result)
+		t.Fatalf("应为“更新但暂无可下载文件”：%+v", result)
 	}
 	same, err := Client{APIURL: server.URL}.Check(context.Background(), "1.1.0")
 	if err != nil || same.AssetMissing || same.Available {

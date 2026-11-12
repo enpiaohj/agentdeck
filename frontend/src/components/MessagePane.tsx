@@ -258,7 +258,7 @@ export function MessagePane({ session, sourceVersion, jumpPart, jumpMatch, jumpO
         <div className={styles.empty}>
           <span className={styles.emptyIcon}><CommentMultipleRegular fontSize={26} /></span>
           <Text size={400} weight="semibold" style={{ display: 'block', marginTop: 10 }}>选择一个会话查看消息</Text>
-          <Text size={200} style={{ display: 'block', marginTop: 6 }}>左侧会话列表按时间分组；Ctrl+K 可全文检索消息内容</Text>
+          <Text size={200} style={{ display: 'block', marginTop: 6 }}>左侧会话列表按时间分组；Ctrl+K 可全文搜索消息内容</Text>
         </div>
       </div>
     )
@@ -569,7 +569,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpT
           <Tooltip content="下一问" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronRightRegular />} aria-label="跳到下一问" disabled={loading||promptAt>=prompts.length-1} onClick={()=>jumpToPrompt(prompts[promptAt+1].index)} /></Tooltip>
         </> : <>
           <Tooltip content="更早的内容" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronLeftRegular />} aria-label="阅读更早内容" disabled={loading||!tr?.has_before} onClick={()=>navigate(tr?.start??0,true)} /></Tooltip>
-          <span role="status" className="ad-reader-range" title="「段」是会话正文的一个片段：消息、思考、工具调用与结果各算一段">{loading?`正在载入…${tr?.total?`（${tr.total} 段）`:''}`:tr?.total?`第 ${tr.start+1}–${tr.start+tr.parts.length} 段，共 ${tr.total} 段`:'暂无正文'}</span>
+          <span role="status" className="ad-reader-range" title="“段”是会话正文的一个片段：消息、思考、工具调用与结果各算一段">{loading?`正在载入…${tr?.total?`（${tr.total} 段）`:''}`:tr?.total?`第 ${tr.start+1}–${tr.start+tr.parts.length} 段，共 ${tr.total} 段`:'暂无正文'}</span>
           <Tooltip content="较新的内容" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronRightRegular />} aria-label="阅读较新内容" disabled={loading||!tr?.has_after} onClick={()=>navigate((tr?.start??0)+(tr?.parts.length??0))} /></Tooltip>
         </>}
         <Tooltip content={findOpen ? '收起查找 (Esc)' : '查找当前会话 (Ctrl+F)'} relationship="label"><Button size="small" appearance={findOpen ? 'secondary' : 'subtle'} icon={<SearchRegular />} aria-label="查找当前会话" aria-pressed={findOpen} onClick={findOpen ? closeFind : openFind} /></Tooltip>
@@ -629,10 +629,13 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpT
             const setHitRef = (el: HTMLElement | null) => { if (hit) hitRef.current = el; if(i===latestIndex)latestRef.current=el }
             const isUser = p.role === 'user'
             const folded = foldedContent(p)
+            // 图片与同一说话人相邻的段落属于同一条消息：不再另起头像与署名行
+            const prev = i > 0 ? tr.parts[i - 1] : undefined
+            const cont = !folded && !!prev && prev.role === p.role && (p.kind === 'image' || prev.kind === 'image')
             const time = (p as { at?: string }).at
             return (
-              <div key={partIndex} data-part-index={partIndex} data-text-offset={p.omitted_before} ref={setHitRef} className={mergeClasses('ad-message', folded ? styles.processMsg : styles.msg, hit && styles.hit)}>
-                  {!folded ? <div className={styles.avatarCol}>
+              <div key={partIndex} data-part-index={partIndex} data-text-offset={p.omitted_before} ref={setHitRef} className={mergeClasses('ad-message', cont && 'ad-message-cont', folded ? styles.processMsg : styles.msg, hit && styles.hit)}>
+                  {!folded ? <div className={styles.avatarCol} style={cont ? { visibility: 'hidden' } : undefined}>
                     {isUser ? (
                       <span className={styles.userAvatar}><PersonRegular fontSize={15} /></span>
                     ) : p.role === 'tool' ? (
@@ -642,7 +645,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpT
                     )}
                   </div> : null}
                   <div className={mergeClasses(styles.msgBody, !folded && isUser && styles.userMessage)}>
-                    {!folded ? <div className={styles.msgHead}>
+                    {!folded && !cont ? <div className={styles.msgHead}>
                       <span className={styles.roleName}>{isUser ? '你' : p.role === 'tool' ? '工具' : p.kind === 'card' ? '飞书卡片' : m.label}</span>
                       {time ? <span className={styles.msgTime}>{fmtTime(time)}</span> : null}
                       {p.model && !isUser ? <span className={styles.msgTime}>{p.model}</span> : null}
@@ -692,7 +695,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpT
               onClick={() => void runAction(async () => { await resumeWithLocation(session.key, 'copy') })}>复制恢复命令</Button>
           </>
         ) : (
-          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>此记录支持阅读、检索与导出</Text>
+          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>此记录支持阅读、搜索与导出</Text>
         )}
         <Button size="small" appearance="subtle" icon={<ArrowDownloadRegular />} onClick={exportMd} disabled={!session.transcript}>导出 Markdown</Button>
       </div>
@@ -750,7 +753,11 @@ function MarkdownLink({ href, children }: ComponentProps<'a'>) {
   if (!href || !/^https?:\/\//i.test(href)) return <span>{children}</span>
   return <a href={href} title={href} onClick={event => { event.preventDefault(); context?.openLink(href) }}>{children}</a>
 }
+// 已导入的 ChatGPT 图片：只认 /_chatgpt/<账号>/<内容哈希>.<扩展名> 这一种本地地址，
+// 由桌面端的资源中间件提供；其余图片（尤其是远程地址）一律不加载，只显示占位。
+const localImage = /^\/_chatgpt\/[0-9a-f]{64}\/[0-9a-f]{64}\.(png|jpg|gif|webp)$/
 function MarkdownImage({ src, alt }: ComponentProps<'img'>) {
+  if (typeof src === 'string' && localImage.test(src)) return <img className="ad-md-local-image" src={src} alt={alt || '图片'} loading="lazy" decoding="async" />
   return <span className="ad-md-image">图片：{alt || '附件'}{typeof src === 'string' && /^https?:\/\//i.test(src) ? <> · <MarkdownLink href={src}>查看图片</MarkdownLink></> : null}</span>
 }
 const markdownComponents: Components = {

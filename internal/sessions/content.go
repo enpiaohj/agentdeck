@@ -124,7 +124,17 @@ type ccBlock struct {
 	Name     string          `json:"name"`
 	Input    json.RawMessage `json:"input"`
 	Content  json.RawMessage `json:"content"`
+	// AgentDeck: an image block of an imported ChatGPT export carries the
+	// address the reader shows it from (internal/chatgpthistory).
+	Source struct {
+		URL  string `json:"url"`
+		Name string `json:"name"`
+	} `json:"source"`
 }
+
+// LocalImagePrefix starts the address of an image AgentDeck stored itself; the
+// desktop shell serves them from the import store (chatgpthistory.AssetPrefix).
+const LocalImagePrefix = "/_chatgpt/"
 
 // claudeContent reads the lines from where the call was asked to where it ended:
 // the user lines — a prompt, a tool's result — are what it was given, and the
@@ -208,7 +218,15 @@ func claudeParts(raw json.RawMessage, role string) []Part {
 		case "tool_result":
 			parts = append(parts, Part{Role: "tool", Kind: "tool_result", Text: resultText(b.Content)})
 		case "image":
-			parts = append(parts, Part{Role: role, Kind: "image", Text: "[image]"})
+			text := "[image]"
+			if strings.HasPrefix(b.Source.URL, LocalImagePrefix) {
+				alt := strings.NewReplacer("[", " ", "]", " ", "\n", " ").Replace(b.Source.Name)
+				if strings.TrimSpace(alt) == "" {
+					alt = "图片"
+				}
+				text = "![" + strings.TrimSpace(alt) + "](" + b.Source.URL + ")"
+			}
+			parts = append(parts, Part{Role: role, Kind: "image", Text: text})
 		}
 	}
 	return parts

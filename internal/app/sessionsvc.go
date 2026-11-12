@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/enpiaohj/agentdeck/internal/chatgpthistory"
 	"github.com/enpiaohj/agentdeck/internal/claudehistory"
 	"github.com/enpiaohj/agentdeck/internal/marks"
 	"github.com/enpiaohj/agentdeck/internal/projects"
@@ -48,6 +50,51 @@ func (s *SessionService) ImportClaudeHistory(path, account string) (ClaudeImport
 		return ClaudeImportReport{}, fmt.Errorf("文件已保存，但读取导入库失败: %s", loadError)
 	}
 	return ClaudeImportReport{Conversations: report.Conversations, Account: report.Account, AlreadyImported: report.AlreadyImported, SkippedBlocks: report.SkippedBlocks}, nil
+}
+
+// PreviewChatGPT 读一遍 ChatGPT 官方导出（ZIP 或 conversations JSON），告诉前端
+// 有多少会话、有哪些项目，什么都不写。account 用来回显该账号已起好的项目名。
+func (s *SessionService) PreviewChatGPT(path, account string) (ChatGPTPreview, error) {
+	res, err := chatgpthistory.Preview(s.a.chatgptDir(), path, account)
+	if err != nil {
+		return ChatGPTPreview{}, err
+	}
+	out := ChatGPTPreview{Conversations: res.Conversations, Images: res.Images, ImageBytes: res.ImageBytes, Projects: make([]ChatGPTProject, 0, len(res.Projects))}
+	for _, p := range res.Projects {
+		out.Projects = append(out.Projects, ChatGPTProject{ID: p.ID, Name: p.Name, Default: p.Default, Conversations: p.Conversations, Samples: append([]string{}, p.Samples...)})
+	}
+	return out, nil
+}
+
+// ImportChatGPT 把 ChatGPT 官方导出复制进 AgentDeck 自己的存储。names 是
+// 项目 id → 用户起的名字；images 为真时把会话里的图片一并拷进来。导出文件与
+// 账号凭据都不会被写入或读取。
+func (s *SessionService) ImportChatGPT(path, account string, names map[string]string, images bool) (ChatGPTImportReport, error) {
+	s.a.dataMu.Lock()
+	defer s.a.dataMu.Unlock()
+	report, err := chatgpthistory.Import(s.a.chatgptDir(), path, account, chatgpthistory.Options{Names: names, Images: images, FreeSpace: diskFree})
+	if err != nil {
+		return ChatGPTImportReport{}, err
+	}
+	s.Refresh()
+	s.a.mu.Lock()
+	loadError := s.a.chatgptError
+	s.a.mu.Unlock()
+	if loadError != "" {
+		return ChatGPTImportReport{}, fmt.Errorf("文件已保存，但读取 ChatGPT 导入库失败: %s", loadError)
+	}
+	return ChatGPTImportReport{Conversations: report.Conversations, Projects: report.Projects, Account: report.Account, AlreadyImported: report.AlreadyImported, SkippedBlocks: report.SkippedBlocks, Images: report.Images}, nil
+}
+
+// SetChatGPTProjectNames 给已导入账号的项目改名，不需要重新导入。
+func (s *SessionService) SetChatGPTProjectNames(account string, names map[string]string) error {
+	s.a.dataMu.Lock()
+	defer s.a.dataMu.Unlock()
+	if err := chatgpthistory.SetProjectNames(s.a.chatgptDir(), account, names); err != nil {
+		return err
+	}
+	s.Refresh()
+	return nil
 }
 
 // Refresh rereads sources without touching transcripts or user marks.
@@ -347,21 +394,17 @@ func (s *SessionService) ExportMarkdown(key, destDir string) (string, error) {
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 		return "", fmt.Errorf("导出目录不存在: %s", dir)
 	}
-	name := fmt.Sprintf("%s-%s-%s.md", time.Now().Format("20060102-150405"), sess.Agent, safeFile(sess.ID))
 	tr, _, _, err := s.a.readConversation(sess)
 	if err != nil {
 		return "", err
 	}
-	f, err := os.Create(filepath.Join(dir, name))
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	sess.Title = displayTitle(sess, ms[sessionMarkKey(sess, key, ms)])
-	if err := sessions.WriteRetainedMarkdown(f, sess, sess.Agent, tr); err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, name), nil
+	tr.Parts = s.a.exportImages(tr.Parts, dir)
+	mark := ms[sessionMarkKey(sess, key, ms)]
+	sess.Title = displayTitle(sess, mark)
+	info := sessions.ExportInfo{Tags: mark.Tags, Note: mark.Note, Favorite: mark.Favorite, ExportedAt: time.Now()}
+	return writeExportFile(dir, exportFileName(sess, sess.Title), sess.ID, func(w io.Writer) error {
+		return sessions.WriteExportMarkdown(w, sess, sess.Agent, tr, info)
+	})
 }
 
 // ---- 内部 ----

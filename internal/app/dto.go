@@ -44,6 +44,33 @@ type ClaudeImportReport struct {
 	SkippedBlocks   int    `json:"skipped_blocks"`
 }
 
+// ChatGPTProject 是 ChatGPT 导出里发现的一个项目（Projects）。导出不含项目名，
+// 只有 g-p- 开头的 id，所以由用户起名；Samples 是该项目最近几个会话的标题，
+// 帮用户认出它是哪一个。
+type ChatGPTProject struct {
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	Default       string   `json:"default"`
+	Conversations int      `json:"conversations"`
+	Samples       []string `json:"samples"`
+}
+
+type ChatGPTPreview struct {
+	Conversations int              `json:"conversations"`
+	Projects      []ChatGPTProject `json:"projects"`
+	Images        int              `json:"images"`      // 会话里用到、导出里带了的图片数
+	ImageBytes    int64            `json:"image_bytes"` // 全部拷进来要占多少字节
+}
+
+type ChatGPTImportReport struct {
+	Conversations   int    `json:"conversations"`
+	Projects        int    `json:"projects"`
+	Account         string `json:"account"`
+	AlreadyImported bool   `json:"already_imported"`
+	SkippedBlocks   int    `json:"skipped_blocks"`
+	Images          int    `json:"images"`
+}
+
 // TranscriptView 是会话详情：全文按序。Cut 说明会话层按上限截断了。
 type TranscriptView struct {
 	Start          int              `json:"start"`

@@ -59,12 +59,12 @@ export function ClaudeHistoryImport({ onImported }: { onImported: (report: Claud
       <header>
         <div className={styles.eyebrow}>数据来源 / Claude Desktop</div>
         <h1 className={styles.title}>导入 Claude 聊天记录</h1>
-        <p className={styles.description}>Claude 的普通聊天及新版聊天任务不一定保存在 Code / Cowork 本地目录。通过官方数据导出，可将会话导入本机并按账号检索。</p>
+        <p className={styles.description}>Claude 的普通聊天及新版聊天任务不一定保存在 Code / Cowork 本地目录。通过官方数据导出，可将会话导入本机并按账号搜索。</p>
       </header>
       <div className={styles.card}>
         <div className={styles.field}>
           <Text weight="semibold">1. 从对应账号导出记录</Text>
-          <div className={styles.description}>在 Claude 桌面端或网页版进入「设置 → 隐私 → 导出数据」，下载邮件中的导出文件。不同账号分别导出。</div>
+          <div className={styles.description}>在 Claude 桌面端或网页版进入“设置”&gt;“隐私”&gt;“导出数据”，下载邮件中的导出文件。不同账号分别导出。</div>
           <Button appearance="subtle" icon={<OpenRegular />} style={{ alignSelf: 'flex-start' }} onClick={() => Browser.OpenURL(exportHelp).catch(reason => setError(String(reason)))}>查看官方导出说明</Button>
         </div>
         <div className={styles.field}>
@@ -83,11 +83,11 @@ export function ClaudeHistoryImport({ onImported }: { onImported: (report: Claud
         {error ? <div role="alert" style={{ color: tokens.colorPaletteRedForeground1, fontSize: 13, overflowWrap: 'anywhere' }}>{error}</div> : null}
         {message ? <div role="status" className={styles.description}>{message}</div> : null}
         <div className={styles.footer}>
-          <span className={styles.note}>导入后可预览、全文检索、收藏和导出 Markdown。</span>
+          <span className={styles.note}>导入后可预览、全文搜索、收藏和导出 Markdown。</span>
           <Button appearance="primary" icon={busy ? <Spinner size="extra-tiny" /> : <ArrowUploadRegular />} disabled={busy || !file || !account.trim()} onClick={() => void run()}>{busy ? '正在导入…' : '导入聊天记录'}</Button>
         </div>
       </div>
-      <p className={styles.note}>导入副本保存在本机，不会自动同步云端。当前读取导出中的文本和思考内容；附件文件本体、图片及部分工具内容不在导入范围内。导入记录可查看和检索，不能用 CLI 恢复命令继续。</p>
+      <p className={styles.note}>导入副本保存在本机，不会自动同步云端。当前读取导出中的文本和思考内容；附件文件本体、图片及部分工具内容不在导入范围内。导入记录可查看和搜索，不能用 CLI 恢复命令继续。</p>
     </div>
   </section>
 }

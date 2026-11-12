@@ -116,7 +116,7 @@ export function SearchResults({ query: q, revision, selectedKey, onFocusSearch, 
           <SearchRegular style={{ color: tokens.colorBrandForeground1 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <Text size={300} weight="semibold" block>搜索结果</Text>
-            <Text size={200} block style={{ color: tokens.colorNeutralForeground3, marginTop: 4, overflowWrap: 'anywhere' }}>「{q}」</Text>
+            <Text size={200} block style={{ color: tokens.colorNeutralForeground3, marginTop: 4, overflowWrap: 'anywhere' }}>“{q}”</Text>
           </div>
           {loading ? <Spinner size="extra-tiny" /> : null}
         </div>
@@ -125,11 +125,11 @@ export function SearchResults({ query: q, revision, selectedKey, onFocusSearch, 
             {reply.mode === 'scan' ? (
               <div className={styles.banner}>全文索引尚未就绪，当前使用逐会话扫描，仅显示部分结果。</div>
             ) : (
-              <div className={mergeClasses(styles.banner, styles.bannerOk)}>全文检索 · {reply.total} 处命中 · 显示 {reply.hits.length} 条</div>
+              <div className={mergeClasses(styles.banner, styles.bannerOk)}>全文搜索 · {reply.total} 处命中 · 显示 {reply.hits.length} 条</div>
             )}
             <div className={styles.results}>
               {reply.hits.length === 0 ? (
-                <div className={styles.empty}>未找到与「{q}」相关的会话内容</div>
+                <div className={styles.empty}>未找到与“{q}”相关的会话内容</div>
               ) : (
                 reply.hits.map((h, i) => (
                   <button title={h.title || '未命名会话'} key={h.part + i} ref={element => { resultRefs.current[i] = element }} className={mergeClasses(styles.hit, selectedKey === h.key && styles.active)} aria-current={selectedKey === h.key ? 'true' : undefined} onClick={() => onJump(h.key, partIndexOf(h.part), h.match, h.start)}
@@ -154,7 +154,7 @@ export function SearchResults({ query: q, revision, selectedKey, onFocusSearch, 
             </div>
           </>
         ) : (
-          <div className={styles.empty}>{loading ? '正在搜索会话正文…' : q.trim() ? '正在准备搜索…' : '输入关键词以检索历史会话正文。'}</div>
+          <div className={styles.empty}>{loading ? '正在搜索会话正文…' : q.trim() ? '正在准备搜索…' : '输入关键词以搜索历史会话正文。'}</div>
         )}
         <div className={mergeClasses(styles.banner, styles.bannerOk)}>选择结果预览会话 · Esc 返回会话列表</div>
     </section>

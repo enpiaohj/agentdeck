@@ -177,7 +177,7 @@ export function DataLocation() {
       <p>迁移过程中请勿关闭应用。旧位置的数据一律保留，确认无误后再清理。</p>
     </> : <Spinner size="tiny" />}
     {/* 迁移进度只画在弹窗里：迁移期间弹窗是模态且不许关闭，设置区被遮在后面，
-        画在这里等于没人看得见——这正是「没有进度」的由来之一。 */}
+        画在这里等于没人看得见——这正是“没有进度”的由来之一。 */}
     {message ? <Text block role="status" className="ad-storage-message">{message}</Text> : null}
     {error ? <Text block role="alert" className="ad-storage-error">{error}</Text> : null}
     {view && (view.prev_dirs?.length ?? 0) > 0 ? <section className="ad-storage-old">

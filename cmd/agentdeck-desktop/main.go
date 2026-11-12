@@ -160,6 +160,8 @@ func main() {
 		},
 		Assets: application.AssetOptions{
 			Handler: application.BundledAssetFileServer(assets),
+			// 已导入的 ChatGPT 图片：只服务存储目录里按内容哈希命名的文件
+			Middleware: application.Middleware(a.ChatGPTAssets()),
 		},
 		Services: []application.Service{
 			application.NewService(a.NewSessionService()),

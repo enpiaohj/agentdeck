@@ -266,6 +266,9 @@ button:focus-visible, select:focus-visible, [role='button']:focus-visible, [role
 .ad-md-table th, .ad-md-table td { padding: 7px 10px; border-bottom: 1px solid var(--ad-line); text-align: left; min-width: 90px; }
 .ad-md-table th { background: var(--ad-soft); font-weight: 600; }
 .ad-md-table tr:last-child td { border-bottom: 0; }
+/* 紧接在同一说话人上一段后的图片段：上一段不再收尾（去掉分隔线与下边距），两段看起来是一条消息 */
+.ad-message:has(+ .ad-message-cont) { border-bottom: 0 !important; margin-bottom: 8px !important; padding-bottom: 0 !important; }
+.ad-md-local-image { display: block; max-width: 100%; max-height: 560px; height: auto; margin: 8px 0; border: 1px solid var(--ad-line); border-radius: 6px; background: var(--ad-surface, transparent); }
 .ad-md-image { display: inline-block; padding: 5px 9px; border: 1px solid var(--ad-line); border-radius: 4px; color: var(--ad-muted); font-size: 12px; }
 
 .ad-reader-nav { flex-shrink: 0; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 3px; min-height: 38px; padding: 4px 14px; border-bottom: 1px solid var(--ad-line); background: var(--ad-surface); }

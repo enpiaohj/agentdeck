@@ -21,6 +21,9 @@ export {
 export {
     AgentView,
     BackupInfo,
+    ChatGPTImportReport,
+    ChatGPTPreview,
+    ChatGPTProject,
     ClaudeImportReport,
     CleanupPlan,
     CleanupReport,
