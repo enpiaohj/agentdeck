@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/enpiaohj/agentdeck/internal/chatgpthistory"
 	"github.com/enpiaohj/agentdeck/internal/history"
 	"github.com/enpiaohj/agentdeck/internal/marks"
 	"github.com/enpiaohj/agentdeck/internal/sessions"
@@ -46,6 +47,36 @@ type deletionRecord struct {
 	State   string   `json:"state"`
 	Keys    []string `json:"keys"`
 	Owned   []string `json:"owned_keys"`
+}
+
+// allImported 报告这次删除的全是导入的 ChatGPT 会话（那样「原始记录」指的是 AgentDeck 自己的副本）。
+func (job *deleteJob) allImported() bool {
+	if len(job.sessions) == 0 {
+		return false
+	}
+	for _, sess := range job.sessions {
+		if !(sess.Agent == chatgpthistory.Agent && sess.Imported) {
+			return false
+		}
+	}
+	return true
+}
+
+// errImportDeleteOff 是设置里没开启「删除导入的聊天记录」时的拒绝原因。
+var errImportDeleteOff = errors.New("删除导入的聊天记录的功能没有开启。需要时请在“设置”>“会话”里开启")
+
+// prepareDelete 为一个会话取删除计划。导入的 ChatGPT 会话只有在设置里开启后才删，
+// 并把它在每个批次里的全部副本一并纳入；其余来源走原有的原生删除规则。
+// 预览与执行两次都经过这里，所以设置在两步之间被关掉时，执行同样会被拒绝。
+func (a *App) prepareDelete(sess sessions.Session) (*sessions.NativeDeletePlan, error) {
+	if sess.Agent == chatgpthistory.Agent && sess.Imported {
+		if !a.importDeleteEnabled() {
+			return nil, errImportDeleteOff
+		}
+		root := a.chatgptDir()
+		return sessions.PrepareOwnedDelete(sess, func() ([]string, error) { return chatgpthistory.TranscriptFiles(root, sess.ID) })
+	}
+	return sessions.PrepareNativeDelete(sess)
 }
 
 func deleteToken() string {
@@ -159,7 +190,7 @@ func (s *SessionService) PreviewDeleteSessions(keys []string, includeChildren bo
 		if !chosen[key] {
 			continue
 		}
-		plan, err := sessions.PrepareNativeDelete(sess)
+		plan, err := a.prepareDelete(sess)
 		if err != nil {
 			return DeletePreview{}, fmt.Errorf("%s：%w", displayTitle(sess, ms[sessionMarkKey(sess, key, ms)]), err)
 		}
@@ -265,7 +296,7 @@ func (s *SessionService) deleteSessions(token string, keepBackup bool) (DeleteRe
 		return DeleteReport{}, errors.New("程序正在关闭")
 	}
 	for i, sess := range job.sessions {
-		fresh, err := sessions.PrepareNativeDelete(sess)
+		fresh, err := a.prepareDelete(sess)
 		if err != nil {
 			return DeleteReport{}, fmt.Errorf("原始记录范围已变化，请重新预览：%w", err)
 		}
@@ -367,7 +398,11 @@ func (s *SessionService) deleteSessions(token string, keepBackup bool) (DeleteRe
 	a.deleteUndos[undo] = job
 	s.refreshAfterDelete()
 	a.emit("sessions:deleted", append([]string(nil), job.keys...))
-	return DeleteReport{append([]string(nil), job.keys...), dir, undo, fmt.Sprintf("已删除 %d 个会话，原始记录与本地副本已移除。", len(job.keys))}, nil
+	message := fmt.Sprintf("已删除 %d 个会话，原始记录与本地副本已移除。", len(job.keys))
+	if job.allImported() {
+		message = fmt.Sprintf("已删除 %d 个导入的会话（只删除了 AgentDeck 里的副本，ChatGPT 上的原始聊天和导出文件不受影响）。", len(job.keys))
+	}
+	return DeleteReport{append([]string(nil), job.keys...), dir, undo, message}, nil
 }
 
 // finishPermanent 收尾「直接删除」：丢弃恢复备份，只留下 operation.json
@@ -386,6 +421,9 @@ func (s *SessionService) finishPermanent(job *deleteJob) DeleteReport {
 	s.refreshAfterDelete()
 	s.a.emit("sessions:deleted", append([]string(nil), job.keys...))
 	message := fmt.Sprintf("已删除 %d 个会话（未创建备份）。", len(job.keys))
+	if job.allImported() {
+		message = fmt.Sprintf("已删除 %d 个导入的会话（未创建备份；ChatGPT 上的原始聊天和导出文件不受影响）。", len(job.keys))
+	}
 	backupPath := ""
 	if err := errors.Join(errs...); err != nil {
 		message += fmt.Sprintf("部分临时备份文件未能清理，可手动删除：%s（%v）", job.dir, err)

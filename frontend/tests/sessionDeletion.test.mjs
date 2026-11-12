@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { deletionUnavailableReason, explicitDeletionTargets, deletedSessionKeys } from '../src/sessionDeletion.ts'
+import { deletionUnavailableReason, explicitDeletionTargets, deletedSessionKeys, setImportDeleteEnabled, isImportDeleteEnabled, deleteSummary } from '../src/sessionDeletion.ts'
 
 test('仅本机受支持 Agent 的原生或保留记录可删除，read_only 不替代来源判断', () => {
   for (const agent of ['codex', 'claude', 'claude-desktop']) {
@@ -34,4 +34,30 @@ test('删除确认文案：问句标题，后果随「删除前备份」设置�
   assert.ok(irreversibleAck.includes('无法撤销'))
   assert.deepEqual(deletionTitles(['a', '', 'c'], 5), { shown: ['a', '未命名会话', 'c'], more: 0 })
   assert.deepEqual(deletionTitles(['1', '2', '3', '4', '5', '6', '7'], 5), { shown: ['1', '2', '3', '4', '5'], more: 2 })
+})
+
+// 导入的 ChatGPT 会话：默认不能删；设置里开启后才开放；其他导入记录始终不开放
+test('imported ChatGPT sessions are deletable only when the setting is on', () => {
+  const chatgpt = { agent: 'chatgpt', source: 'import' }
+  assert.equal(isImportDeleteEnabled(), false)
+  assert.match(deletionUnavailableReason([chatgpt]), /开启/)
+  setImportDeleteEnabled(true)
+  try {
+    assert.equal(deletionUnavailableReason([chatgpt]), '')
+    assert.equal(deletionUnavailableReason([chatgpt, { agent: 'codex', source: 'local' }]), '')
+    // other imports stay protected whatever the switch says
+    assert.ok(deletionUnavailableReason([{ agent: 'claude-desktop', source: 'import' }]))
+    assert.ok(deletionUnavailableReason([chatgpt, { agent: 'claude-desktop', source: 'import' }]))
+    // only the import source is opened: a ChatGPT row from anywhere else is not
+    assert.ok(deletionUnavailableReason([{ agent: 'chatgpt', source: 'local' }]))
+    assert.ok(deletionUnavailableReason([{ agent: 'chatgpt', source: 'wsl' }]))
+  } finally { setImportDeleteEnabled(false) }
+  assert.match(deletionUnavailableReason([chatgpt]), /开启/)
+})
+
+test('the delete summary says only the local copy goes when it is an import', () => {
+  assert.match(deleteSummary(true, true), /只删除 AgentDeck 里导入的副本/)
+  assert.match(deleteSummary(true, true), /不受影响/)
+  assert.match(deleteSummary(false, true), /无法恢复/)
+  assert.match(deleteSummary(true), /原始会话记录/)
 })

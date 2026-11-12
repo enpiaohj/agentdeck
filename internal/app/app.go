@@ -310,7 +310,7 @@ func (a *App) ensure() {
 	}
 	// ChatGPT 官方导出的副本（chatgpthistory）：与 Claude 导入同属 ImportDir，
 	// 备份、恢复与数据迁移因此不用另行处理。读失败不影响其他来源。
-	chatList, chatErr := chatgpthistory.List(a.chatgptDir())
+	chatList, chatErr := chatgpthistory.List(a.chatgptDir(), func(id string) bool { return a.deleted["chatgpt:"+id] })
 	a.chatgptError = ""
 	if chatErr != nil {
 		a.chatgptError = chatErr.Error()

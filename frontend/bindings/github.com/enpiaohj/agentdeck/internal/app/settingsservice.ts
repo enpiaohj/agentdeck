@@ -54,6 +54,13 @@ export function Desktop(): $CancellablePromise<$models.DesktopOptions> {
 }
 
 /**
+ * ImportDeleteEnabled 报告是否允许删除导入的聊天记录。
+ */
+export function ImportDeleteEnabled(): $CancellablePromise<boolean> {
+    return $Call.ByID(746389722);
+}
+
+/**
  * Migrate 把 AgentDeck 自有数据迁移到 picked 目录下固定的 AgentDeck\Data，
  * 成功后写入数据位置指针。picked 是用户在目录选择器里选的目录，不是最终数据
  * 根：补全规则见 storageDestination。详细步骤与不变量见 migrate.go；进度经
@@ -124,6 +131,14 @@ export function SetCloseToTray(enabled: boolean): $CancellablePromise<$models.De
     return $Call.ByID(3564853082, enabled).then(($result: any) => {
         return $$createType3($result);
     });
+}
+
+/**
+ * SetImportDeleteEnabled 开启或关闭「删除导入的聊天记录」。配置读不出来时拒绝写入
+ * （理由同 saveTerminalShell）。关闭不会影响已经删除的内容。
+ */
+export function SetImportDeleteEnabled(value: boolean): $CancellablePromise<boolean> {
+    return $Call.ByID(153162492, value);
 }
 
 /**

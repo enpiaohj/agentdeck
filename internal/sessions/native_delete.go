@@ -37,13 +37,16 @@ type nativeFile struct {
 // are actually unlinked — the Codex state DB and shared index files are rewritten
 // in place and never removed, so a preview must not report them as deleted files.
 type NativeDeletePlan struct {
-	Files        []string
-	Remove       []string
-	session      Session
-	files        []nativeFile
-	index        *nativeIndex
-	histories    []*nativeIndex
-	databases    []*nativeDatabase
+	Files     []string
+	Remove    []string
+	session   Session
+	files     []nativeFile
+	index     *nativeIndex
+	histories []*nativeIndex
+	databases []*nativeDatabase
+	// ownedPaths, when set, resolves the files of a session AgentDeck stored itself
+	// (an imported chat's transcripts) instead of looking in an agent's folders.
+	ownedPaths   func() ([]string, error)
 	backup       string
 	manifestHash string
 	ready        bool
@@ -429,7 +432,7 @@ func (p *NativeDeletePlan) Backup(dir string) error {
 }
 
 func (p *NativeDeletePlan) validate() error {
-	paths, err := nativePaths(p.session)
+	paths, err := p.currentPaths()
 	if err != nil {
 		return err
 	}

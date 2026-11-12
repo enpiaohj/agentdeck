@@ -313,3 +313,32 @@ func (s *SettingsService) OpenLink(link string) (bool, error) {
 	}
 	return true, nil
 }
+
+// ---- 删除导入的聊天记录（默认关闭） ----
+
+func (a *App) importDeleteEnabled() bool {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+	return a.settings.AllowImportDelete
+}
+
+// ImportDeleteEnabled 报告是否允许删除导入的聊天记录。
+func (s *SettingsService) ImportDeleteEnabled() bool { return s.a.importDeleteEnabled() }
+
+// SetImportDeleteEnabled 开启或关闭「删除导入的聊天记录」。配置读不出来时拒绝写入
+// （理由同 saveTerminalShell）。关闭不会影响已经删除的内容。
+func (s *SettingsService) SetImportDeleteEnabled(value bool) (bool, error) {
+	a := s.a
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+	if a.settingsErr != nil {
+		return a.settings.AllowImportDelete, fmt.Errorf("应用配置文件无法读取，未保存设置：%v", a.settingsErr)
+	}
+	cfg := a.settings
+	cfg.AllowImportDelete = value
+	if err := appconfig.Save(cfg); err != nil {
+		return a.settings.AllowImportDelete, fmt.Errorf("写入应用配置失败：%w", err)
+	}
+	a.settings = cfg
+	return value, nil
+}

@@ -175,6 +175,47 @@ export class BrowserSettingsView {
     }
 }
 
+/**
+ * ChatGPTAccountMatch 是已导入的、与这份导出共有会话的账号。同一个 ChatGPT 账号用两个
+ * 账号名导入会把每个会话存两份（收藏与标签也不互通），所以导入页要提示。
+ */
+export class ChatGPTAccountMatch {
+    "name": string;
+
+    /**
+     * 这份导出里已在该账号下导入过的会话数
+     */
+    "overlap": number;
+
+    /**
+     * 该账号下已导入、但这份导出里已没有的会话数（可能已在 ChatGPT 里删除）
+     */
+    "missing": number;
+
+    /** Creates a new ChatGPTAccountMatch instance. */
+    constructor($$source: Partial<ChatGPTAccountMatch> = {}) {
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("overlap" in $$source)) {
+            this["overlap"] = 0;
+        }
+        if (!("missing" in $$source)) {
+            this["missing"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ChatGPTAccountMatch instance from a string or object.
+     */
+    static createFrom($$source: any = {}): ChatGPTAccountMatch {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ChatGPTAccountMatch($$parsedSource as Partial<ChatGPTAccountMatch>);
+    }
+}
+
 export class ChatGPTImportReport {
     "conversations": number;
     "projects": number;
@@ -182,6 +223,13 @@ export class ChatGPTImportReport {
     "already_imported": boolean;
     "skipped_blocks": number;
     "images": number;
+
+    /**
+     * Reclaimed 是这次导入后被清理掉的旧批次数（其中每个会话都有更新或更全的副本），
+     * ReclaimedBytes 是释放的字节数。
+     */
+    "reclaimed": number;
+    "reclaimed_bytes": number;
 
     /** Creates a new ChatGPTImportReport instance. */
     constructor($$source: Partial<ChatGPTImportReport> = {}) {
@@ -203,6 +251,12 @@ export class ChatGPTImportReport {
         if (!("images" in $$source)) {
             this["images"] = 0;
         }
+        if (!("reclaimed" in $$source)) {
+            this["reclaimed"] = 0;
+        }
+        if (!("reclaimed_bytes" in $$source)) {
+            this["reclaimed_bytes"] = 0;
+        }
 
         Object.assign(this, $$source);
     }
@@ -217,6 +271,7 @@ export class ChatGPTImportReport {
 }
 
 export class ChatGPTPreview {
+    "accounts": ChatGPTAccountMatch[];
     "conversations": number;
     "projects": ChatGPTProject[];
 
@@ -232,6 +287,9 @@ export class ChatGPTPreview {
 
     /** Creates a new ChatGPTPreview instance. */
     constructor($$source: Partial<ChatGPTPreview> = {}) {
+        if (!("accounts" in $$source)) {
+            this["accounts"] = [];
+        }
         if (!("conversations" in $$source)) {
             this["conversations"] = 0;
         }
@@ -252,10 +310,14 @@ export class ChatGPTPreview {
      * Creates a new ChatGPTPreview instance from a string or object.
      */
     static createFrom($$source: any = {}): ChatGPTPreview {
-        const $$createField1_0 = $$createType3;
+        const $$createField0_0 = $$createType3;
+        const $$createField2_0 = $$createType5;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("accounts" in $$parsedSource) {
+            $$parsedSource["accounts"] = $$createField0_0($$parsedSource["accounts"]);
+        }
         if ("projects" in $$parsedSource) {
-            $$parsedSource["projects"] = $$createField1_0($$parsedSource["projects"]);
+            $$parsedSource["projects"] = $$createField2_0($$parsedSource["projects"]);
         }
         return new ChatGPTPreview($$parsedSource as Partial<ChatGPTPreview>);
     }
@@ -326,8 +388,8 @@ export class ChatGPTProject {
      * Creates a new ChatGPTProject instance from a string or object.
      */
     static createFrom($$source: any = {}): ChatGPTProject {
-        const $$createField4_0 = $$createType4;
-        const $$createField8_0 = $$createType4;
+        const $$createField4_0 = $$createType6;
+        const $$createField8_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("files" in $$parsedSource) {
             $$parsedSource["files"] = $$createField4_0($$parsedSource["files"]);
@@ -412,8 +474,8 @@ export class CleanupPlan {
      * Creates a new CleanupPlan instance from a string or object.
      */
     static createFrom($$source: any = {}): CleanupPlan {
-        const $$createField1_0 = $$createType4;
-        const $$createField4_0 = $$createType4;
+        const $$createField1_0 = $$createType6;
+        const $$createField4_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("dirs" in $$parsedSource) {
             $$parsedSource["dirs"] = $$createField1_0($$parsedSource["dirs"]);
@@ -569,8 +631,8 @@ export class DeletePreview {
      * Creates a new DeletePreview instance from a string or object.
      */
     static createFrom($$source: any = {}): DeletePreview {
-        const $$createField5_0 = $$createType4;
-        const $$createField6_0 = $$createType4;
+        const $$createField5_0 = $$createType6;
+        const $$createField6_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("titles" in $$parsedSource) {
             $$parsedSource["titles"] = $$createField5_0($$parsedSource["titles"]);
@@ -610,7 +672,7 @@ export class DeleteReport {
      * Creates a new DeleteReport instance from a string or object.
      */
     static createFrom($$source: any = {}): DeleteReport {
-        const $$createField0_0 = $$createType4;
+        const $$createField0_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("deleted_keys" in $$parsedSource) {
             $$parsedSource["deleted_keys"] = $$createField0_0($$parsedSource["deleted_keys"]);
@@ -859,7 +921,7 @@ export class Filter {
      * Creates a new Filter instance from a string or object.
      */
     static createFrom($$source: any = {}): Filter {
-        const $$createField1_0 = $$createType4;
+        const $$createField1_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("agents" in $$parsedSource) {
             $$parsedSource["agents"] = $$createField1_0($$parsedSource["agents"]);
@@ -1060,7 +1122,7 @@ export class Mark {
      * Creates a new Mark instance from a string or object.
      */
     static createFrom($$source: any = {}): Mark {
-        const $$createField3_0 = $$createType4;
+        const $$createField3_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tags" in $$parsedSource) {
             $$parsedSource["tags"] = $$createField3_0($$parsedSource["tags"]);
@@ -1104,7 +1166,7 @@ export class MigrateReport {
      * Creates a new MigrateReport instance from a string or object.
      */
     static createFrom($$source: any = {}): MigrateReport {
-        const $$createField3_0 = $$createType4;
+        const $$createField3_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("skipped" in $$parsedSource) {
             $$parsedSource["skipped"] = $$createField3_0($$parsedSource["skipped"]);
@@ -1482,7 +1544,7 @@ export class SearchReply {
      * Creates a new SearchReply instance from a string or object.
      */
     static createFrom($$source: any = {}): SearchReply {
-        const $$createField2_0 = $$createType6;
+        const $$createField2_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("hits" in $$parsedSource) {
             $$parsedSource["hits"] = $$createField2_0($$parsedSource["hits"]);
@@ -1658,7 +1720,7 @@ export class SessionView {
      * Creates a new SessionView instance from a string or object.
      */
     static createFrom($$source: any = {}): SessionView {
-        const $$createField24_0 = $$createType4;
+        const $$createField24_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tags" in $$parsedSource) {
             $$parsedSource["tags"] = $$createField24_0($$parsedSource["tags"]);
@@ -1851,9 +1913,9 @@ export class StorageView {
      * Creates a new StorageView instance from a string or object.
      */
     static createFrom($$source: any = {}): StorageView {
-        const $$createField8_0 = $$createType8;
-        const $$createField11_0 = $$createType4;
-        const $$createField13_0 = $$createType8;
+        const $$createField8_0 = $$createType10;
+        const $$createField11_0 = $$createType6;
+        const $$createField13_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("items" in $$parsedSource) {
             $$parsedSource["items"] = $$createField8_0($$parsedSource["items"]);
@@ -1983,7 +2045,7 @@ export class TerminalShellView {
      * Creates a new TerminalShellView instance from a string or object.
      */
     static createFrom($$source: any = {}): TerminalShellView {
-        const $$createField4_0 = $$createType10;
+        const $$createField4_0 = $$createType12;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("options" in $$parsedSource) {
             $$parsedSource["options"] = $$createField4_0($$parsedSource["options"]);
@@ -2092,8 +2154,8 @@ export class TranscriptView {
      * Creates a new TranscriptView instance from a string or object.
      */
     static createFrom($$source: any = {}): TranscriptView {
-        const $$createField7_0 = $$createType12;
-        const $$createField9_0 = $$createType14;
+        const $$createField7_0 = $$createType14;
+        const $$createField9_0 = $$createType16;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("parts" in $$parsedSource) {
             $$parsedSource["parts"] = $$createField7_0($$parsedSource["parts"]);
@@ -2291,16 +2353,18 @@ export class UpdateView {
 // Private type creation functions
 const $$createType0 = BrowserOption.createFrom;
 const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = ChatGPTProject.createFrom;
+const $$createType2 = ChatGPTAccountMatch.createFrom;
 const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = $Create.Array($Create.Any);
-const $$createType5 = SearchHitView.createFrom;
-const $$createType6 = $Create.Array($$createType5);
-const $$createType7 = StorageItem.createFrom;
+const $$createType4 = ChatGPTProject.createFrom;
+const $$createType5 = $Create.Array($$createType4);
+const $$createType6 = $Create.Array($Create.Any);
+const $$createType7 = SearchHitView.createFrom;
 const $$createType8 = $Create.Array($$createType7);
-const $$createType9 = TerminalShellOption.createFrom;
+const $$createType9 = StorageItem.createFrom;
 const $$createType10 = $Create.Array($$createType9);
-const $$createType11 = TranscriptPart.createFrom;
+const $$createType11 = TerminalShellOption.createFrom;
 const $$createType12 = $Create.Array($$createType11);
-const $$createType13 = PromptMark.createFrom;
+const $$createType13 = TranscriptPart.createFrom;
 const $$createType14 = $Create.Array($$createType13);
+const $$createType15 = PromptMark.createFrom;
+const $$createType16 = $Create.Array($$createType15);

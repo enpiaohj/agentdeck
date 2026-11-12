@@ -23,6 +23,7 @@ export {
     BackupInfo,
     BrowserOption,
     BrowserSettingsView,
+    ChatGPTAccountMatch,
     ChatGPTImportReport,
     ChatGPTPreview,
     ChatGPTProject,

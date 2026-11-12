@@ -98,7 +98,7 @@ func TestImportImages(t *testing.T) {
 	if len(assets) != 1 || !strings.HasSuffix(assets[0].Name(), ".png") {
 		t.Fatalf("assets = %v", assets)
 	}
-	list, _ := List(root)
+	list, _ := List(root, nil)
 	if len(list) != 1 {
 		t.Fatalf("list = %d", len(list))
 	}
@@ -130,7 +130,7 @@ func TestImportImages(t *testing.T) {
 		t.Fatalf("plain = %+v %v", plain, err)
 	}
 	// equally new, the copy with its pictures is the one shown — even though the other came later
-	list, _ = List(root)
+	list, _ = List(root, nil)
 	if len(list) != 1 || !strings.Contains(transcriptText(t, list[0]), AssetPrefix) {
 		t.Fatal("同样新的两份，带图片的应优先显示")
 	}
@@ -146,7 +146,7 @@ func TestImportWithoutImagesKeepsPlaceholders(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, digest("a"), "assets")); err == nil {
 		t.Fatal("不要图片时不该建 assets 目录")
 	}
-	list, _ := List(root)
+	list, _ := List(root, nil)
 	if text := transcriptText(t, list[0]); strings.Count(text, "*[图片") != 4 || strings.Count(text, "*[图片：相机 1 .png]*") != 1 || strings.Contains(text, AssetPrefix) {
 		t.Fatalf("应全是占位:\n%s", text)
 	}
@@ -222,7 +222,7 @@ func TestImportRefusesWhenDiskIsTooSmall(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "磁盘空间不足") {
 		t.Fatalf("err = %v", err)
 	}
-	if list, _ := List(root); len(list) != 0 {
+	if list, _ := List(root, nil); len(list) != 0 {
 		t.Fatal("空间不足时不该留下数据")
 	}
 	// the same import is fine with room, and without images the check is skipped
@@ -251,7 +251,7 @@ func TestListKeepsWhatCanBeRead(t *testing.T) {
 		t.Fatalf("manifests = %d", len(manifests))
 	}
 	os.WriteFile(manifests[0], []byte("{broken"), 0o600)
-	list, err := List(root)
+	list, err := List(root, nil)
 	if err == nil || !strings.Contains(err.Error(), "已损坏") {
 		t.Fatalf("应报告哪里坏了: %v", err)
 	}
@@ -260,10 +260,10 @@ func TestListKeepsWhatCanBeRead(t *testing.T) {
 	}
 	// a transcript file that went missing drops only that session
 	var gone string
-	list, _ = List(root)
+	list, _ = List(root, nil)
 	gone = list[0].Path
 	os.Remove(gone)
-	after, err := List(root)
+	after, err := List(root, nil)
 	if err == nil || len(after) != len(list)-1 {
 		t.Fatalf("缺一个正文文件只少一个会话: %d → %d, %v", len(list), len(after), err)
 	}

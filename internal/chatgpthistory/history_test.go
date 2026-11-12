@@ -114,7 +114,7 @@ func TestImportListAndTranscript(t *testing.T) {
 		t.Fatal("导出文件被改动")
 	}
 
-	list, err := List(root)
+	list, err := List(root, nil)
 	if err != nil || len(list) != 4 {
 		t.Fatalf("list = %d %v", len(list), err)
 	}
@@ -174,7 +174,7 @@ func TestImportIdempotentAndNames(t *testing.T) {
 	if err != nil || !rep.AlreadyImported || rep.Conversations != 4 {
 		t.Fatalf("再次导入 = %+v %v", rep, err)
 	}
-	list, _ := List(root)
+	list, _ := List(root, nil)
 	cwds := map[string]bool{}
 	for _, s := range list {
 		cwds[s.Cwd] = true
@@ -185,7 +185,7 @@ func TestImportIdempotentAndNames(t *testing.T) {
 	if err := SetProjectNames(root, "a", map[string]string{"g-p-aaaaaaaa11112222": "改名后"}); err != nil {
 		t.Fatal(err)
 	}
-	list, _ = List(root)
+	list, _ = List(root, nil)
 	found := false
 	for _, s := range list {
 		found = found || s.Cwd == filepath.Join("ChatGPT", "改名后")
@@ -213,7 +213,7 @@ func TestImportNewerWins(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	list, _ := List(root)
+	list, _ := List(root, nil)
 	if len(list) != 1 || list[0].Title != "新标题" {
 		t.Fatalf("list = %+v", list)
 	}
@@ -255,7 +255,7 @@ func TestImportRejectsBadInput(t *testing.T) {
 	if _, err := Import(root, bad, "A", Options{}); err == nil {
 		t.Error("损坏的 JSON 被接受")
 	}
-	if list, _ := List(root); len(list) != 0 {
+	if list, _ := List(root, nil); len(list) != 0 {
 		t.Fatalf("失败的导入不该留下数据: %d", len(list))
 	}
 	if ents, _ := filepath.Glob(filepath.Join(root, "*", ".stage-*")); len(ents) != 0 {

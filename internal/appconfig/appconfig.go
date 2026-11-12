@@ -60,6 +60,10 @@ type Config struct {
 	// chrome、msedge）。空串表示系统默认浏览器。用户常在某个特定浏览器里登录
 	// 了 ChatGPT 等网站，而系统默认浏览器往往是别的，所以由用户指定。
 	Browser string `json:"browser,omitempty"`
+	// AllowImportDelete 允许删除导入的聊天记录（ChatGPT 导入副本）。默认关闭：
+	// 导入副本是用户从导出文件里整理出来的，误删后只能靠备份或重新导入找回，
+	// 所以删除要由用户在设置里明确开启。服务端同样强制检查它，不只靠界面置灰。
+	AllowImportDelete bool `json:"allow_import_delete"`
 	// AutoCheckUpdates 控制启动后的后台检查更新。与上面两项相反，它默认
 	// 开启，因此旧配置缺少该字段时按 Default() 的取值保留，而不是 false。
 	AutoCheckUpdates bool `json:"auto_check_updates"`
@@ -164,10 +168,11 @@ func LoadFrom(path string) (Config, error) {
 		delete(fields, key)
 	}
 	for key, target := range map[string]*bool{
-		"start_at_login":     &cfg.StartAtLogin,
-		"close_to_tray":      &cfg.CloseToTray,
-		"auto_check_updates": &cfg.AutoCheckUpdates,
-		"resume_maximized":   &cfg.ResumeMaximized,
+		"start_at_login":      &cfg.StartAtLogin,
+		"close_to_tray":       &cfg.CloseToTray,
+		"auto_check_updates":  &cfg.AutoCheckUpdates,
+		"resume_maximized":    &cfg.ResumeMaximized,
+		"allow_import_delete": &cfg.AllowImportDelete,
 	} {
 		if value, ok := fields[key]; ok {
 			if err = json.Unmarshal(value, target); err != nil {
@@ -228,6 +233,8 @@ func SaveTo(path string, cfg Config) error {
 	fields["auto_check_updates"] = autoCheck
 	maximized, _ := json.Marshal(cfg.ResumeMaximized)
 	fields["resume_maximized"] = maximized
+	allowImportDelete, _ := json.Marshal(cfg.AllowImportDelete)
+	fields["allow_import_delete"] = allowImportDelete
 	openMode, _ := json.Marshal(NormalizeOpenMode(cfg.ResumeOpenMode))
 	fields["resume_open_mode"] = openMode
 	if browser := NormalizeBrowser(cfg.Browser); browser != "" {

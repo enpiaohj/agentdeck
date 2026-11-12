@@ -61,7 +61,10 @@ func (s *SessionService) PreviewChatGPT(path, account string) (ChatGPTPreview, e
 	}
 	// 导出里没有项目名；本机的 ChatGPT 桌面应用把项目列表连名字一起记着，只读取，作为命名建议
 	chatgpthistory.ApplySuggestions(&res, chatgpthistory.LocalProjectNames(sessions.CodexDir()))
-	out := ChatGPTPreview{Conversations: res.Conversations, Images: res.Images, ImageBytes: res.ImageBytes, Projects: make([]ChatGPTProject, 0, len(res.Projects))}
+	out := ChatGPTPreview{Accounts: make([]ChatGPTAccountMatch, 0, len(res.Accounts)), Conversations: res.Conversations, Images: res.Images, ImageBytes: res.ImageBytes, Projects: make([]ChatGPTProject, 0, len(res.Projects))}
+	for _, acc := range res.Accounts {
+		out.Accounts = append(out.Accounts, ChatGPTAccountMatch{Name: acc.Name, Overlap: acc.Overlap, Missing: acc.Missing})
+	}
 	for _, p := range res.Projects {
 		out.Projects = append(out.Projects, ChatGPTProject{ID: p.ID, Name: p.Name, Default: p.Default, Suggested: p.Suggested, Files: append([]string{}, p.Files...), Recommended: p.Recommended, RecommendedBasis: p.RecommendedBasis, Conversations: p.Conversations, Samples: append([]string{}, p.Samples...)})
 	}
@@ -85,7 +88,7 @@ func (s *SessionService) ImportChatGPT(path, account string, names map[string]st
 	if loadError != "" {
 		return ChatGPTImportReport{}, fmt.Errorf("文件已保存，但读取 ChatGPT 导入库失败: %s", loadError)
 	}
-	return ChatGPTImportReport{Conversations: report.Conversations, Projects: report.Projects, Account: report.Account, AlreadyImported: report.AlreadyImported, SkippedBlocks: report.SkippedBlocks, Images: report.Images}, nil
+	return ChatGPTImportReport{Conversations: report.Conversations, Projects: report.Projects, Account: report.Account, AlreadyImported: report.AlreadyImported, SkippedBlocks: report.SkippedBlocks, Images: report.Images, Reclaimed: report.Reclaimed, ReclaimedBytes: report.ReclaimedBytes}, nil
 }
 
 // SetChatGPTProjectNames 给已导入账号的项目改名，不需要重新导入。

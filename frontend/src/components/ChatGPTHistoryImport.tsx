@@ -21,6 +21,7 @@ const useStyles = makeStyles({
   file: { display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', border: `1px dashed ${tokens.colorNeutralStroke1}`, borderRadius: '6px', minWidth: 0 },
   fileName: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '13px' },
   note: { fontSize: '12px', lineHeight: 1.8, color: tokens.colorNeutralForeground3 },
+  warning: { fontSize: '13px', lineHeight: 1.7, padding: '10px 12px', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start', backgroundColor: tokens.colorPaletteYellowBackground1, border: `1px solid ${tokens.colorPaletteYellowBorder1}`, color: tokens.colorNeutralForeground1 },
   footer: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '14px', flexWrap: 'wrap' },
   projectName: { display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 },
   projectActions: { display: 'flex', flexWrap: 'wrap', gap: '2px', marginLeft: '-6px' },
@@ -65,17 +66,29 @@ export function ChatGPTHistoryImport({ onImported }: { onImported: (report: Chat
         Filters: [{ DisplayName: 'ChatGPT 导出的 ZIP 文件', Pattern: '*.zip' }, { DisplayName: 'conversations JSON 文件', Pattern: '*.json' }],
       })
       if (!selected || typeof selected !== 'string') return
-      setFile(selected); setError(''); setMessage(''); setPreview(null); setNames({})
-      setReading(true)
-      try {
-        // 先填写账号名时，已为该账号命名的项目会一并带回
-        const result = await sessionService.PreviewChatGPT(selected, account.trim())
-        setPreview(result)
-        // 已命名的优先；否则用本机 ChatGPT 桌面应用里的项目名（可改）；都没有则留空
-        setNames(Object.fromEntries(result.projects.map(p => [p.id, p.name || p.suggested])))
-      } finally { setReading(false) }
+      setFile(selected)
+      await readExport(selected, account.trim())
     } catch (reason) { setError(String(reason).slice(0, 400)) }
   }
+
+  // 读一遍导出文件，给出会话数、项目与已有账号的重叠情况。账号名变了要重读：
+  // 已为该账号命名的项目会随之带回。
+  const readExport = async (path: string, accountName: string) => {
+    setError(''); setMessage(''); setPreview(null); setNames({})
+    setReading(true)
+    try {
+      const result = await sessionService.PreviewChatGPT(path, accountName)
+      setPreview(result)
+      // 已命名的优先；否则用本机 ChatGPT 桌面应用里的项目名（可改）；都没有则留空
+      setNames(Object.fromEntries(result.projects.map(p => [p.id, p.name || p.suggested])))
+    } catch (reason) { setError(String(reason).slice(0, 400)) } finally { setReading(false) }
+  }
+  // 与这份导出共有会话、但账号名和你填的不同的已有账号：同一个 ChatGPT 账号用了两个名字，
+  // 每个会话会各存一份，收藏、标签也不互通
+  const typed = account.trim().toLowerCase()
+  const sameName = (preview?.accounts ?? []).find(item => item.name.toLowerCase() === typed)
+  const otherAccount = sameName ? undefined : (preview?.accounts ?? [])[0]
+  const useAccount = (name: string) => { setAccount(name); if (file) void readExport(file, name) }
 
   const openProject = async (id: string) => {
     const page = projectPage(id)
@@ -91,11 +104,16 @@ export function ChatGPTHistoryImport({ onImported }: { onImported: (report: Chat
     setBusy(true); setError(''); setMessage('')
     let saved = false
     try {
-      const chosen = Object.fromEntries(Object.entries(names).filter(([, name]) => name.trim()))
+      // 输入框里有名字就保存；清空了原来已保存的名字，则传空串把它清掉（回到默认名称）
+      const chosen: Record<string, string> = {}
+      for (const project of preview.projects) {
+        const value = (names[project.id] ?? '').trim()
+        if (value || project.name) chosen[project.id] = value
+      }
       const result = await sessionService.ImportChatGPT(file, account.trim(), chosen, withImages && (preview.images ?? 0) > 0)
       saved = true
       const prefix = result.already_imported ? '此导出文件已导入过，已更新项目名' : `已导入 ${result.conversations} 个会话（${result.projects} 个项目）`
-      setMessage(`${prefix}${result.images ? `；${result.images} 张图片` : ''}${result.skipped_blocks ? `；${result.skipped_blocks} 处图片或音频内容未导入` : ''}`)
+      setMessage(`${prefix}${result.images ? `；${result.images} 张图片` : ''}${result.skipped_blocks ? `；${result.skipped_blocks} 处图片或音频内容未导入` : ''}${result.reclaimed ? `；已清理 ${result.reclaimed} 个被取代的旧批次，释放 ${fmtBytes(result.reclaimed_bytes)}` : ''}`)
       await onImported(result)
     } catch (reason) { setError(`${saved ? '数据已保存，但界面刷新失败：' : ''}${String(reason)}`.slice(0, 400)) }
     finally { setBusy(false) }
@@ -128,6 +146,13 @@ export function ChatGPTHistoryImport({ onImported }: { onImported: (report: Chat
           </div>
           {reading ? <div className={styles.note} role="status"><Spinner size="extra-tiny" /> 正在读取导出文件，较大的文件需要几秒钟…</div> : null}
           {preview ? <div className={styles.description} role="status">共 {preview.conversations} 个会话，包含 {preview.projects.length} 个项目。</div> : null}
+          {otherAccount ? <div className={styles.warning} role="alert">
+            这份导出里有 {otherAccount.overlap} 个会话已在账号“{otherAccount.name}”下导入过。如果它们属于同一个 ChatGPT 账号，请使用同样的账号名称，否则每个会话会各存一份，收藏和标签也不互通。
+            <div><Button size="small" appearance="primary" disabled={busy || reading} onClick={() => useAccount(otherAccount.name)}>改用“{otherAccount.name}”</Button></div>
+          </div> : null}
+          {sameName && sameName.missing > 0 ? <div className={styles.note} role="status">
+            账号“{sameName.name}”下已导入的会话里，有 {sameName.missing} 个不在这份导出里，可能已在 ChatGPT 中删除。它们会继续保留在这里；如需清理，可在“设置”&gt;“会话”里开启“允许删除导入的聊天记录”，再到会话列表中选择删除。
+          </div> : null}
           {preview && preview.images > 0 ? <Checkbox checked={withImages} disabled={busy} onChange={(_, data) => setWithImages(data.checked === true)}
             label={`同时导入图片（约 ${fmtBytes(preview.image_bytes)}，${preview.images} 张）`} /> : null}
           {preview ? <div className={styles.note}>{preview.images > 0 ? '图片会复制到本机，并直接显示在阅读区；如果取消选中，则只显示“图片”占位符。' : '此导出文件中没有可导入的图片。'}不会复制你上传的文件（文档、代码、表格等），只保留文件名。语音对话只有文字转录，导出文件中不含音频。</div> : null}

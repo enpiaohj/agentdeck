@@ -314,7 +314,12 @@ README 截图用隔离的演示用户目录生成（见陷阱 #21），不得截
   对象写入；涉及 Codex `state_5.sqlite` 时在单个事务里 `DELETE` 相关行。
   改动这条路径必须保持以下不变量，测试里都有对应用例：
   - 只对 `codex` / `claude` / `claude-desktop` 的本机原生或保留会话开放，
-    WSL / 网关 / 导入来源一律拒绝
+    WSL / 网关 / 导入来源一律拒绝。**唯一的例外**是导入的 ChatGPT 副本（AgentDeck
+    自己存的文件，不是上游存储）：仅当设置 `allow_import_delete`（默认关闭）开启时开放，
+    预览与执行两次都检查开关，并把该会话在每个批次里的全部副本一并纳入同一个删除计划
+    （`sessions.PrepareOwnedDelete` + `chatgpthistory.TranscriptFiles`，只认导入目录里
+    账号/批次文件夹下的普通文件）；Claude 等其他导入记录仍一律拒绝。已删除的会话 key 写进
+    `deletions/` 的恢复记录，重新导入同一份导出不会让它回来
   - 预览返回 token 绑定选择与内容哈希；执行前重新校验，源文件变了就整批拒绝
   - 先写备份再删；备份失败不删。备份只含**所选会话**：原始文件逐个复制，
     保留版本与标注按 key 复制成独立的小库（`history.BackupKeysTo` /

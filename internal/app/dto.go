@@ -60,11 +60,20 @@ type ChatGPTProject struct {
 	Samples          []string `json:"samples"`
 }
 
+// ChatGPTAccountMatch 是已导入的、与这份导出共有会话的账号。同一个 ChatGPT 账号用两个
+// 账号名导入会把每个会话存两份（收藏与标签也不互通），所以导入页要提示。
+type ChatGPTAccountMatch struct {
+	Name    string `json:"name"`
+	Overlap int    `json:"overlap"` // 这份导出里已在该账号下导入过的会话数
+	Missing int    `json:"missing"` // 该账号下已导入、但这份导出里已没有的会话数（可能已在 ChatGPT 里删除）
+}
+
 type ChatGPTPreview struct {
-	Conversations int              `json:"conversations"`
-	Projects      []ChatGPTProject `json:"projects"`
-	Images        int              `json:"images"`      // 会话里用到、导出里带了的图片数
-	ImageBytes    int64            `json:"image_bytes"` // 全部拷进来要占多少字节
+	Accounts      []ChatGPTAccountMatch `json:"accounts"`
+	Conversations int                   `json:"conversations"`
+	Projects      []ChatGPTProject      `json:"projects"`
+	Images        int                   `json:"images"`      // 会话里用到、导出里带了的图片数
+	ImageBytes    int64                 `json:"image_bytes"` // 全部拷进来要占多少字节
 }
 
 type ChatGPTImportReport struct {
@@ -74,6 +83,10 @@ type ChatGPTImportReport struct {
 	AlreadyImported bool   `json:"already_imported"`
 	SkippedBlocks   int    `json:"skipped_blocks"`
 	Images          int    `json:"images"`
+	// Reclaimed 是这次导入后被清理掉的旧批次数（其中每个会话都有更新或更全的副本），
+	// ReclaimedBytes 是释放的字节数。
+	Reclaimed      int   `json:"reclaimed"`
+	ReclaimedBytes int64 `json:"reclaimed_bytes"`
 }
 
 // TranscriptView 是会话详情：全文按序。Cut 说明会话层按上限截断了。

@@ -31,7 +31,7 @@ func TestRealExport(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("import: %+v (%s)", rep, time.Since(start).Round(time.Millisecond))
-	list, err := List(root)
+	list, err := List(root, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,6 +7,7 @@ import { DiagnosticsView, type SettingsDataSection } from './DiagnosticsView'
 import { ReadingPreview } from './MessagePane'
 import { AgentSelect } from './AgentSelect'
 import { BrowserControl } from './BrowserControl'
+import { ImportDeleteControl } from './ImportDeleteControl'
 import { ResumeMaximizedControl, ResumeOpenModeControl, TerminalShellControl } from './TerminalShellControl'
 import { DesktopSettingsControl, matchesDesktopSettings } from './DesktopSettingsControl'
 import { UpdateControl, matchesUpdateSettings } from './UpdateControl'
@@ -70,6 +71,7 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
     ] },
     { id: 'delete', category: 'sessions', title: '删除会话', rows: [
       { key: 'deleteBackup', title: '删除前创建恢复备份', description: p.deleteBackup ? '删除会话前自动备份所选会话，可在本次运行期间撤销。备份文件保留在本地磁盘。' : '已停用。删除会话时不创建备份，删除后无法恢复。', control: id => <input id={id} aria-describedby={`${id}-description`} type="checkbox" role="switch" checked={p.deleteBackup} onChange={e => update({ deleteBackup: e.target.checked })} /> },
+      { key: 'allowImportDelete', title: '允许删除导入的聊天记录', description: '默认关闭。开启后，可以删除导入的 ChatGPT 聊天记录（会话详情、右键菜单和批量选择里的“删除”）。只删除 AgentDeck 里的副本，不影响 ChatGPT 上的原始聊天和你的导出文件；删除前会按上面的备份选项先备份。已删除的会话，重新导入同一份导出也不会回来。', control: id => <ImportDeleteControl id={id} /> },
     ] },
     { id: 'shell', category: 'terminal', title: '终端环境', rows: [
       { key: 'terminalShell', title: '终端 PowerShell', description: '新建或继续会话时使用的终端。更改后对新打开的终端生效。', control: id => <TerminalShellControl id={id} /> },

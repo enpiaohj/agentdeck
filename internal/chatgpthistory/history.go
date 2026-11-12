@@ -55,6 +55,10 @@ type Report struct {
 	AlreadyImported bool   `json:"already_imported"`
 	SkippedBlocks   int    `json:"skipped_blocks"`
 	Images          int    `json:"images"` // distinct images copied into the store
+	// Reclaimed is how many older batches this import made redundant (every
+	// conversation in them has a newer or richer copy elsewhere) and removed.
+	Reclaimed      int   `json:"reclaimed"`
+	ReclaimedBytes int64 `json:"reclaimed_bytes"`
 }
 
 // Options are what the user chose for one import.
@@ -94,11 +98,24 @@ type ProjectInfo struct {
 const maxTitlesPerProject = 500
 
 // PreviewResult is what an export holds, before anything is imported.
+// ExistingAccount is an account already imported whose conversations overlap the export.
+type ExistingAccount struct {
+	Name    string `json:"name"`
+	Overlap int    `json:"overlap"` // conversations of the export already imported under it
+	// Missing counts conversations imported under it that the export no longer holds
+	// (deleted in ChatGPT since, or from before the export's window).
+	Missing int `json:"missing"`
+}
+
 type PreviewResult struct {
-	Conversations int           `json:"conversations"`
-	Projects      []ProjectInfo `json:"projects"`
-	Images        int           `json:"images"`      // distinct images the conversations use that the export carries
-	ImageBytes    int64         `json:"image_bytes"` // what copying them would take
+	// Accounts lists the already-imported accounts that share conversations with the
+	// export, most shared first. A second account name for the same ChatGPT account
+	// would store every conversation twice, so the import page points it out.
+	Accounts      []ExistingAccount `json:"accounts"`
+	Conversations int               `json:"conversations"`
+	Projects      []ProjectInfo     `json:"projects"`
+	Images        int               `json:"images"`      // distinct images the conversations use that the export carries
+	ImageBytes    int64             `json:"image_bytes"` // what copying them would take
 }
 
 type entry struct {
@@ -909,6 +926,7 @@ func Import(root, source, account string, opts Options) (Report, error) {
 	}
 	stage = ""
 	report.Conversations, report.SkippedBlocks, report.Projects, report.Images = len(m.Entries), m.SkippedBlocks, countProjects(m.Entries), m.Images
+	report.Reclaimed, report.ReclaimedBytes = reclaim(accountRoot)
 	return report, nil
 }
 
@@ -1039,8 +1057,12 @@ func Preview(root, source, account string) (PreviewResult, error) {
 	}
 	byID := map[string]*seenProject{}
 	images := map[string]bool{} // export members the conversations show as images
+	var convIDs []string
 	err = eachConversation(shards, func(c conversation) error {
 		res.Conversations++
+		if id := c.id(); id != "" {
+			convIDs = append(convIDs, id)
+		}
 		n, size := src.countImages(c, images)
 		res.Images += n
 		res.ImageBytes += size
@@ -1069,6 +1091,7 @@ func Preview(root, source, account string) (PreviewResult, error) {
 	if err != nil {
 		return res, err
 	}
+	res.Accounts = existingAccounts(root, convIDs)
 	files := src.projectFiles()
 	for id, p := range byID {
 		sort.Slice(p.samples, func(i, j int) bool { return p.samples[i].at > p.samples[j].at })
@@ -1193,6 +1216,26 @@ func SetProjectNames(root, account string, names map[string]string) error {
 
 var validID = regexp.MustCompile(`^gpt_[a-f0-9]{64}$`)
 
+// copyInfo is what decides which of two stored copies of one conversation is shown.
+type copyInfo struct {
+	updated    time.Time
+	importedAt time.Time
+	images     bool // the batch that carries the pictures
+}
+
+// beats reports whether copy a is the one to show instead of b: the newer
+// conversation; of two equally new, the one with its pictures (it shows everything
+// the other does); then the later import.
+func (a copyInfo) beats(b copyInfo) bool {
+	if !a.updated.Equal(b.updated) {
+		return a.updated.After(b.updated)
+	}
+	if a.images != b.images {
+		return a.images
+	}
+	return a.importedAt.After(b.importedAt)
+}
+
 // List merges every stored batch by stable account+conversation identity; an
 // older export never replaces a newer copy of the same conversation, and a copy
 // with its pictures is preferred to one without. A project
@@ -1201,16 +1244,16 @@ var validID = regexp.MustCompile(`^gpt_[a-f0-9]{64}$`)
 //
 // A damaged batch or a missing transcript file skips only what it affects: the
 // sessions that can be read are returned together with an error that says what
-// was left out.
-func List(root string) ([]sessions.Session, error) {
+// was left out. skip, when given, names conversation ids that were deleted on
+// purpose: they are left out without a word, even where their files are gone.
+func List(root string, skip func(id string) bool) ([]sessions.Session, error) {
 	paths, err := filepath.Glob(filepath.Join(root, "*", "*", "manifest.json"))
 	if err != nil {
 		return nil, err
 	}
 	type stored struct {
 		session sessions.Session
-		at      time.Time
-		images  bool // the batch that carries the pictures
+		copy    copyInfo
 	}
 	var problems []error
 	byID := map[string]stored{}
@@ -1245,21 +1288,18 @@ func List(root string) ([]sessions.Session, error) {
 				problems = append(problems, errors.New("导入记录中有无效的会话 ID"))
 				continue
 			}
+			if skip != nil && skip(e.ID) {
+				continue
+			}
 			file := filepath.Join(filepath.Dir(p), e.ID+".jsonl")
 			if info, err := os.Stat(file); err != nil || !info.Mode().IsRegular() {
 				problems = append(problems, fmt.Errorf("无法读取已导入的正文文件：%s", filepath.Base(file)))
 				continue
 			}
 			key := filepath.Base(accountRoot) + "/" + e.ID
-			// The newer copy wins; of two equally new ones, the one with its
-			// pictures (it shows everything the other does), then the later import.
-			prior, exists := byID[key]
-			if exists {
-				older := prior.session.Last.After(e.Updated)
-				same := prior.session.Last.Equal(e.Updated)
-				if older || (same && (prior.images != m.WithImages && prior.images || prior.images == m.WithImages && !m.ImportedAt.After(prior.at))) {
-					continue
-				}
+			c := copyInfo{updated: e.Updated, importedAt: m.ImportedAt, images: m.WithImages}
+			if prior, exists := byID[key]; exists && !c.beats(prior.copy) {
+				continue
 			}
 			cwd := ""
 			if e.Project != "" {
@@ -1274,7 +1314,7 @@ func List(root string) ([]sessions.Session, error) {
 				models = append(models, sessions.Model{Model: e.Model})
 			}
 			byID[key] = stored{session: sessions.Session{Agent: Agent, ID: e.ID, Title: e.Title, Cwd: cwd, Account: label, Imported: true, MessageCount: e.Messages,
-				Start: e.Created, Last: e.Updated, ReadOnly: true, Transcript: true, Path: file, Models: models}, at: m.ImportedAt, images: m.WithImages}
+				Start: e.Created, Last: e.Updated, ReadOnly: true, Transcript: true, Path: file, Models: models}, copy: c}
 		}
 	}
 	out := make([]sessions.Session, 0, len(byID))
@@ -1288,6 +1328,178 @@ func List(root string) ([]sessions.Session, error) {
 		return out[i].ID < out[j].ID
 	})
 	return out, errors.Join(problems...)
+}
+
+// TranscriptFiles lists every stored copy of one conversation's transcript, in
+// every batch: a conversation imported from several exports has one in each.
+// Only regular files inside root's own account/batch folders are returned, so
+// deleting "the conversation" can never reach anything else.
+func TranscriptFiles(root, id string) ([]string, error) {
+	if !validID.MatchString(id) {
+		return nil, errors.New("会话 ID 无效")
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return nil, err
+	}
+	paths, err := filepath.Glob(filepath.Join(abs, "*", "*", id+".jsonl"))
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, p := range paths {
+		batch, account := filepath.Dir(p), filepath.Dir(filepath.Dir(p))
+		if strings.HasPrefix(filepath.Base(batch), ".stage-") || !accountDir.MatchString(filepath.Base(account)) || filepath.Dir(account) != abs {
+			continue
+		}
+		if info, err := os.Lstat(p); err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+var accountDir = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+// existingAccounts compares an export's conversation ids with the accounts already
+// stored. A session's id is derived from the account folder and the ChatGPT
+// conversation id, so the same conversation under another account name has a
+// different id — which is how a second spelling of the account name would quietly
+// store everything twice. Here the ids are worked out for each stored account.
+func existingAccounts(root string, convIDs []string) []ExistingAccount {
+	abs, err := filepath.Abs(root)
+	if err != nil || len(convIDs) == 0 {
+		return nil
+	}
+	entries, err := os.ReadDir(abs)
+	if err != nil {
+		return nil
+	}
+	var out []ExistingAccount
+	for _, e := range entries {
+		if !e.IsDir() || !accountDir.MatchString(e.Name()) {
+			continue
+		}
+		accountRoot := filepath.Join(abs, e.Name())
+		have := map[string]bool{}
+		manifests, _ := filepath.Glob(filepath.Join(accountRoot, "*", "manifest.json"))
+		for _, p := range manifests {
+			if strings.HasPrefix(filepath.Base(filepath.Dir(p)), ".stage-") {
+				continue
+			}
+			data, err := os.ReadFile(p)
+			var m manifest
+			if err != nil || json.Unmarshal(data, &m) != nil || m.Version != 1 {
+				continue
+			}
+			for _, entry := range m.Entries {
+				have[entry.ID] = true
+			}
+		}
+		overlap := 0
+		for _, id := range convIDs {
+			if have["gpt_"+digest(e.Name()+":"+id)] {
+				overlap++
+			}
+		}
+		if overlap == 0 {
+			continue
+		}
+		name, _ := canonicalAccount(accountRoot, "")
+		out = append(out, ExistingAccount{Name: name, Overlap: overlap, Missing: max(0, len(have)-overlap)})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Overlap != out[j].Overlap {
+			return out[i].Overlap > out[j].Overlap
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+// reclaim removes the batches of one account that no longer show anything: every
+// conversation in them has a copy elsewhere that List would show instead (newer,
+// or as new with its pictures, or imported later). Each export is stored whole, so
+// without this every re-import would leave the unchanged conversations behind one
+// more time. A batch is touched only when its manifest reads cleanly; only the
+// files that manifest names and the manifest itself are removed, and its folder
+// only if that leaves it empty — never a recursive delete. It reports how many
+// batches and bytes went; failures just leave the batch for next time.
+func reclaim(accountRoot string) (batches int, bytes int64) {
+	type batch struct {
+		dir string
+		m   manifest
+	}
+	manifests, _ := filepath.Glob(filepath.Join(accountRoot, "*", "manifest.json"))
+	var all []batch
+	winner := map[string]string{} // conversation id → the batch folder whose copy is shown
+	best := map[string]copyInfo{}
+	for _, p := range manifests {
+		dir := filepath.Dir(p)
+		if strings.HasPrefix(filepath.Base(dir), ".stage-") {
+			continue
+		}
+		data, err := os.ReadFile(p)
+		var m manifest
+		if err != nil || json.Unmarshal(data, &m) != nil || m.Version != 1 {
+			continue // never touch a batch that cannot be read
+		}
+		all = append(all, batch{dir, m})
+		for _, e := range m.Entries {
+			if !validID.MatchString(e.ID) {
+				continue
+			}
+			if info, err := os.Stat(filepath.Join(dir, e.ID+".jsonl")); err != nil || !info.Mode().IsRegular() {
+				continue // a copy that is gone shows nothing
+			}
+			c := copyInfo{updated: e.Updated, importedAt: m.ImportedAt, images: m.WithImages}
+			if prior, ok := best[e.ID]; !ok || c.beats(prior) {
+				best[e.ID], winner[e.ID] = c, dir
+			}
+		}
+	}
+	for _, b := range all {
+		shown := false
+		for _, e := range b.m.Entries {
+			if winner[e.ID] == b.dir {
+				shown = true
+				break
+			}
+		}
+		if shown {
+			continue
+		}
+		clean := true
+		for _, e := range b.m.Entries {
+			if !validID.MatchString(e.ID) {
+				continue
+			}
+			file := filepath.Join(b.dir, e.ID+".jsonl")
+			info, err := os.Lstat(file)
+			if err != nil {
+				continue
+			}
+			if !info.Mode().IsRegular() {
+				clean = false
+				continue
+			}
+			if os.Remove(file) == nil {
+				bytes += info.Size()
+			} else {
+				clean = false
+			}
+		}
+		if os.Remove(filepath.Join(b.dir, "manifest.json")) != nil {
+			clean = false
+		}
+		os.Remove(b.dir) // only if it is empty by now
+		if clean {
+			batches++
+		}
+	}
+	return batches, bytes
 }
 
 // ---- serving stored images to the reader ----

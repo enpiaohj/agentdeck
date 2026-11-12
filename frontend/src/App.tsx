@@ -40,7 +40,8 @@ import { WorkspaceStatus } from './components/WorkspaceStatus'
 import { ImportsView } from './components/ImportsView'
 import { DeleteSessionsDialog, DeletedSessionsNotice } from './components/DeleteSessionsDialog'
 import { useSessionDeletion } from './hooks/useSessionDeletion'
-import { deletedSessionKeys } from './sessionDeletion'
+import { deletedSessionKeys, setImportDeleteEnabled } from './sessionDeletion'
+import * as settingsService from '../bindings/github.com/enpiaohj/agentdeck/internal/app/settingsservice'
 import { navWidthRange, listWidthRange, infoWidthRange, paneWidthCss, readerWidthCss, rememberProject } from './preferences'
 import { usePaneResizer, readerMinWidth } from './hooks/usePaneResizer'
 import { PaneResizer } from './components/PaneResizer'
@@ -230,6 +231,8 @@ export function App() {
   const [projectDialog, setProjectDialog] = useState<{ agent?: string } | null>(null)
 
   // 设置里改了「侧栏 / 信息栏默认状态」立即生效；之后用户手动开合不受影响。
+  // 「允许删除导入的聊天记录」由后端持有；读入后，列表与详情里的删除按钮才知道要不要对导入的 ChatGPT 会话开放
+  useEffect(() => { void settingsService.ImportDeleteEnabled().then(setImportDeleteEnabled).catch(() => undefined) }, [])
   useEffect(() => { setCollapsed(preferences.navCollapsed || window.innerWidth < 900) }, [preferences.navCollapsed])
   useEffect(() => { setInfoOpen(preferences.infoPanel === 'open') }, [preferences.infoPanel])
 
