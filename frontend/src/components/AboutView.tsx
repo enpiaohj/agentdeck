@@ -1,4 +1,4 @@
-import { Browser } from '@wailsio/runtime'
+import { openExternal } from '../openExternal'
 import { useEffect, useState } from 'react'
 import * as updateService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/updateservice'
 import { matchesSetting } from '../settingsSearch'
@@ -9,7 +9,7 @@ const authorURL = 'https://github.com/enpiaohj'
 export const matchesAboutSettings = (query: string) => matchesSetting(query, '关于 版本 开发者 作者 源码仓库 GitHub 许可证 MIT 第三方 隐私 数据 遥测 网络 联网 AgentDeck')
 
 function Link({ href, children }: { href: string; children: string }) {
-  return <button className="ad-link" onClick={() => void Browser.OpenURL(href)}>{children}</button>
+  return <button className="ad-link" onClick={() => void openExternal(href)}>{children}</button>
 }
 
 // 关于页：只放事实——产品、版本、作者、仓库、许可证，以及联网行为。

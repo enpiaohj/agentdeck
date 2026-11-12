@@ -183,3 +183,26 @@ func TestChatGPTImagesImportAndExport(t *testing.T) {
 		t.Fatalf("assets 里应只有 1 个文件: %d", len(ents))
 	}
 }
+
+// 预览把本机 ChatGPT 桌面应用里的项目名当作命名建议（导出本身没有项目名）。
+func TestPreviewChatGPTSuggestsNamesFromDesktopApp(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CODEX_HOME", home)
+	state := `{"electron-persisted-atom-state":{"chatgpt-sidebar-state-v2":{"acct":{"projects":[{"id":"g-p-1234567890abcdef","name":"桌面应用里的名字"}]}}}}`
+	if err := os.WriteFile(filepath.Join(home, ".codex-global-state.json"), []byte(state), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a, _, _, _ := newTestApp(t)
+	source := filepath.Join(t.TempDir(), "conversations.json")
+	if err := os.WriteFile(source, []byte(chatgptShard), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pre, err := a.NewSessionService().PreviewChatGPT(source, "个人")
+	if err != nil || len(pre.Projects) != 1 || pre.Projects[0].Suggested != "桌面应用里的名字" || pre.Projects[0].Name != "" {
+		t.Fatalf("%+v %v", pre, err)
+	}
+	// 状态文件还是原样
+	if b, _ := os.ReadFile(filepath.Join(home, ".codex-global-state.json")); string(b) != state {
+		t.Fatal("状态文件被改动")
+	}
+}

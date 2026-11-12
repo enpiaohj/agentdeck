@@ -181,3 +181,30 @@ func TestSaveLeavesNoTempFile(t *testing.T) {
 		t.Fatalf("目录里残留了临时文件：%v", names)
 	}
 }
+
+// 浏览器取值：往返保存；形如 ID 才保留；空为系统默认；本版不认识的字段原样保留。
+func TestBrowserRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app-config.json")
+	cfg := Default()
+	cfg.Browser = "  MsEdge "
+	if err := SaveTo(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(path)
+	if !strings.Contains(string(raw), `"browser": "msedge"`) {
+		t.Fatalf("应保存归一化后的取值:\n%s", raw)
+	}
+	for in, want := range map[string]string{"chrome": "chrome", "": "", `C:\x\y.exe`: "", "a b": "", "../z": "", "QUARK": "quark"} {
+		if got := NormalizeBrowser(in); got != want {
+			t.Errorf("NormalizeBrowser(%q) = %q, want %q", in, got, want)
+		}
+	}
+	// 改回默认：键被去掉，而不是写成空串
+	cfg.Browser = ""
+	if err := SaveTo(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if raw, _ = os.ReadFile(path); strings.Contains(string(raw), "browser") {
+		t.Fatalf("默认浏览器不该留下 browser 键:\n%s", raw)
+	}
+}

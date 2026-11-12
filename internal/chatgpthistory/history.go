@@ -72,12 +72,26 @@ type Options struct {
 
 // ProjectInfo is a ChatGPT Project found in an export, for the user to name.
 type ProjectInfo struct {
-	ID            string   `json:"id"`
-	Name          string   `json:"name"`    // already chosen for this account, else ""
-	Default       string   `json:"default"` // what it is called until named
+	ID      string `json:"id"`
+	Name    string `json:"name"`    // already chosen for this account, else ""
+	Default string `json:"default"` // what it is called until named
+	// Suggested is the name the ChatGPT desktop app on this computer gives it
+	// (LocalProjectNames); the export itself carries no project names.
+	Suggested string `json:"suggested"`
+	// Files are names of files uploaded to the project (from the export's
+	// library_files.json): another way to recognise it, needing nothing but the export.
+	Files         []string `json:"files"`
 	Conversations int      `json:"conversations"`
 	Samples       []string `json:"samples"` // titles of the latest conversations, to recognise it by
+	// Recommended is a name worked out from the project's conversation titles and
+	// uploaded files (recommendName), RecommendedBasis says from which. A guess to
+	// be confirmed; "" when there is nothing to go on.
+	Recommended      string `json:"recommended"`
+	RecommendedBasis string `json:"recommended_basis"`
 }
+
+// maxTitlesPerProject bounds the titles kept per project to work a name out of.
+const maxTitlesPerProject = 500
 
 // PreviewResult is what an export holds, before anything is imported.
 type PreviewResult struct {
@@ -184,7 +198,10 @@ type shard struct {
 type exportSource struct {
 	shards []shard
 	assets map[string]*zip.File // member name without ".dat" → file
-	close  func()
+	// library is library_files.json: the files the user uploaded, among them the
+	// ones that belong to a Project (the only place the export names a project's files).
+	library *zip.File
+	close   func()
 }
 
 var shardName = regexp.MustCompile(`^conversations(-\d+)?\.json$`)
@@ -217,10 +234,15 @@ func openSource(source string) (*exportSource, error) {
 		}
 		var shards []shard
 		assets := map[string]*zip.File{}
+		var library *zip.File
 		for _, f := range zr.File {
 			base := path.Base(strings.ReplaceAll(f.Name, "\\", "/"))
 			if !f.FileInfo().IsDir() && strings.HasSuffix(base, ".dat") && !strings.Contains(strings.TrimSuffix(f.Name, base), "/") {
 				assets[strings.TrimSuffix(base, ".dat")] = f
+				continue
+			}
+			if base == "library_files.json" && f.Name == base && f.UncompressedSize64 <= 64<<20 {
+				library = f
 				continue
 			}
 			if f.FileInfo().IsDir() || !shardName.MatchString(base) {
@@ -238,7 +260,7 @@ func openSource(source string) (*exportSource, error) {
 			return nil, errors.New("在 ZIP 文件中找不到 conversations-*.json。请确认选择的是 ChatGPT 导出的数据包")
 		}
 		sort.Slice(shards, func(i, j int) bool { return shards[i].name < shards[j].name })
-		return &exportSource{shards: shards, assets: assets, close: func() { zr.Close() }}, nil
+		return &exportSource{shards: shards, assets: assets, library: library, close: func() { zr.Close() }}, nil
 	}
 	return nil, errors.New("仅支持 ChatGPT 导出的 ZIP 文件或 JSON 文件")
 }
@@ -271,6 +293,42 @@ func (e *exportSource) countImages(c conversation, seen map[string]bool) (n int,
 		}
 	}
 	return n, size
+}
+
+// projectFiles lists, per project id, the names of up to three files uploaded
+// to it (newest first), from library_files.json. Deleted files are left out.
+func (e *exportSource) projectFiles() map[string][]string {
+	out := map[string][]string{}
+	if e.library == nil {
+		return out
+	}
+	rc, err := e.library.Open()
+	if err != nil {
+		return out
+	}
+	defer rc.Close()
+	var entries []struct {
+		Name      string  `json:"file_name"`
+		Project   string  `json:"gizmo_id"`
+		Created   string  `json:"created_at"`
+		DeletedAt *string `json:"deleted_at"`
+		Visible   *bool   `json:"is_visible"`
+	}
+	if json.NewDecoder(io.LimitReader(rc, 64<<20)).Decode(&entries) != nil {
+		return out
+	}
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Created > entries[j].Created })
+	seen := map[string]bool{}
+	for _, f := range entries {
+		name := truncateRunes(oneLine(f.Name), 60)
+		key := f.Project + "\x00" + name
+		if !strings.HasPrefix(f.Project, "g-p-") || name == "" || f.DeletedAt != nil || (f.Visible != nil && !*f.Visible) || seen[key] || len(out[f.Project]) >= 3 {
+			continue
+		}
+		seen[key] = true
+		out[f.Project] = append(out[f.Project], name)
+	}
+	return out
 }
 
 // asset finds the file an asset pointer ("file-service://file-XXXX" or
@@ -973,6 +1031,7 @@ func Preview(root, source, account string) (PreviewResult, error) {
 	}
 	type seenProject struct {
 		count   int
+		titles  []string
 		samples []struct {
 			title string
 			at    float64
@@ -994,6 +1053,9 @@ func Preview(root, source, account string) (PreviewResult, error) {
 			byID[*c.Template] = p
 		}
 		p.count++
+		if t := strings.TrimSpace(c.Title); t != "" && len(p.titles) < maxTitlesPerProject {
+			p.titles = append(p.titles, t)
+		}
 		p.samples = append(p.samples, struct {
 			title string
 			at    float64
@@ -1007,14 +1069,20 @@ func Preview(root, source, account string) (PreviewResult, error) {
 	if err != nil {
 		return res, err
 	}
+	files := src.projectFiles()
 	for id, p := range byID {
 		sort.Slice(p.samples, func(i, j int) bool { return p.samples[i].at > p.samples[j].at })
-		info := ProjectInfo{ID: id, Name: names[id], Default: defaultName(id), Conversations: p.count}
+		info := ProjectInfo{ID: id, Name: names[id], Default: defaultName(id), Conversations: p.count, Files: files[id]}
 		for i := 0; i < len(p.samples) && i < 3; i++ {
 			if p.samples[i].title != "" {
 				info.Samples = append(info.Samples, p.samples[i].title)
 			}
 		}
+		latest := ""
+		if len(info.Samples) > 0 {
+			latest = info.Samples[0]
+		}
+		info.Recommended, info.RecommendedBasis = recommendName(p.titles, latest, info.Files)
 		res.Projects = append(res.Projects, info)
 	}
 	sort.Slice(res.Projects, func(i, j int) bool {

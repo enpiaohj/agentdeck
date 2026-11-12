@@ -6,6 +6,7 @@ import { matchesSetting, settingSearchKeywords } from '../settingsSearch'
 import { DiagnosticsView, type SettingsDataSection } from './DiagnosticsView'
 import { ReadingPreview } from './MessagePane'
 import { AgentSelect } from './AgentSelect'
+import { BrowserControl } from './BrowserControl'
 import { ResumeMaximizedControl, ResumeOpenModeControl, TerminalShellControl } from './TerminalShellControl'
 import { DesktopSettingsControl, matchesDesktopSettings } from './DesktopSettingsControl'
 import { UpdateControl, matchesUpdateSettings } from './UpdateControl'
@@ -38,6 +39,9 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
   const active = categories.find(item => item.id === category) ?? categories[0]
   const matches = (section: string, ...text: string[]) => q ? matchesSetting(q, ...text) : section === category
   const groups: SettingGroup[] = [
+    { id: 'links', category: 'general', title: '网页链接', rows: [
+      { key: 'browser', title: '打开网页链接的浏览器', description: '导入页的官方说明、ChatGPT 项目链接等网页会用它打开。请选择你登录了 ChatGPT 的浏览器；没有选择时使用系统默认浏览器。', control: id => <BrowserControl id={id} /> },
+    ] },
     { id: 'defaults', category: 'general', title: '新建会话', rows: [
       { key: 'defaultAgent', title: '默认智能体', description: '新建会话时优先使用项目配置，否则使用此选项。', control: id => <AgentSelect id={id} value={p.defaultAgent} onChange={agent => update({ defaultAgent: agent })} /> },
       { key: 'recentProjects', title: '最近使用的目录', description: p.recentProjects.length ? `已记录 ${p.recentProjects.length} 个目录，供新建会话时快速选择。` : '使用项目目录后，会在新建会话时提供快捷选择。', control: id => <Button id={id} size="small" disabled={!p.recentProjects.length} onClick={() => update({ recentProjects: [] })}>清除目录记录</Button> },

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -55,6 +56,10 @@ type Config struct {
 	// ResumeOpenMode 决定继续会话时是开新终端窗口还是在活动窗口里开新标签。
 	// 空串按 TerminalWindow 处理，与引入本设置之前的行为一致。
 	ResumeOpenMode string `json:"resume_open_mode,omitempty"`
+	// Browser 是打开网页链接所用的浏览器（internal/browsers 的浏览器 ID，如
+	// chrome、msedge）。空串表示系统默认浏览器。用户常在某个特定浏览器里登录
+	// 了 ChatGPT 等网站，而系统默认浏览器往往是别的，所以由用户指定。
+	Browser string `json:"browser,omitempty"`
 	// AutoCheckUpdates 控制启动后的后台检查更新。与上面两项相反，它默认
 	// 开启，因此旧配置缺少该字段时按 Default() 的取值保留，而不是 false。
 	AutoCheckUpdates bool `json:"auto_check_updates"`
@@ -80,6 +85,19 @@ func NormalizeOpenMode(value string) string {
 		return TerminalTab
 	}
 	return TerminalWindow
+}
+
+var browserID = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,39}$`)
+
+// NormalizeBrowser 把浏览器取值归一化：形如浏览器 ID（小写字母、数字、点、下划线、
+// 连字符）的原样保留，其余（含空串）回退为空，即系统默认浏览器。取值是否对应一个
+// 已安装的浏览器，在打开链接时才检测。
+func NormalizeBrowser(value string) string {
+	v := strings.ToLower(strings.TrimSpace(value))
+	if browserID.MatchString(v) {
+		return v
+	}
+	return ""
 }
 
 // NormalizeShell 把终端 shell 取值归一化：空串与无法识别的取值回退到
@@ -136,6 +154,7 @@ func LoadFrom(path string) (Config, error) {
 		"data_root":        &cfg.DataRoot,
 		"terminal_shell":   &cfg.TerminalShell,
 		"resume_open_mode": &cfg.ResumeOpenMode,
+		"browser":          &cfg.Browser,
 	} {
 		if value, ok := fields[key]; ok {
 			if err = json.Unmarshal(value, target); err != nil {
@@ -172,6 +191,7 @@ func LoadFrom(path string) (Config, error) {
 	cfg.DataRoot = strings.TrimSpace(cfg.DataRoot)
 	cfg.TerminalShell = NormalizeShell(cfg.TerminalShell)
 	cfg.ResumeOpenMode = NormalizeOpenMode(cfg.ResumeOpenMode)
+	cfg.Browser = NormalizeBrowser(cfg.Browser)
 	cfg.extra = fields
 	return cfg, nil
 }
@@ -210,6 +230,12 @@ func SaveTo(path string, cfg Config) error {
 	fields["resume_maximized"] = maximized
 	openMode, _ := json.Marshal(NormalizeOpenMode(cfg.ResumeOpenMode))
 	fields["resume_open_mode"] = openMode
+	if browser := NormalizeBrowser(cfg.Browser); browser != "" {
+		raw, _ := json.Marshal(browser)
+		fields["browser"] = raw
+	} else {
+		delete(fields, "browser")
+	}
 	if len(cfg.PreviousDirs) > 0 {
 		dirs := make([]string, 0, len(cfg.PreviousDirs))
 		for _, dir := range cfg.PreviousDirs {

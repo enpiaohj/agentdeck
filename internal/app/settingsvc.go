@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/enpiaohj/agentdeck/internal/appconfig"
+	"github.com/enpiaohj/agentdeck/internal/browsers"
 )
 
 // SettingsService 是应用级设置的门面。
@@ -220,4 +221,95 @@ func (s *SettingsService) saveResume(mutate func(*appconfig.Config)) (TerminalSh
 	a.settings = cfg
 	a.settingsMu.Unlock()
 	return s.TerminalShell(), nil
+}
+
+// ---- 打开网页链接所用的浏览器 ----
+
+func (a *App) detectBrowsers() []browsers.Browser {
+	if a.cfg.Browsers != nil {
+		return a.cfg.Browsers()
+	}
+	return browsers.Detect()
+}
+
+func (a *App) browserSetting() string {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+	return appconfig.NormalizeBrowser(a.settings.Browser)
+}
+
+// BrowserSettings 返回「打开网页链接的浏览器」设置的当前状态与本机检测到的浏览器。
+func (s *SettingsService) BrowserSettings() BrowserSettingsView {
+	list := s.a.detectBrowsers()
+	view := BrowserSettingsView{Setting: s.a.browserSetting(), Options: make([]BrowserOption, 0, len(list)), Name: "系统默认浏览器"}
+	for _, b := range list {
+		view.Options = append(view.Options, BrowserOption{ID: b.ID, Name: b.Name, Default: b.Default, Running: b.Running, ChatGPT: b.ChatGPT})
+		if b.Default {
+			view.Name = b.Name
+		}
+	}
+	if view.Setting != "" {
+		if b, ok := browsers.Find(list, view.Setting); ok {
+			view.Name = b.Name
+		} else {
+			view.Error = "已选择的浏览器在本机找不到了，链接会用系统默认浏览器（" + view.Name + "）打开。"
+		}
+	}
+	return view
+}
+
+// SetBrowser 保存打开网页链接所用的浏览器：空串为系统默认浏览器，否则必须是
+// 本机检测到的浏览器。配置读不出来时拒绝写入（理由同 saveTerminalShell）。
+func (s *SettingsService) SetBrowser(id string) (BrowserSettingsView, error) {
+	raw := strings.TrimSpace(id)
+	id = appconfig.NormalizeBrowser(raw)
+	if raw != "" && id == "" {
+		// 不是浏览器 ID 的取值不能悄悄当成「系统默认」存下来
+		return s.BrowserSettings(), errors.New("本机没有找到所选的浏览器")
+	}
+	if id != "" {
+		if _, ok := browsers.Find(s.a.detectBrowsers(), id); !ok {
+			return s.BrowserSettings(), errors.New("本机没有找到所选的浏览器")
+		}
+	}
+	a := s.a
+	a.settingsMu.Lock()
+	if a.settingsErr != nil {
+		a.settingsMu.Unlock()
+		return s.BrowserSettings(), fmt.Errorf("应用配置文件无法读取，未保存设置：%v", a.settingsErr)
+	}
+	cfg := a.settings
+	cfg.Browser = id
+	if err := appconfig.Save(cfg); err != nil {
+		a.settingsMu.Unlock()
+		return s.BrowserSettings(), fmt.Errorf("写入应用配置失败：%w", err)
+	}
+	a.settings = cfg
+	a.settingsMu.Unlock()
+	return s.BrowserSettings(), nil
+}
+
+// OpenLink 用设置里选的浏览器打开 link，返回是否已打开。没有选择、所选浏览器
+// 找不到或启动失败时返回 false（不报错），调用方改用系统默认浏览器——链接
+// 总该打得开，浏览器选错了不该让按钮失灵。只接受 http / https 链接。
+func (s *SettingsService) OpenLink(link string) (bool, error) {
+	if err := browsers.ValidURL(link); err != nil {
+		return false, err
+	}
+	id := s.a.browserSetting()
+	if id == "" {
+		return false, nil
+	}
+	b, ok := browsers.Find(s.a.detectBrowsers(), id)
+	if !ok {
+		return false, nil
+	}
+	launch := s.a.cfg.LaunchBrowser
+	if launch == nil {
+		launch = browsers.Launch
+	}
+	if err := launch(b.Path, link); err != nil {
+		return false, nil
+	}
+	return true, nil
 }

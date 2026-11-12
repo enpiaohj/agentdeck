@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/enpiaohj/agentdeck/internal/appconfig"
+	"github.com/enpiaohj/agentdeck/internal/browsers"
 	"github.com/enpiaohj/agentdeck/internal/chatgpthistory"
 	"github.com/enpiaohj/agentdeck/internal/claudecache"
 	"github.com/enpiaohj/agentdeck/internal/claudehistory"
@@ -50,6 +51,10 @@ type Config struct {
 	Clipboard func(text string) error
 	// Runner 启动外部进程（恢复终端）；nil 时用 exec.Command.Start。
 	Runner func(name string, args ...string) error
+	// Browsers 列出本机浏览器；LaunchBrowser 用指定浏览器打开链接。nil 时用真实实现，
+	// 测试注入替身，免得扫描本机或真的拉起浏览器。
+	Browsers      func() []browsers.Browser
+	LaunchBrowser func(exe, link string) error
 	// TerminalShell 是打开终端时使用的 PowerShell 可执行文件：全文取值见
 	// appconfig（powershell / auto / pwsh 或自定义绝对路径）；空用应用配置。
 	TerminalShell string

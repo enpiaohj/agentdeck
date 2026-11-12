@@ -18,11 +18,20 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 import * as $models from "./models.js";
 
 /**
+ * BrowserSettings 返回「打开网页链接的浏览器」设置的当前状态与本机检测到的浏览器。
+ */
+export function BrowserSettings(): $CancellablePromise<$models.BrowserSettingsView> {
+    return $Call.ByID(60732800).then(($result: any) => {
+        return $$createType0($result);
+    });
+}
+
+/**
  * CleanupOld 按预览删除旧位置的数据；token 必须是同一次预览的结果。
  */
 export function CleanupOld(token: string): $CancellablePromise<$models.CleanupReport> {
     return $Call.ByID(283169458, token).then(($result: any) => {
-        return $$createType0($result);
+        return $$createType1($result);
     });
 }
 
@@ -31,7 +40,7 @@ export function CleanupOld(token: string): $CancellablePromise<$models.CleanupRe
  */
 export function CleanupPreview(): $CancellablePromise<$models.CleanupPlan> {
     return $Call.ByID(2751734091).then(($result: any) => {
-        return $$createType1($result);
+        return $$createType2($result);
     });
 }
 
@@ -40,7 +49,7 @@ export function CleanupPreview(): $CancellablePromise<$models.CleanupPlan> {
  */
 export function Desktop(): $CancellablePromise<$models.DesktopOptions> {
     return $Call.ByID(3514621213).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType3($result);
     });
 }
 
@@ -55,8 +64,17 @@ export function Desktop(): $CancellablePromise<$models.DesktopOptions> {
  */
 export function Migrate(picked: string): $CancellablePromise<$models.MigrateReport> {
     return $Call.ByID(434712964, picked).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType4($result);
     });
+}
+
+/**
+ * OpenLink 用设置里选的浏览器打开 link，返回是否已打开。没有选择、所选浏览器
+ * 找不到或启动失败时返回 false（不报错），调用方改用系统默认浏览器——链接
+ * 总该打得开，浏览器选错了不该让按钮失灵。只接受 http / https 链接。
+ */
+export function OpenLink(link: string): $CancellablePromise<boolean> {
+    return $Call.ByID(1690275199, link);
 }
 
 /**
@@ -77,7 +95,7 @@ export function ResetRoot(): $CancellablePromise<void> {
  */
 export function ResolveDestination(picked: string): $CancellablePromise<$models.DestinationView> {
     return $Call.ByID(432786299, picked).then(($result: any) => {
-        return $$createType4($result);
+        return $$createType5($result);
     });
 }
 
@@ -90,11 +108,21 @@ export function Restart(): $CancellablePromise<void> {
 }
 
 /**
+ * SetBrowser 保存打开网页链接所用的浏览器：空串为系统默认浏览器，否则必须是
+ * 本机检测到的浏览器。配置读不出来时拒绝写入（理由同 saveTerminalShell）。
+ */
+export function SetBrowser(id: string): $CancellablePromise<$models.BrowserSettingsView> {
+    return $Call.ByID(2501978647, id).then(($result: any) => {
+        return $$createType0($result);
+    });
+}
+
+/**
  * SetCloseToTray 持久化关闭窗口行为，保存成功后立即对本次运行生效。
  */
 export function SetCloseToTray(enabled: boolean): $CancellablePromise<$models.DesktopOptions> {
     return $Call.ByID(3564853082, enabled).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType3($result);
     });
 }
 
@@ -106,7 +134,7 @@ export function SetCloseToTray(enabled: boolean): $CancellablePromise<$models.De
  */
 export function SetResumeMaximized(value: boolean): $CancellablePromise<$models.TerminalShellView> {
     return $Call.ByID(1913434964, value).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType6($result);
     });
 }
 
@@ -119,7 +147,7 @@ export function SetResumeMaximized(value: boolean): $CancellablePromise<$models.
  */
 export function SetResumeOpenMode(value: string): $CancellablePromise<$models.TerminalShellView> {
     return $Call.ByID(2532099537, value).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType6($result);
     });
 }
 
@@ -129,7 +157,7 @@ export function SetResumeOpenMode(value: string): $CancellablePromise<$models.Te
  */
 export function SetStartAtLogin(enabled: boolean): $CancellablePromise<$models.DesktopOptions> {
     return $Call.ByID(388123143, enabled).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType3($result);
     });
 }
 
@@ -142,7 +170,7 @@ export function SetStartAtLogin(enabled: boolean): $CancellablePromise<$models.D
  */
 export function SetTerminalShell(value: string): $CancellablePromise<$models.TerminalShellView> {
     return $Call.ByID(3306319109, value).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType6($result);
     });
 }
 
@@ -151,7 +179,7 @@ export function SetTerminalShell(value: string): $CancellablePromise<$models.Ter
  */
 export function Storage(): $CancellablePromise<$models.StorageView> {
     return $Call.ByID(1443616652).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType7($result);
     });
 }
 
@@ -160,15 +188,16 @@ export function Storage(): $CancellablePromise<$models.StorageView> {
  */
 export function TerminalShell(): $CancellablePromise<$models.TerminalShellView> {
     return $Call.ByID(3736505951).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType6($result);
     });
 }
 
 // Private type creation functions
-const $$createType0 = $models.CleanupReport.createFrom;
-const $$createType1 = $models.CleanupPlan.createFrom;
-const $$createType2 = $models.DesktopOptions.createFrom;
-const $$createType3 = $models.MigrateReport.createFrom;
-const $$createType4 = $models.DestinationView.createFrom;
-const $$createType5 = $models.TerminalShellView.createFrom;
-const $$createType6 = $models.StorageView.createFrom;
+const $$createType0 = $models.BrowserSettingsView.createFrom;
+const $$createType1 = $models.CleanupReport.createFrom;
+const $$createType2 = $models.CleanupPlan.createFrom;
+const $$createType3 = $models.DesktopOptions.createFrom;
+const $$createType4 = $models.MigrateReport.createFrom;
+const $$createType5 = $models.DestinationView.createFrom;
+const $$createType6 = $models.TerminalShellView.createFrom;
+const $$createType7 = $models.StorageView.createFrom;

@@ -74,6 +74,107 @@ export class BackupInfo {
     }
 }
 
+/**
+ * BrowserOption 是一个可选的浏览器。
+ */
+export class BrowserOption {
+    "id": string;
+    "name": string;
+
+    /**
+     * Default 为系统默认浏览器；Running 为有窗口在运行；ChatGPT 为某个窗口的标题里
+     * 有 ChatGPT（提示它可能登录了 ChatGPT；只能看到每个窗口当前的标签页，所以
+     * 为假不说明什么）。
+     */
+    "default": boolean;
+    "running": boolean;
+    "chatgpt": boolean;
+
+    /** Creates a new BrowserOption instance. */
+    constructor($$source: Partial<BrowserOption> = {}) {
+        if (!("id" in $$source)) {
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("default" in $$source)) {
+            this["default"] = false;
+        }
+        if (!("running" in $$source)) {
+            this["running"] = false;
+        }
+        if (!("chatgpt" in $$source)) {
+            this["chatgpt"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new BrowserOption instance from a string or object.
+     */
+    static createFrom($$source: any = {}): BrowserOption {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new BrowserOption($$parsedSource as Partial<BrowserOption>);
+    }
+}
+
+/**
+ * BrowserSettingsView 是「打开网页链接的浏览器」设置的当前状态。
+ */
+export class BrowserSettingsView {
+    /**
+     * 已保存的浏览器 ID；空为系统默认
+     */
+    "setting": string;
+
+    /**
+     * 本机检测到的浏览器
+     */
+    "options": BrowserOption[];
+
+    /**
+     * Name 是链接实际会用的浏览器的名字：已保存且仍然存在的那个，否则是系统默认浏览器。
+     */
+    "name": string;
+
+    /**
+     * Error 非空：已保存的浏览器在本机找不到了，链接改用系统默认浏览器。
+     */
+    "error": string;
+
+    /** Creates a new BrowserSettingsView instance. */
+    constructor($$source: Partial<BrowserSettingsView> = {}) {
+        if (!("setting" in $$source)) {
+            this["setting"] = "";
+        }
+        if (!("options" in $$source)) {
+            this["options"] = [];
+        }
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("error" in $$source)) {
+            this["error"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new BrowserSettingsView instance from a string or object.
+     */
+    static createFrom($$source: any = {}): BrowserSettingsView {
+        const $$createField1_0 = $$createType1;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("options" in $$parsedSource) {
+            $$parsedSource["options"] = $$createField1_0($$parsedSource["options"]);
+        }
+        return new BrowserSettingsView($$parsedSource as Partial<BrowserSettingsView>);
+    }
+}
+
 export class ChatGPTImportReport {
     "conversations": number;
     "projects": number;
@@ -151,7 +252,7 @@ export class ChatGPTPreview {
      * Creates a new ChatGPTPreview instance from a string or object.
      */
     static createFrom($$source: any = {}): ChatGPTPreview {
-        const $$createField1_0 = $$createType1;
+        const $$createField1_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("projects" in $$parsedSource) {
             $$parsedSource["projects"] = $$createField1_0($$parsedSource["projects"]);
@@ -169,6 +270,22 @@ export class ChatGPTProject {
     "id": string;
     "name": string;
     "default": string;
+
+    /**
+     * 本机 ChatGPT 桌面应用里该项目的名字，没有则为空
+     */
+    "suggested": string;
+
+    /**
+     * 项目里上传的文件名（取自导出的 library_files.json），帮助认出项目
+     */
+    "files": string[];
+
+    /**
+     * 推荐名：由会话标题与上传的文件名推测，依据见 RecommendedBasis（titles / file / latest）；只是建议，需用户确认
+     */
+    "recommended": string;
+    "recommended_basis": string;
     "conversations": number;
     "samples": string[];
 
@@ -182,6 +299,18 @@ export class ChatGPTProject {
         }
         if (!("default" in $$source)) {
             this["default"] = "";
+        }
+        if (!("suggested" in $$source)) {
+            this["suggested"] = "";
+        }
+        if (!("files" in $$source)) {
+            this["files"] = [];
+        }
+        if (!("recommended" in $$source)) {
+            this["recommended"] = "";
+        }
+        if (!("recommended_basis" in $$source)) {
+            this["recommended_basis"] = "";
         }
         if (!("conversations" in $$source)) {
             this["conversations"] = 0;
@@ -197,10 +326,14 @@ export class ChatGPTProject {
      * Creates a new ChatGPTProject instance from a string or object.
      */
     static createFrom($$source: any = {}): ChatGPTProject {
-        const $$createField4_0 = $$createType2;
+        const $$createField4_0 = $$createType4;
+        const $$createField8_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("files" in $$parsedSource) {
+            $$parsedSource["files"] = $$createField4_0($$parsedSource["files"]);
+        }
         if ("samples" in $$parsedSource) {
-            $$parsedSource["samples"] = $$createField4_0($$parsedSource["samples"]);
+            $$parsedSource["samples"] = $$createField8_0($$parsedSource["samples"]);
         }
         return new ChatGPTProject($$parsedSource as Partial<ChatGPTProject>);
     }
@@ -279,8 +412,8 @@ export class CleanupPlan {
      * Creates a new CleanupPlan instance from a string or object.
      */
     static createFrom($$source: any = {}): CleanupPlan {
-        const $$createField1_0 = $$createType2;
-        const $$createField4_0 = $$createType2;
+        const $$createField1_0 = $$createType4;
+        const $$createField4_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("dirs" in $$parsedSource) {
             $$parsedSource["dirs"] = $$createField1_0($$parsedSource["dirs"]);
@@ -436,8 +569,8 @@ export class DeletePreview {
      * Creates a new DeletePreview instance from a string or object.
      */
     static createFrom($$source: any = {}): DeletePreview {
-        const $$createField5_0 = $$createType2;
-        const $$createField6_0 = $$createType2;
+        const $$createField5_0 = $$createType4;
+        const $$createField6_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("titles" in $$parsedSource) {
             $$parsedSource["titles"] = $$createField5_0($$parsedSource["titles"]);
@@ -477,7 +610,7 @@ export class DeleteReport {
      * Creates a new DeleteReport instance from a string or object.
      */
     static createFrom($$source: any = {}): DeleteReport {
-        const $$createField0_0 = $$createType2;
+        const $$createField0_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("deleted_keys" in $$parsedSource) {
             $$parsedSource["deleted_keys"] = $$createField0_0($$parsedSource["deleted_keys"]);
@@ -726,7 +859,7 @@ export class Filter {
      * Creates a new Filter instance from a string or object.
      */
     static createFrom($$source: any = {}): Filter {
-        const $$createField1_0 = $$createType2;
+        const $$createField1_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("agents" in $$parsedSource) {
             $$parsedSource["agents"] = $$createField1_0($$parsedSource["agents"]);
@@ -927,7 +1060,7 @@ export class Mark {
      * Creates a new Mark instance from a string or object.
      */
     static createFrom($$source: any = {}): Mark {
-        const $$createField3_0 = $$createType2;
+        const $$createField3_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tags" in $$parsedSource) {
             $$parsedSource["tags"] = $$createField3_0($$parsedSource["tags"]);
@@ -971,7 +1104,7 @@ export class MigrateReport {
      * Creates a new MigrateReport instance from a string or object.
      */
     static createFrom($$source: any = {}): MigrateReport {
-        const $$createField3_0 = $$createType2;
+        const $$createField3_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("skipped" in $$parsedSource) {
             $$parsedSource["skipped"] = $$createField3_0($$parsedSource["skipped"]);
@@ -1349,7 +1482,7 @@ export class SearchReply {
      * Creates a new SearchReply instance from a string or object.
      */
     static createFrom($$source: any = {}): SearchReply {
-        const $$createField2_0 = $$createType4;
+        const $$createField2_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("hits" in $$parsedSource) {
             $$parsedSource["hits"] = $$createField2_0($$parsedSource["hits"]);
@@ -1525,7 +1658,7 @@ export class SessionView {
      * Creates a new SessionView instance from a string or object.
      */
     static createFrom($$source: any = {}): SessionView {
-        const $$createField24_0 = $$createType2;
+        const $$createField24_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tags" in $$parsedSource) {
             $$parsedSource["tags"] = $$createField24_0($$parsedSource["tags"]);
@@ -1718,9 +1851,9 @@ export class StorageView {
      * Creates a new StorageView instance from a string or object.
      */
     static createFrom($$source: any = {}): StorageView {
-        const $$createField8_0 = $$createType6;
-        const $$createField11_0 = $$createType2;
-        const $$createField13_0 = $$createType6;
+        const $$createField8_0 = $$createType8;
+        const $$createField11_0 = $$createType4;
+        const $$createField13_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("items" in $$parsedSource) {
             $$parsedSource["items"] = $$createField8_0($$parsedSource["items"]);
@@ -1850,7 +1983,7 @@ export class TerminalShellView {
      * Creates a new TerminalShellView instance from a string or object.
      */
     static createFrom($$source: any = {}): TerminalShellView {
-        const $$createField4_0 = $$createType8;
+        const $$createField4_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("options" in $$parsedSource) {
             $$parsedSource["options"] = $$createField4_0($$parsedSource["options"]);
@@ -1959,8 +2092,8 @@ export class TranscriptView {
      * Creates a new TranscriptView instance from a string or object.
      */
     static createFrom($$source: any = {}): TranscriptView {
-        const $$createField7_0 = $$createType10;
-        const $$createField9_0 = $$createType12;
+        const $$createField7_0 = $$createType12;
+        const $$createField9_0 = $$createType14;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("parts" in $$parsedSource) {
             $$parsedSource["parts"] = $$createField7_0($$parsedSource["parts"]);
@@ -2156,16 +2289,18 @@ export class UpdateView {
 }
 
 // Private type creation functions
-const $$createType0 = ChatGPTProject.createFrom;
+const $$createType0 = BrowserOption.createFrom;
 const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = $Create.Array($Create.Any);
-const $$createType3 = SearchHitView.createFrom;
-const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = StorageItem.createFrom;
+const $$createType2 = ChatGPTProject.createFrom;
+const $$createType3 = $Create.Array($$createType2);
+const $$createType4 = $Create.Array($Create.Any);
+const $$createType5 = SearchHitView.createFrom;
 const $$createType6 = $Create.Array($$createType5);
-const $$createType7 = TerminalShellOption.createFrom;
+const $$createType7 = StorageItem.createFrom;
 const $$createType8 = $Create.Array($$createType7);
-const $$createType9 = TranscriptPart.createFrom;
+const $$createType9 = TerminalShellOption.createFrom;
 const $$createType10 = $Create.Array($$createType9);
-const $$createType11 = PromptMark.createFrom;
+const $$createType11 = TranscriptPart.createFrom;
 const $$createType12 = $Create.Array($$createType11);
+const $$createType13 = PromptMark.createFrom;
+const $$createType14 = $Create.Array($$createType13);

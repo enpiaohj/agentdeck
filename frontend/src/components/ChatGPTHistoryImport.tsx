@@ -1,8 +1,9 @@
-import { Button, Checkbox, Input, Spinner, Text, makeStyles, tokens } from '@fluentui/react-components'
+import { Button, Checkbox, Input, Spinner, Text, Tooltip, makeStyles, tokens } from '@fluentui/react-components'
 import { ArrowUploadRegular, DocumentTextRegular, OpenRegular, PersonRegular } from '@fluentui/react-icons'
-import { Browser } from '@wailsio/runtime'
-import { useState } from 'react'
+import { openExternal } from '../openExternal'
+import { useEffect, useState } from 'react'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
+import * as settingsService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/settingsservice'
 import type { ChatGPTImportReport, ChatGPTPreview } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import { fmtBytes } from '../format'
 import { pickOpenPath } from '../nativeDialogs'
@@ -21,9 +22,21 @@ const useStyles = makeStyles({
   fileName: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '13px' },
   note: { fontSize: '12px', lineHeight: 1.8, color: tokens.colorNeutralForeground3 },
   footer: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '14px', flexWrap: 'wrap' },
+  projectName: { display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 },
+  projectActions: { display: 'flex', flexWrap: 'wrap', gap: '2px', marginLeft: '-6px' },
   project: { display: 'grid', gridTemplateColumns: 'minmax(180px, 260px) 1fr', gap: '12px', alignItems: 'start', padding: '10px 0', borderTop: `1px solid ${tokens.colorNeutralStroke2}` },
   samples: { fontSize: '12px', lineHeight: 1.6, color: tokens.colorNeutralForeground3, minWidth: 0, overflowWrap: 'anywhere' },
 })
+
+// 推荐名的依据，显示在推荐按钮的悬停说明里
+const BASIS: Record<string, string> = {
+  titles: '根据该项目会话标题中反复出现的词推测',
+  file: '取自该项目上传的文件名',
+  latest: '取自该项目最近一个会话的标题',
+}
+
+// 项目首页：浏览器里登录后会跳转到带项目名的地址，页面上也直接显示项目名
+const projectPage = (id: string) => /^g-p-[0-9a-f]{32}$/i.test(id) ? `https://chatgpt.com/g/${id}/project` : ''
 
 /**
  * 导入 ChatGPT 官方数据导出。导出文件里没有项目名，只有项目 ID，所以读完导出文件后
@@ -41,6 +54,9 @@ export function ChatGPTHistoryImport({ onImported }: { onImported: (report: Chat
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  // 链接会用设置里选的浏览器打开；这里只取名字，用于说明
+  const [browserName, setBrowserName] = useState('系统默认浏览器')
+  useEffect(() => { void settingsService.BrowserSettings().then(view => setBrowserName(view.name)).catch(() => undefined) }, [])
 
   const choose = async () => {
     try {
@@ -55,10 +71,20 @@ export function ChatGPTHistoryImport({ onImported }: { onImported: (report: Chat
         // 先填写账号名时，已为该账号命名的项目会一并带回
         const result = await sessionService.PreviewChatGPT(selected, account.trim())
         setPreview(result)
-        setNames(Object.fromEntries(result.projects.map(p => [p.id, p.name])))
+        // 已命名的优先；否则用本机 ChatGPT 桌面应用里的项目名（可改）；都没有则留空
+        setNames(Object.fromEntries(result.projects.map(p => [p.id, p.name || p.suggested])))
       } finally { setReading(false) }
     } catch (reason) { setError(String(reason).slice(0, 400)) }
   }
+
+  const openProject = async (id: string) => {
+    const page = projectPage(id)
+    if (!page) return
+    try { await openExternal(page) } catch (reason) { setError(`无法打开项目页面：${String(reason)}`.slice(0, 300)) }
+  }
+  const empty = (id: string) => !(names[id] ?? '').trim()
+  const useRecommended = (id: string, name: string) => setNames(prev => ({ ...prev, [id]: name }))
+  const useAllRecommended = () => setNames(prev => ({ ...prev, ...Object.fromEntries((preview?.projects ?? []).filter(p => p.recommended && !(prev[p.id] ?? '').trim()).map(p => [p.id, p.recommended])) }))
 
   const run = async () => {
     if (busy || !file || !preview || !account.trim()) return
@@ -86,7 +112,7 @@ export function ChatGPTHistoryImport({ onImported }: { onImported: (report: Chat
         <div className={styles.field}>
           <Text weight="semibold">1. 从 ChatGPT 导出数据</Text>
           <div className={styles.description}>在 ChatGPT 网页版中，依次选择“设置”&gt;“数据控制”&gt;“导出数据”，确认后等待电子邮件，然后下载其中的 ZIP 文件。导出内容包含整个账号的数据，其中有项目中的会话。</div>
-          <Button appearance="subtle" icon={<OpenRegular />} style={{ alignSelf: 'flex-start' }} onClick={() => Browser.OpenURL(exportHelp).catch(reason => setError(String(reason)))}>查看官方导出说明</Button>
+          <Button appearance="subtle" icon={<OpenRegular />} style={{ alignSelf: 'flex-start' }} onClick={() => openExternal(exportHelp).catch(reason => setError(String(reason)))}>查看官方导出说明</Button>
         </div>
         <div className={styles.field}>
           <label className={styles.label} htmlFor="chatgpt-import-account">2. 设置账号名称</label>
@@ -108,14 +134,28 @@ export function ChatGPTHistoryImport({ onImported }: { onImported: (report: Chat
         </div>
         {preview && preview.projects.length > 0 ? <div className={styles.field}>
           <Text weight="semibold">4. 命名项目（可选）</Text>
-          <div className={styles.note}>导出文件中没有项目名，只有编号。右侧列出各项目中最近的会话标题，可据此识别项目。留空则使用默认名称；之后可随时重命名，无需重新导入。</div>
+          <div className={styles.note}>{preview.projects.some(p => p.suggested)
+            ? `导出文件中没有项目名。已从本机的 ChatGPT 桌面应用读取到 ${preview.projects.filter(p => p.suggested).length} 个项目的名称并填入，你可以直接使用或修改。`
+            : '导出文件中没有项目名，只有编号。'}右侧列出各项目中最近的会话标题和上传的文件名，可据此识别项目。没有现成的名称时，会根据会话标题和上传的文件名给出“推荐名”，只是推测，请确认后再使用。也可以点“在 ChatGPT 中打开”，用 {browserName} 打开项目页面查看名称（可在“设置”&gt;“常规”中更改浏览器）。留空则使用默认名称；之后可随时重命名，无需重新导入。</div>
+          {preview.projects.some(p => p.recommended && empty(p.id)) ? <Button size="small" appearance="secondary" style={{ alignSelf: 'flex-start' }} disabled={busy} onClick={useAllRecommended}>全部使用推荐名</Button> : null}
           <div>
             {preview.projects.map(project => <div key={project.id} className={styles.project}>
-              <Input aria-label={`项目名（${project.conversations} 个会话）`} value={names[project.id] ?? ''} maxLength={60} disabled={busy} placeholder={project.default}
-                onChange={(_, data) => setNames(prev => ({ ...prev, [project.id]: data.value }))} />
+              <div className={styles.projectName}>
+                <Input aria-label={`项目名（${project.conversations} 个会话）`} value={names[project.id] ?? ''} maxLength={60} disabled={busy} placeholder={project.default}
+                  onChange={(_, data) => setNames(prev => ({ ...prev, [project.id]: data.value }))} />
+                <div className={styles.projectActions}>
+                  {project.recommended && empty(project.id) ? <Tooltip content={`${BASIS[project.recommended_basis] ?? '推测的名称'}，仅供参考`} relationship="description">
+                    <Button size="small" appearance="subtle" disabled={busy} onClick={() => useRecommended(project.id, project.recommended)}>使用推荐名：{project.recommended}</Button>
+                  </Tooltip> : null}
+                  <Tooltip content={`用 ${browserName} 打开该项目的页面，页面上会显示项目名`} relationship="description">
+                    <Button size="small" appearance="subtle" icon={<OpenRegular />} disabled={busy || !projectPage(project.id)} onClick={() => void openProject(project.id)}>在 ChatGPT 中打开</Button>
+                  </Tooltip>
+                </div>
+              </div>
               <div className={styles.samples}>
                 <div>{project.conversations} 个会话</div>
                 {project.samples.map((title, index) => <div key={index}>· {title}</div>)}
+                {project.files.length ? <div>项目文件：{project.files.join('、')}</div> : null}
               </div>
             </div>)}
           </div>

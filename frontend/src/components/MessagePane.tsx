@@ -40,7 +40,7 @@ import {
   TextBulletListLtrRegular,
 } from '@fluentui/react-icons'
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Browser } from '@wailsio/runtime'
+import { openExternal } from '../openExternal'
 import type { SessionView, TranscriptView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import { resumeInOtherDirectory, resumeWithLocation } from './ProjectLocationDialog'
@@ -771,7 +771,7 @@ function MarkdownContent({ text, styles, theme, reveal, revealToken }: { text: s
   const [error, setError] = useState('')
   useEffect(() => setError(''), [text])
   const rendered = useMemo(() => <Markdown remarkPlugins={markdownPlugins} components={markdownComponents}>{text}</Markdown>, [text])
-  return <MarkdownContext.Provider value={{ styles, theme, reveal, revealToken, openLink: url => { void Browser.OpenURL(url).catch(reason => setError(`链接打开失败：${String(reason).slice(0, 160)}`)) } }}>
+  return <MarkdownContext.Provider value={{ styles, theme, reveal, revealToken, openLink: url => { void openExternal(url).catch(reason => setError(`链接打开失败：${String(reason).slice(0, 160)}`)) } }}>
     <div className="ad-markdown">{rendered}</div>
     {error ? <Text size={200} role="alert" style={{ color: tokens.colorPaletteRedForeground1 }}>{error}</Text> : null}
   </MarkdownContext.Provider>

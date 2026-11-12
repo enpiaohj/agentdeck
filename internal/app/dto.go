@@ -48,11 +48,16 @@ type ClaudeImportReport struct {
 // 只有 g-p- 开头的 id，所以由用户起名；Samples 是该项目最近几个会话的标题，
 // 帮用户认出它是哪一个。
 type ChatGPTProject struct {
-	ID            string   `json:"id"`
-	Name          string   `json:"name"`
-	Default       string   `json:"default"`
-	Conversations int      `json:"conversations"`
-	Samples       []string `json:"samples"`
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
+	Default   string   `json:"default"`
+	Suggested string   `json:"suggested"` // 本机 ChatGPT 桌面应用里该项目的名字，没有则为空
+	Files     []string `json:"files"`     // 项目里上传的文件名（取自导出的 library_files.json），帮助认出项目
+	// 推荐名：由会话标题与上传的文件名推测，依据见 RecommendedBasis（titles / file / latest）；只是建议，需用户确认
+	Recommended      string   `json:"recommended"`
+	RecommendedBasis string   `json:"recommended_basis"`
+	Conversations    int      `json:"conversations"`
+	Samples          []string `json:"samples"`
 }
 
 type ChatGPTPreview struct {
@@ -175,6 +180,28 @@ type TerminalShellOption struct {
 	Exe     string `json:"exe"`     // 解析出的可执行文件；空 = 未找到
 	Version string `json:"version"` // 自报版本；空 = 未探测到
 	Error   string `json:"error"`   // 不可用原因；空 = 可用
+}
+
+// BrowserOption 是一个可选的浏览器。
+type BrowserOption struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Default 为系统默认浏览器；Running 为有窗口在运行；ChatGPT 为某个窗口的标题里
+	// 有 ChatGPT（提示它可能登录了 ChatGPT；只能看到每个窗口当前的标签页，所以
+	// 为假不说明什么）。
+	Default bool `json:"default"`
+	Running bool `json:"running"`
+	ChatGPT bool `json:"chatgpt"`
+}
+
+// BrowserSettingsView 是「打开网页链接的浏览器」设置的当前状态。
+type BrowserSettingsView struct {
+	Setting string          `json:"setting"` // 已保存的浏览器 ID；空为系统默认
+	Options []BrowserOption `json:"options"` // 本机检测到的浏览器
+	// Name 是链接实际会用的浏览器的名字：已保存且仍然存在的那个，否则是系统默认浏览器。
+	Name string `json:"name"`
+	// Error 非空：已保存的浏览器在本机找不到了，链接改用系统默认浏览器。
+	Error string `json:"error"`
 }
 
 // TerminalShellView 是终端 shell 设置的当前状态：当前取值、它解析出的

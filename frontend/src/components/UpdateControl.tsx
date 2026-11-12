@@ -1,6 +1,7 @@
 import { Button, ProgressBar, Spinner } from '@fluentui/react-components'
 import { ArrowDownloadRegular, ArrowSyncRegular, CheckmarkCircleFilled, DismissRegular, ErrorCircleFilled, FolderOpenRegular, InfoFilled, OpenRegular, ArrowCircleDownFilled } from '@fluentui/react-icons'
-import { Browser, Events } from '@wailsio/runtime'
+import { Events } from '@wailsio/runtime'
+import { openExternal } from '../openExternal'
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import * as updateService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/updateservice'
 import type { UpdateView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
@@ -105,9 +106,9 @@ export function UpdateControl({ id }: { id: string }) {
           {stage === 'available' && installable ? <Button id={`${id}-download`} size="small" appearance="primary" icon={<ArrowDownloadRegular />}
             disabled={!view?.downloadable} onClick={() => void settings.download()}>下载并更新</Button> : null}
           {stage === 'noAsset' && releasePage ? <Button size="small" appearance="primary" icon={<OpenRegular />}
-            onClick={() => void Browser.OpenURL(releasePage)}>到发布页查看</Button> : null}
+            onClick={() => void openExternal(releasePage)}>到发布页查看</Button> : null}
           {stage === 'available' && !installable && releasePage ? <Button size="small" appearance="primary" icon={<OpenRegular />}
-            onClick={() => void Browser.OpenURL(releasePage)}>到发布页下载</Button> : null}
+            onClick={() => void openExternal(releasePage)}>到发布页下载</Button> : null}
           {stage === 'downloading' ? <Button id={`${id}-cancel`} size="small" appearance="subtle" icon={<DismissRegular />}
             onClick={() => void settings.cancelDownload()}>取消下载</Button> : null}
           {stage === 'ready' ? <>
@@ -126,7 +127,7 @@ export function UpdateControl({ id }: { id: string }) {
         <div><dt>最新版本</dt><dd>{latestVersion || '—'}{publishedAt && latestVersion ? <span className="ad-info-sub">发布于 {publishedAt}</span> : null}</dd></div>
         <div><dt>上次检查</dt><dd>{checkedAt || '尚未检查'}</dd></div>
         <div><dt>更新方式</dt><dd>{method}</dd></div>
-        {releasePage ? <div><dt>发布页</dt><dd><button className="ad-link" onClick={() => void Browser.OpenURL(releasePage)}>{releasePage}</button></dd></div> : null}
+        {releasePage ? <div><dt>发布页</dt><dd><button className="ad-link" onClick={() => void openExternal(releasePage)}>{releasePage}</button></dd></div> : null}
         {stage === 'ready' && view?.target_path ? <div><dt>写入位置</dt><dd className="ad-info-path">{view.target_path}</dd></div> : null}
       </dl>
 

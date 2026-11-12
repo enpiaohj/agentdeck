@@ -1,6 +1,6 @@
 import { Button, Input, Spinner, Text, makeStyles, tokens } from '@fluentui/react-components'
 import { ArrowUploadRegular, DocumentTextRegular, PersonRegular, OpenRegular } from '@fluentui/react-icons'
-import { Browser } from '@wailsio/runtime'
+import { openExternal } from '../openExternal'
 import { useState } from 'react'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import type { ClaudeImportReport } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
@@ -65,7 +65,7 @@ export function ClaudeHistoryImport({ onImported }: { onImported: (report: Claud
         <div className={styles.field}>
           <Text weight="semibold">1. 从对应账号导出记录</Text>
           <div className={styles.description}>在 Claude 桌面端或网页版进入“设置”&gt;“隐私”&gt;“导出数据”，下载邮件中的导出文件。不同账号分别导出。</div>
-          <Button appearance="subtle" icon={<OpenRegular />} style={{ alignSelf: 'flex-start' }} onClick={() => Browser.OpenURL(exportHelp).catch(reason => setError(String(reason)))}>查看官方导出说明</Button>
+          <Button appearance="subtle" icon={<OpenRegular />} style={{ alignSelf: 'flex-start' }} onClick={() => openExternal(exportHelp).catch(reason => setError(String(reason)))}>查看官方导出说明</Button>
         </div>
         <div className={styles.field}>
           <label className={styles.label} htmlFor="claude-import-account">2. 设置账号名称</label>

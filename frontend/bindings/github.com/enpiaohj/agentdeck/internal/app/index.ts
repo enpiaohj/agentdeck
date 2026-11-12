@@ -21,6 +21,8 @@ export {
 export {
     AgentView,
     BackupInfo,
+    BrowserOption,
+    BrowserSettingsView,
     ChatGPTImportReport,
     ChatGPTPreview,
     ChatGPTProject,

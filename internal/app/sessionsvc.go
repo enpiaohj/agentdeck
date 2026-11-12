@@ -59,9 +59,11 @@ func (s *SessionService) PreviewChatGPT(path, account string) (ChatGPTPreview, e
 	if err != nil {
 		return ChatGPTPreview{}, err
 	}
+	// 导出里没有项目名；本机的 ChatGPT 桌面应用把项目列表连名字一起记着，只读取，作为命名建议
+	chatgpthistory.ApplySuggestions(&res, chatgpthistory.LocalProjectNames(sessions.CodexDir()))
 	out := ChatGPTPreview{Conversations: res.Conversations, Images: res.Images, ImageBytes: res.ImageBytes, Projects: make([]ChatGPTProject, 0, len(res.Projects))}
 	for _, p := range res.Projects {
-		out.Projects = append(out.Projects, ChatGPTProject{ID: p.ID, Name: p.Name, Default: p.Default, Conversations: p.Conversations, Samples: append([]string{}, p.Samples...)})
+		out.Projects = append(out.Projects, ChatGPTProject{ID: p.ID, Name: p.Name, Default: p.Default, Suggested: p.Suggested, Files: append([]string{}, p.Files...), Recommended: p.Recommended, RecommendedBasis: p.RecommendedBasis, Conversations: p.Conversations, Samples: append([]string{}, p.Samples...)})
 	}
 	return out, nil
 }
