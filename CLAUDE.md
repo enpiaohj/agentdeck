@@ -21,7 +21,7 @@
 
 | 项 | 选型 |
 | --- | --- |
-| 语言 | Go 1.26.8+（`go.mod` 固定 `toolchain go1.27.3`） |
+| 语言 | Go 1.26.8+（`go.mod` 固定 `toolchain go1.27.4`） |
 | 桌面框架 | Wails v3（已接入，React 18 + Fluent UI v9） |
 | SQLite | `modernc.org/sqlite`（纯 Go，无 CGO） |
 | JSON | `tidwall/gjson` + `encoding/json` |
