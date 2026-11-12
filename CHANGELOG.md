@@ -12,9 +12,13 @@ AgentDeck 的版本索引。
 - 发布产物（exe）不入 Git History（`.gitignore` 的 `releases/**/*.exe`），按规则
   上传 GitHub Releases；本地快照同时保留 exe 与分发归档。
 
-## 未发布
+## v0.18.1 — 2026-11-12
+
+设置里的“更新”和“关于”合并为“关于与更新”。
 
 - 改进：设置里的“更新”和“关于”两个分类合并为“关于与更新”：一页里先是版本与更新（检查更新、自动检查开关），下面是关于 AgentDeck（开发者、源码仓库、许可证、隐私与数据说明）。设置搜索仍能搜到原来的内容。
+- 快照：`releases/v0.18.1/`；产物：Windows x64 EXE、分发 ZIP、源码 ZIP 与 SHA256SUMS。
+- 完整变更、升级说明与验证结果见 [本版 CHANGELOG](releases/v0.18.1/CHANGELOG.md)。
 
 ## v0.18.0 — 2026-11-12
 
