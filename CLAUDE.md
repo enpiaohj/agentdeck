@@ -319,7 +319,7 @@ README 截图用隔离的演示用户目录生成（见陷阱 #21），不得截
     预览与执行两次都检查开关，并把该会话在每个批次里的全部副本一并纳入同一个删除计划
     （`sessions.PrepareOwnedDelete` + `chatgpthistory.TranscriptFiles`，只认导入目录里
     账号/批次文件夹下的普通文件）；Claude 等其他导入记录仍一律拒绝。已删除的会话 key 写进
-    `deletions/` 的恢复记录，重新导入同一份导出不会让它回来
+    `deletions/` 的恢复记录，重新导入同一份导出默认不会让它回来、也不写回磁盘；导入页列出这些会话，用户勾选的才恢复（`unblockDeletedImports` 只改状态为 deleted 的记录，原子改写）
   - 预览返回 token 绑定选择与内容哈希；执行前重新校验，源文件变了就整批拒绝
   - 先写备份再删；备份失败不删。备份只含**所选会话**：原始文件逐个复制，
     保留版本与标注按 key 复制成独立的小库（`history.BackupKeysTo` /
