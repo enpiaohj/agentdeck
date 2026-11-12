@@ -6,7 +6,7 @@ toolchain go1.27.4
 
 require (
 	github.com/go-ole/go-ole v1.3.0
-	github.com/klauspost/compress v1.20.2
+	github.com/klauspost/compress v1.20.3
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/tidwall/gjson v1.20.0
 	github.com/tidwall/jsonc v0.3.3
