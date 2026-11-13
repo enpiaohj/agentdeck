@@ -418,6 +418,9 @@ func (s *SessionService) ExportMarkdown(key, destDir string) (string, error) {
 	sess.Title = displayTitle(sess, mark)
 	info := sessions.ExportInfo{Tags: mark.Tags, Note: mark.Note, Favorite: mark.Favorite, ExportedAt: time.Now()}
 	return writeExportFile(dir, exportFileName(sess, sess.Title), sess.ID, func(w io.Writer) error {
+		if _, err := io.WriteString(w, exportBOM); err != nil {
+			return err
+		}
 		return sessions.WriteExportMarkdown(w, sess, sess.Agent, tr, info)
 	})
 }

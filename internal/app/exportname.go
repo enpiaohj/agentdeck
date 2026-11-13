@@ -83,6 +83,11 @@ func exportShortID(id string) string {
 //     另存一份，避免同一个会话堆出多个文件。只改名认得出是自己写的文件。
 //   - 目标名已被别的文件占用（不是该会话的导出）时加 _2、_3……，绝不覆盖。
 //   - 先写临时文件再改名，写到一半失败不会留下半截的导出或毁掉旧导出。
+//
+// exportBOM 是写在导出文件最前面的 UTF-8 字节序标记：一些 Windows 编辑器和查看器没有它就会按
+// ANSI / GBK 猜编码，文件一长，后半段就成了乱码；带上它这些工具都能认对，Markdown 工具会忽略它。
+const exportBOM = "\xef\xbb\xbf"
+
 func writeExportFile(dir, name, sessionID string, write func(io.Writer) error) (string, error) {
 	target := filepath.Join(dir, name)
 	if old := findPreviousExport(dir, sessionID); old != "" && !strings.EqualFold(old, target) {
@@ -158,7 +163,8 @@ func isExportOf(path, sessionID string) bool {
 	defer f.Close()
 	head := make([]byte, exportHeadBytes)
 	n, _ := io.ReadFull(f, head)
-	text := string(head[:n])
+	// 导出文件以 UTF-8 BOM 开头（见 exportBOM），旧版本导出的没有，两种都认
+	text := strings.TrimPrefix(string(head[:n]), exportBOM)
 	if !strings.HasPrefix(text, "---\n") {
 		return false
 	}
