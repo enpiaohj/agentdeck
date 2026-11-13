@@ -43,7 +43,8 @@ func WriteExportMarkdown(w io.Writer, s Session, agent string, t Transcript, inf
 	var heads []string // 每个用户轮次的首行发言
 	who, said, turns, headAt := "", false, 0, -1
 	for _, p := range t.Parts {
-		p.Text = strings.TrimSpace(p.Text)
+		p.Text = strings.TrimSpace(exportClean(p.Text))
+		p.Name = exportClean(p.Name)
 		if p.Text == "" {
 			continue
 		}
@@ -106,7 +107,7 @@ func WriteExportMarkdown(w io.Writer, s Session, agent string, t Transcript, inf
 	}
 
 	b := bufio.NewWriter(w)
-	title := oneLine(s.Title)
+	title := oneLine(exportClean(s.Title))
 	if title == "" {
 		title = "（无标题）"
 	}
@@ -238,6 +239,40 @@ func toolBrief(text string) string {
 		}
 	}
 	return ""
+}
+
+// bulletGlyphs 是 PDF 文字提取常把项目符号带出来的私有区字符（Wingdings / Symbol 字体里
+// 的圆点、方块、箭头、对勾），私有区在任何字体里都画不出来，映射成同义的标准符号。
+var bulletGlyphs = map[rune]rune{
+	0xF06C: '●', 0xF06E: '■', 0xF075: '◆', 0xF076: '❖', 0xF0A7: '▪',
+	0xF0B7: '•', 0xF0D8: '➢', 0xF0FC: '✓', 0xF0E0: '→',
+}
+
+// exportClean 去掉写进 .md 会让阅读器出错的字符：NUL 等控制字符（很多编辑器见到 NUL 就把
+// 整个文件当二进制或猜错编码，后半段全成乱码，PDF / 二进制工具的输出里常有），保留换行、
+// 回车与制表符；并把常见的私有区项目符号换成标准符号。其余内容不动。
+func exportClean(s string) string {
+	clean := true
+	for _, r := range s {
+		if (r < 0x20 && r != '\n' && r != '\r' && r != '\t') || r == 0x7f || (r >= 0x80 && r < 0xa0) || (r >= 0xE000 && r <= 0xF8FF) {
+			clean = false
+			break
+		}
+	}
+	if clean {
+		return s
+	}
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r < 0x20 && r != '\n' && r != '\r' && r != '\t', r == 0x7f, r >= 0x80 && r < 0xa0:
+			return -1
+		case r >= 0xE000 && r <= 0xF8FF:
+			if g, ok := bulletGlyphs[r]; ok {
+				return g
+			}
+		}
+		return r
+	}, s)
 }
 
 // yamlString 用 JSON 字符串字面量表示：JSON 是 YAML 的子集，转义规则现成，

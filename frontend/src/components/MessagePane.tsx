@@ -58,6 +58,7 @@ import type { ComponentProps, ReactNode } from 'react'
 import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { usePreferences } from '../hooks/usePreferences'
+import type { Notify } from '../hooks/useToasts'
 
 const useStyles = makeStyles({
   wrap: {
@@ -246,9 +247,10 @@ type Props = {
   jumpOffset: number
   jumpMatch: string // 全局搜索命中的原文：带进会话内查找，正文里同样高亮
   onOpenInfo: () => void
+  notify?: Notify
 }
 
-export function MessagePane({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpToken, infoOpen, onToggleInfo, onOpenInfo }: Props) {
+export function MessagePane({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpToken, infoOpen, onToggleInfo, onOpenInfo, notify }: Props) {
   const styles = useStyles()
   if (!session) {
     // 注意:此前用 `flex:1` 的 flex 容器做居中,该容器内的子元素在本项目
@@ -263,10 +265,10 @@ export function MessagePane({ session, sourceVersion, jumpPart, jumpMatch, jumpO
       </div>
     )
   }
-  return <Loaded key={session.key} session={session} sourceVersion={sourceVersion} jumpPart={jumpPart} jumpMatch={jumpMatch} jumpOffset={jumpOffset} jumpToken={jumpToken} infoOpen={infoOpen} onToggleInfo={onToggleInfo} onOpenInfo={onOpenInfo} />
+  return <Loaded key={session.key} session={session} sourceVersion={sourceVersion} jumpPart={jumpPart} jumpMatch={jumpMatch} jumpOffset={jumpOffset} jumpToken={jumpToken} infoOpen={infoOpen} onToggleInfo={onToggleInfo} onOpenInfo={onOpenInfo} notify={notify} />
 }
 
-function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpToken, infoOpen, onToggleInfo, onOpenInfo }: { session: SessionView; sourceVersion: number; jumpPart: number; jumpMatch: string; jumpOffset: number; jumpToken: number; infoOpen: boolean; onToggleInfo: () => void; onOpenInfo: () => void }) {
+function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpToken, infoOpen, onToggleInfo, onOpenInfo, notify }: { notify?: Notify; session: SessionView; sourceVersion: number; jumpPart: number; jumpMatch: string; jumpOffset: number; jumpToken: number; infoOpen: boolean; onToggleInfo: () => void; onOpenInfo: () => void }) {
   const styles = useStyles()
   const theme = useTheme()
   const m = agentMeta(session.agent)
@@ -289,6 +291,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpT
   const loadedVersion = useRef(sourceVersion)
   const displayedDestination = useRef<typeof destination | null>(null)
   const [exportPath, setExportPath] = useState('')
+  const [exporting, setExporting] = useState(false)
   const [findIndex, setFindIndex] = useState(-1)
   const [findBusy, setFindBusy] = useState(false)
   const [findError, setFindError] = useState('')
@@ -524,10 +527,16 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpT
         Title: '选择 Markdown 导出目录', ButtonText: '导出到此目录',
       }).then((dir) => {
         if (!dir || typeof dir !== 'string') return
-        sessionService.ExportMarkdown(session.key, dir).then(
-          (p) => { setActionError(''); setExportPath(String(p)) },
-          (reason) => setActionError(`导出失败：${String(reason)}`),
-        )
+        setExporting(true); setExportPath(''); setActionError('')
+        notify?.('正在导出 Markdown…大会话需要几秒钟。')
+        return sessionService.ExportMarkdown(session.key, dir).then(
+          (p) => {
+            const path = String(p)
+            setExportPath(path)
+            notify?.(`已导出 Markdown：${path}`, { tone: 'success', action: { label: '复制路径', run: () => { void writeClipboard(path) } } })
+          },
+          (reason) => { setActionError(`导出失败：${String(reason)}`); notify?.(`导出失败：${String(reason).slice(0, 160)}`, { tone: 'error' }) },
+        ).finally(() => setExporting(false))
       }).catch(reason => setActionError(`导出失败：${String(reason)}`))
   }
 
@@ -544,8 +553,8 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpT
                 onClick={() => copy(session.title, 'title')}
               />
             </Tooltip>
-            <Tooltip content={session.transcript ? '导出为 Markdown' : '该智能体的会话暂不可读，无法导出'} relationship="label">
-              <Button size="small" appearance="subtle" icon={<ArrowDownloadRegular />} onClick={exportMd} disabled={!session.transcript} />
+            <Tooltip content={exporting ? '正在导出…' : session.transcript ? '导出为 Markdown' : '该智能体的会话暂不可读，无法导出'} relationship="label">
+              <Button size="small" appearance="subtle" icon={exporting ? <Spinner size="extra-tiny" /> : <ArrowDownloadRegular />} onClick={exportMd} disabled={!session.transcript || exporting} />
             </Tooltip>
             <Tooltip content={infoOpen ? '收起会话详情' : '展开会话详情'} relationship="label">
               <Button size="small" appearance="subtle" icon={<PanelRightRegular />} aria-expanded={infoOpen} aria-controls="session-details" onClick={onToggleInfo} />

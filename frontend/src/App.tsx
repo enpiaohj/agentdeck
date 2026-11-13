@@ -586,7 +586,7 @@ export function App() {
                 resizer={list}
               /></div>
               {searchQuery.trim() ? <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}><Button size="small" onClick={() => setSearchQuery('')}>返回会话列表 · 保留筛选与位置</Button><SearchResults query={searchQuery} revision={listVersion + markVersion} selectedKey={selected?.key ?? null} onFocusSearch={() => searchRef.current?.focus()} onJump={onJump} /></div> : null}
-              <MessagePane session={selected} sourceVersion={sourceVersion} jumpPart={jumpPart} jumpToken={jumpToken} jumpMatch={jumpMatch} jumpOffset={jumpOffset} infoOpen={infoOpen} onToggleInfo={() => setInfoOpen(value => !value)} onOpenInfo={() => setInfoOpen(true)} />
+              <MessagePane notify={notify} session={selected} sourceVersion={sourceVersion} jumpPart={jumpPart} jumpToken={jumpToken} jumpMatch={jumpMatch} jumpOffset={jumpOffset} infoOpen={infoOpen} onToggleInfo={() => setInfoOpen(value => !value)} onOpenInfo={() => setInfoOpen(true)} />
               {infoOpen ? (
                 <InfoPane
                   session={selected}

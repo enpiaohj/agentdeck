@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func exportFixture() (Session, Transcript) {
@@ -117,5 +118,40 @@ func TestToolBrief(t *testing.T) {
 		if got := toolBrief(in); got != want {
 			t.Errorf("toolBrief(%q)=%q want %q", in, got, want)
 		}
+	}
+}
+
+// 工具输出（PDF 提取、二进制工具）里的 NUL 等控制字符不能原样写进 .md：许多编辑器见到 NUL
+// 会把整个文件当二进制或猜错编码，后半段就成了乱码。
+func TestWriteExportMarkdownDropsControlCharacters(t *testing.T) {
+	s := Session{Agent: "claude", ID: "s", Title: "标题\x00带NUL"}
+	tr := Transcript{Parts: []Part{
+		{Role: "user", Kind: "text", Text: "看看这个PDF"},
+		{Role: "tool", Kind: "tool_result", Name: "py\x00thon", Text: "\x00\x00海尔AD域\x00\r\n\x01项目概述\x7f\u0085\r\n\uf06c 服务范围\uf0b7 备份\ue123\t制表符保留"},
+	}}
+	var b bytes.Buffer
+	if err := WriteExportMarkdown(&b, s, "claude", tr, ExportInfo{}); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	for _, bad := range []string{"\x00", "\x01", "\x7f", "\u0085", "\uf06c", "\uf0b7"} {
+		if strings.Contains(out, bad) {
+			t.Fatalf("导出里不该有 %q", bad)
+		}
+	}
+	for _, want := range []string{"海尔AD域\r\n项目概述\r\n● 服务范围• 备份", "制表符保留", "标题带NUL", "工具结果：python"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("缺少 %q:\n%s", want, out)
+		}
+	}
+	if !strings.Contains(out, "\ue123") {
+		t.Fatal("不认识的私有区字符不该被擅自删掉")
+	}
+	if !utf8.ValidString(out) {
+		t.Fatal("导出必须是合法 UTF-8")
+	}
+	// 没有需要处理的字符时原样返回
+	if exportClean("普通 text\n\t正常") != "普通 text\n\t正常" {
+		t.Fatal("干净文本不该被改动")
 	}
 }

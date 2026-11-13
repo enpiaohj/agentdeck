@@ -411,11 +411,19 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
         let succeeded = 0
         const failures: string[] = []
         for (const row of items) {
+          setActionMessage(`正在导出 ${succeeded + failures.length + 1} / ${items.length}…`)
           try { await sessionService.ExportMarkdown(row.key, dir); succeeded++ }
           catch (reason) { failures.push(`${row.title || '未命名会话'}：${String(reason).slice(0, 120)}`) }
         }
-        setActionMessage(`已导出 ${succeeded} 个会话。`)
-        if (failures.length) setBulkError(`${failures.length} 个会话导出失败。${failures[0]}`)
+        const where = dir.length > 60 ? `…${dir.slice(-58)}` : dir
+        if (failures.length === 0) {
+          setActionMessage(`已导出 ${succeeded} 个会话到 ${where}`)
+          notify?.(`已导出 ${succeeded} 个会话到 ${dir}`, { tone: 'success' })
+        } else {
+          setActionMessage(succeeded ? `已导出 ${succeeded} 个会话，${failures.length} 个失败。` : '')
+          setBulkError(`${failures.length} 个会话导出失败。${failures[0]}`)
+          notify?.(succeeded ? `已导出 ${succeeded} 个会话，${failures.length} 个失败：${failures[0]}` : `导出失败：${failures[0]}`, { tone: 'error' })
+        }
       }
     } catch (reason) { setBulkError(`操作失败：${String(reason).slice(0, 240)}`) }
     finally { setBusy(false) }
