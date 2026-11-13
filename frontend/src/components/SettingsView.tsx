@@ -11,7 +11,7 @@ import { ImportDeleteControl } from './ImportDeleteControl'
 import { ResumeMaximizedControl, ResumeOpenModeControl, TerminalShellControl } from './TerminalShellControl'
 import { DesktopSettingsControl, matchesDesktopSettings } from './DesktopSettingsControl'
 import { UpdateControl, matchesUpdateSettings } from './UpdateControl'
-import { AboutView, matchesAboutSettings } from './AboutView'
+import { AboutView, PrivacyNote, matchesAboutSettings } from './AboutView'
 import { SettingRow } from './SettingRow'
 
 const categories = [
@@ -23,7 +23,7 @@ const categories = [
   { id: 'backup', label: '备份与恢复', description: '创建完整数据备份，或从备份文件恢复数据。', icon: <ArrowDownloadRegular /> },
   { id: 'diagnostics', label: '诊断', description: '检查智能体状态与搜索索引。', icon: <PulseRegular /> },
   { id: 'shortcuts', label: '快捷键', description: '查看导航、会话管理与阅读操作的键盘快捷键。', icon: <KeyboardRegular /> },
-  { id: 'about', label: '关于与更新', description: '检查新版本，查看版本、开发者、源码仓库、许可证，以及隐私与数据说明。', icon: <InfoRegular /> },
+  { id: 'about', label: '关于', description: '查看版本与开发者信息，检查新版本，了解许可证以及隐私与数据说明。', icon: <InfoRegular /> },
 ] as const
 
 type SettingGroup = { id: string; category: string; title: string; rows: { key: string; title: string; description: string; control: (id: string) => ReactNode }[] }
@@ -116,11 +116,16 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
           </section>)}
           {!q && ['appearance', 'sessions'].includes(category) ? <aside className="ad-settings-preview" aria-label="阅读预览"><div className="ad-preview-toolbar"><span>阅读预览</span><span>实时更新</span></div><ReadingPreview /></aside> : null}
           {dataSections.length ? <DiagnosticsView key={dataSections.join(':')} revision={revision} embedded sections={dataSections} /> : null}
-          {updates ? <section className="ad-settings-section" aria-labelledby={`${baseId}-update-heading`}>
-            <h2 id={`${baseId}-update-heading`}>{q ? '关于与更新 · 版本' : '版本与更新'}</h2>
+          {!q && about ? <section className="ad-settings-section" aria-label="关于 AgentDeck">
+            <AboutView />
+            <UpdateControl id={`${baseId}-update`} />
+            <PrivacyNote />
+          </section> : null}
+          {q && updates ? <section className="ad-settings-section" aria-labelledby={`${baseId}-update-heading`}>
+            <h2 id={`${baseId}-update-heading`}>关于 · 版本与更新</h2>
             <UpdateControl id={`${baseId}-update`} />
           </section> : null}
-          {about ? <section className="ad-settings-section" aria-labelledby={`${baseId}-about-heading`}><h2 id={`${baseId}-about-heading`}>{q ? '关于与更新 · AgentDeck' : '关于 AgentDeck'}</h2><AboutView /></section> : null}
+          {q && about ? <section className="ad-settings-section" aria-labelledby={`${baseId}-about-heading`}><h2 id={`${baseId}-about-heading`}>关于 · AgentDeck</h2><AboutView /><PrivacyNote /></section> : null}
           {shortcuts ? <section className="ad-settings-section"><h2>快捷键列表</h2><dl className="ad-shortcuts">{[
             ['搜索所有会话','Ctrl + K'],['刷新会话列表','F5'],['新建会话','Ctrl + N'],['新建项目','Ctrl + Shift + N'],['打开设置','Ctrl + ,'],['调整栏宽','拖拽分隔条 / 方向键'],['打开操作菜单','Shift + F10 / 菜单键'],['重命名所选会话','F2'],['删除所选会话','Delete'],['查找当前会话','Ctrl + F'],['下一 / 上一处匹配','Enter / Shift + Enter'],['全选当前列表','Ctrl + A'],['多选 / 连选智能体（侧栏）','Ctrl + 单击 / Shift + 单击'],['追加 / 取消选择','Ctrl + 单击'],['连续选择','Shift + 单击'],['追加连续范围','Ctrl + Shift + 单击'],['清空选择','Esc'],['移动焦点 / 扩展选择','方向键 / Shift + 方向键'],['保存备注','Ctrl + Enter'],
           ].map(([label, key]) => <div key={label}><dt>{label}</dt><dd><kbd>{key}</kbd></dd></div>)}</dl><p className="ad-settings-note">全选仅作用于筛选后当前展开的会话。删除操作会先显示确认窗口。</p></section> : null}
