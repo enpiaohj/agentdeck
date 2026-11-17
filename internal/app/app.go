@@ -101,6 +101,7 @@ type App struct {
 	readNative   func(sessions.Session) (sessions.Transcript, error)
 	deletePlans  map[string]*deleteJob                      // guarded by dataMu
 	deleteUndos  map[string]*deleteJob                      // guarded by dataMu
+	rebuildPlans map[string]*rebuildPlan                    // guarded by dataMu，见 rebuild_service.go
 	deleted      map[string]bool                            // guarded by mu
 	nativeDelete func(*sessions.NativeDeletePlan) error     // fault injection for rollback tests
 	codexName    func(threadID, name string) error          // 写 Codex 原生名；测试替换成假的，不去起真进程

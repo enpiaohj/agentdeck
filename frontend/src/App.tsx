@@ -32,6 +32,7 @@ import { SettingsView } from './components/SettingsView'
 import { NewProjectDialog } from './components/NewProjectDialog'
 import { NewSessionDialog } from './components/NewSessionDialog'
 import { ProjectLocationDialog } from './components/ProjectLocationDialog'
+import { RebuildDialog } from './components/RebuildDialog'
 import { ToastHost } from './components/Toasts'
 import { usePreferences } from './hooks/usePreferences'
 import { useToasts } from './hooks/useToasts'
@@ -475,6 +476,7 @@ export function App() {
   return (
     <FluentProvider theme={themeName === 'dark' ? darkTheme : lightTheme}>
       <ProjectLocationDialog />
+      <RebuildDialog />
       <div className={`ad-app ${styles.outer}${resizing ? ' is-resizing' : ''}`} data-theme={themeName} style={{ '--ad-reader-font-size':`${preferences.fontSize}px`, '--ad-reader-line-height':preferences.spacing==='comfortable'?'1.85':'1.65', '--ad-reader-width':readerWidthCss(preferences.readingWidth), ...paneVars } as React.CSSProperties}>
         {/* 无边框窗口:顶栏整体为拖拽区,交互控件标 no-drag */}
         <div className={`ad-titlebar ${styles.topbar}`} style={{ '--wails-draggable': 'drag' } as React.CSSProperties}

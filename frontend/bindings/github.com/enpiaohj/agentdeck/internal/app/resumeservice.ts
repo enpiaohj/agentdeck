@@ -31,6 +31,16 @@ export function Command(key: string): $CancellablePromise<string> {
     return $Call.ByID(611334482, key);
 }
 
+/**
+ * ContinueWithHistory 在 dir（空表示原目录）新开一个 Claude 会话，并让它先读取保留下来的历史。
+ * 不写上游存储：交接文档写在 AgentDeck 自己的数据目录里，启动命令用 --add-dir 授权读取它。
+ */
+export function ContinueWithHistory(key: string, dir: string): $CancellablePromise<$models.HandoffResult> {
+    return $Call.ByID(3789022284, key, dir).then(($result: any) => {
+        return $$createType2($result);
+    });
+}
+
 export function CopyAt(key: string, override: string): $CancellablePromise<void> {
     return $Call.ByID(293918737, key, override);
 }
@@ -83,7 +93,7 @@ export function OpenAt(key: string, override: string): $CancellablePromise<void>
 
 export function OpenAtResult(key: string, override: string): $CancellablePromise<$models.ResumeOpenResult> {
     return $Call.ByID(3460876605, key, override).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType3($result);
     });
 }
 
@@ -105,7 +115,7 @@ export function OpenInTerminal(key: string): $CancellablePromise<void> {
  */
 export function Prepare(key: string, override: string): $CancellablePromise<$models.ResumePreview> {
     return $Call.ByID(1343646076, key, override).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType4($result);
     });
 }
 
@@ -124,8 +134,31 @@ export function PreviewCommandAt(project: string, target: string, agent: string)
     return $Call.ByID(1901497713, project, target, agent);
 }
 
+/**
+ * PreviewRebuild 预览“重建后恢复”：dir 是要为它重建的目录，空表示用会话记录的原目录。
+ * 不写任何文件；返回的 token 只在 10 分钟内、对同一会话与目录有效。
+ */
+export function PreviewRebuild(key: string, dir: string): $CancellablePromise<$models.RebuildPreview> {
+    return $Call.ByID(1328876310, key, dir).then(($result: any) => {
+        return $$createType5($result);
+    });
+}
+
+/**
+ * Rebuild 执行预览确认过的重建：重新生成内容并核对哈希，只新建文件（目标已存在就拒绝，
+ * 绝不覆盖），先写同目录的临时文件再用硬链接放到位，写完回读校验。
+ */
+export function Rebuild(token: string): $CancellablePromise<$models.RebuildResult> {
+    return $Call.ByID(4090523440, token).then(($result: any) => {
+        return $$createType6($result);
+    });
+}
+
 // Private type creation functions
 const $$createType0 = $models.CliAvailability.createFrom;
 const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = $models.ResumeOpenResult.createFrom;
-const $$createType3 = $models.ResumePreview.createFrom;
+const $$createType2 = $models.HandoffResult.createFrom;
+const $$createType3 = $models.ResumeOpenResult.createFrom;
+const $$createType4 = $models.ResumePreview.createFrom;
+const $$createType5 = $models.RebuildPreview.createFrom;
+const $$createType6 = $models.RebuildResult.createFrom;

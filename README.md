@@ -134,6 +134,15 @@ Windows x64 版本从 [Releases](https://github.com/enpiaohj/agentdeck/releases/
 - Codex 会话在恢复前会同步 AgentDeck 里设置的名称；Codex 自己的索引里已经是同名时跳过同步，不再等待 Codex 的
   app-server 启动
 - 恢复参数（会话 ID、工作目录）按白名单校验后才交给终端
+- **继续已被 Claude Code 清理的会话**：Claude Code 默认只保留约 30 天的会话文件（`cleanupPeriodDays`），超期的会被它自己
+  删除。AgentDeck 的永久库里还留着这些会话，阅读区的“继续已清理的会话…”（或右键菜单）提供两种方式：
+  - **重建后继续此会话**（推荐）：预览要写入的文件、带回多少内容，确认后在 Claude Code 的数据目录里新建一个会话文件
+    （只新建、绝不覆盖已有文件、写完回读校验），再用 `claude --resume` 接着聊。因为永久库保存的是解析后的内容而不是原始
+    文件，重建的会话里文字原样保留，工具调用与结果转写成文字，思考内容不带回，内容很长时保留开头与最近的部分
+  - **新开会话并带上历史**：不写 Claude 的目录，把历史整理成一份文档放在 AgentDeck 自己的数据目录，新开一个 Claude 会话
+    让它先读完再继续
+  - 原目录已不存在时可以改选一个目录；“设置”>“会话”里还会显示 Claude Code 的保留天数、7 天内到期的会话，并给出调大
+    保留期的设置片段（只读，AgentDeck 不会改 Claude 的 `settings.json`）
 
 ### 设置
 

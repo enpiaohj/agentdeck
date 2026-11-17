@@ -44,6 +44,7 @@ import { openExternal } from '../openExternal'
 import type { SessionView, TranscriptView } from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/models'
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import { resumeInOtherDirectory, resumeWithLocation } from './ProjectLocationDialog'
+import { openRebuild } from './RebuildDialog'
 import { agentMeta, fmtTime } from '../util'
 import { pickOpenPath } from '../nativeDialogs'
 import { AgentMark } from '../icons/AgentMark'
@@ -703,6 +704,10 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpT
             <Button size="small" appearance="subtle" icon={<CopyRegular />} disabled={actionBusy}
               onClick={() => void runAction(async () => { await resumeWithLocation(session.key, 'copy') })}>复制恢复命令</Button>
           </>
+        ) : session.agent === 'claude' && session.source === 'retained' ? (
+          <Tooltip content="Claude Code 已清理此会话的原记录。可以用 AgentDeck 保留的内容重建后继续，或新开会话并带上历史" relationship="description">
+            <Button size="small" appearance="primary" icon={<OpenRegular />} onClick={() => openRebuild({ key: session.key, title: session.title, cwd: session.cwd })}>继续已清理的会话…</Button>
+          </Tooltip>
         ) : (
           <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>此记录支持阅读、搜索与导出</Text>
         )}

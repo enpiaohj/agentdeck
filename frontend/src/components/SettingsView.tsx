@@ -10,6 +10,7 @@ import { BrowserControl } from './BrowserControl'
 import { ImportDeleteControl } from './ImportDeleteControl'
 import { ResumeMaximizedControl, ResumeOpenModeControl, TerminalShellControl } from './TerminalShellControl'
 import { DesktopSettingsControl, matchesDesktopSettings } from './DesktopSettingsControl'
+import { ClaudeRetentionControl, matchesClaudeRetention } from './ClaudeRetentionControl'
 import { UpdateControl, matchesUpdateSettings } from './UpdateControl'
 import { AboutView, PrivacyNote, matchesAboutSettings } from './AboutView'
 import { SettingRow } from './SettingRow'
@@ -71,7 +72,7 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
     ] },
     { id: 'delete', category: 'sessions', title: '删除会话', rows: [
       { key: 'deleteBackup', title: '删除前创建恢复备份', description: p.deleteBackup ? '删除会话前自动备份所选会话，可在本次运行期间撤销。备份文件保留在本地磁盘。' : '已停用。删除会话时不创建备份，删除后无法恢复。', control: id => <input id={id} aria-describedby={`${id}-description`} type="checkbox" role="switch" checked={p.deleteBackup} onChange={e => update({ deleteBackup: e.target.checked })} /> },
-      { key: 'allowImportDelete', title: '允许删除导入的聊天记录', description: '默认关闭。开启后，可以删除导入的 ChatGPT 聊天记录（会话详情、右键菜单和批量选择里的“删除”）。只删除 AgentDeck 里的副本，不影响 ChatGPT 上的原始聊天和你的导出文件；删除前会按上面的备份选项先备份。已删除的会话，重新导入同一份导出也不会回来。', control: id => <ImportDeleteControl id={id} /> },
+      { key: 'allowImportDelete', title: '允许删除导入的聊天记录', description: '默认关闭。开启后，可以删除导入的 ChatGPT 聊天记录（会话详情、右键菜单和批量选择里的“删除”）。只删除 AgentDeck 里的副本，不影响 ChatGPT 上的原始聊天和你的导出文件；删除前会按上面的备份选项先备份。已删除的会话重新导入同一份导出时默认不会回来，可在导入页勾选恢复。', control: id => <ImportDeleteControl id={id} /> },
     ] },
     { id: 'shell', category: 'terminal', title: '终端环境', rows: [
       { key: 'terminalShell', title: '终端 PowerShell', description: '新建或继续会话时使用的终端。更改后对新打开的终端生效。', control: id => <TerminalShellControl id={id} /> },
@@ -81,6 +82,7 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
   ]
   const shown = groups.map(group => ({ ...group, rows: group.rows.filter(row => matches(group.category, categories.find(item => item.id === group.category)?.label ?? '', group.title, row.title, row.description, settingSearchKeywords[row.key] ?? '')) })).filter(group => group.rows.length)
   const desktop = q ? matchesDesktopSettings(q) : category === 'general'
+  const retention = q ? matchesClaudeRetention(q) : category === 'sessions'
   const dataSections: SettingsDataSection[] = []
   if (matches('data', '数据管理 存储位置 数据目录 迁移 磁盘 空间 清理旧位置')) dataSections.push('storage')
   if (matches('data', '数据管理 本地会话库 永久会话库 历史库 持久保存 压缩 版本 统计 清理旧版本 旧版本 回收空间')) dataSections.push('library')
@@ -90,7 +92,7 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
   const shortcuts = matches('shortcuts', '快捷键 键盘 搜索 Ctrl 选择 Shift 阅读 设置 F2 重命名 Delete 删除 F5 刷新')
   const updates = q ? matchesUpdateSettings(q) : category === 'about'
   const about = q ? matchesAboutSettings(q) : category === 'about'
-  const empty = !shown.length && !desktop && !dataSections.length && !shortcuts && !updates && !about
+  const empty = !shown.length && !desktop && !retention && !dataSections.length && !shortcuts && !updates && !about
   const chooseCategory = (id: string) => { setCategory(id); setQuery(''); contentRef.current?.scrollTo({ top: 0 }) }
   return <section className="ad-settings" aria-label="应用设置">
     <div className="ad-settings-layout">
@@ -114,6 +116,7 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
             <h2 id={`${baseId}-${group.id}-heading`}>{q ? `${categories.find(item => item.id === group.category)?.label} · ${group.title}` : group.title}</h2>
             <div className="ad-setting-card">{group.rows.map(row => <SettingRow key={row.key} id={`${baseId}-${row.key}`} title={row.title} description={row.description}>{row.control(`${baseId}-${row.key}`)}</SettingRow>)}</div>
           </section>)}
+          {retention ? <section className="ad-settings-section" aria-label="Claude Code 会话保留期"><h2>{q ? '会话 · Claude Code 会话保留期' : 'Claude Code 会话保留期'}</h2><ClaudeRetentionControl /></section> : null}
           {!q && ['appearance', 'sessions'].includes(category) ? <aside className="ad-settings-preview" aria-label="阅读预览"><div className="ad-preview-toolbar"><span>阅读预览</span><span>实时更新</span></div><ReadingPreview /></aside> : null}
           {dataSections.length ? <DiagnosticsView key={dataSections.join(':')} revision={revision} embedded sections={dataSections} /> : null}
           {!q && about ? <section className="ad-settings-section" aria-label="关于 AgentDeck">

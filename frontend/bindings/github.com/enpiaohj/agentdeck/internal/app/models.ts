@@ -490,6 +490,101 @@ export class ClaudeImportReport {
 }
 
 /**
+ * ClaudeRetention 是 Claude Code 会话保留期的只读快照。
+ */
+export class ClaudeRetention {
+    /**
+     * 生效的保留天数；0 表示 Claude 设置成了“不保存”
+     */
+    "days": number;
+
+    /**
+     * 是否在 settings.json 里明确设置
+     */
+    "explicit": boolean;
+
+    /**
+     * 读取的 settings.json 路径
+     */
+    "source": string;
+
+    /**
+     * 读取失败的原因（按默认值估算）
+     */
+    "error": string;
+
+    /**
+     * 检查了多少个本机 Claude 会话
+     */
+    "checked": number;
+
+    /**
+     * 其中 7 天内到期或已到期的数量
+     */
+    "soon": number;
+
+    /**
+     * Soon 里永久库还没有副本的数量
+     */
+    "unsaved": number;
+
+    /**
+     * 最先到期的几个
+     */
+    "risks": RetentionRisk[];
+
+    /**
+     * 建议加进 settings.json 的内容
+     */
+    "snippet": string;
+
+    /** Creates a new ClaudeRetention instance. */
+    constructor($$source: Partial<ClaudeRetention> = {}) {
+        if (!("days" in $$source)) {
+            this["days"] = 0;
+        }
+        if (!("explicit" in $$source)) {
+            this["explicit"] = false;
+        }
+        if (!("source" in $$source)) {
+            this["source"] = "";
+        }
+        if (!("error" in $$source)) {
+            this["error"] = "";
+        }
+        if (!("checked" in $$source)) {
+            this["checked"] = 0;
+        }
+        if (!("soon" in $$source)) {
+            this["soon"] = 0;
+        }
+        if (!("unsaved" in $$source)) {
+            this["unsaved"] = 0;
+        }
+        if (!("risks" in $$source)) {
+            this["risks"] = [];
+        }
+        if (!("snippet" in $$source)) {
+            this["snippet"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ClaudeRetention instance from a string or object.
+     */
+    static createFrom($$source: any = {}): ClaudeRetention {
+        const $$createField7_0 = $$createType10;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("risks" in $$parsedSource) {
+            $$parsedSource["risks"] = $$createField7_0($$parsedSource["risks"]);
+        }
+        return new ClaudeRetention($$parsedSource as Partial<ClaudeRetention>);
+    }
+}
+
+/**
  * CleanupPlan 是「清理旧位置数据」的预览：将被逐个删除的文件清单。
  * Token 绑定清单内容，执行前重新校验，清单变了就整批拒绝。
  */
@@ -986,6 +1081,34 @@ export class Filter {
 }
 
 /**
+ * HandoffResult 是“带历史新开会话”启动的结果。
+ */
+export class HandoffResult {
+    "file": string;
+    "omitted": number;
+
+    /** Creates a new HandoffResult instance. */
+    constructor($$source: Partial<HandoffResult> = {}) {
+        if (!("file" in $$source)) {
+            this["file"] = "";
+        }
+        if (!("omitted" in $$source)) {
+            this["omitted"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new HandoffResult instance from a string or object.
+     */
+    static createFrom($$source: any = {}): HandoffResult {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new HandoffResult($$parsedSource as Partial<HandoffResult>);
+    }
+}
+
+/**
  * IndexStatus 是全文索引的状态条数据。State: idle | building | ready |
  * failed。Sessions 是已索引会话数，Docs 是收录的正文块数。
  * Total 是这批会话里待索引的总数（building 时给进度一个分母），
@@ -1363,6 +1486,126 @@ export class PromptMark {
     }
 }
 
+/**
+ * RebuildPreview 是重建前给用户确认的信息。
+ */
+export class RebuildPreview {
+    "key": string;
+    "title": string;
+
+    /**
+     * 会话记录的原目录
+     */
+    "original": string;
+
+    /**
+     * 将为它重建的目录；原目录不存在时为空
+     */
+    "directory": string;
+
+    /**
+     * 原目录不存在，要先选一个目录
+     */
+    "needs_directory": boolean;
+
+    /**
+     * 将写入的会话文件
+     */
+    "file": string;
+    "turns": number;
+    "kept": number;
+    "omitted": number;
+    "tools": number;
+    "chars": number;
+    "bytes": number;
+    "token": string;
+
+    /** Creates a new RebuildPreview instance. */
+    constructor($$source: Partial<RebuildPreview> = {}) {
+        if (!("key" in $$source)) {
+            this["key"] = "";
+        }
+        if (!("title" in $$source)) {
+            this["title"] = "";
+        }
+        if (!("original" in $$source)) {
+            this["original"] = "";
+        }
+        if (!("directory" in $$source)) {
+            this["directory"] = "";
+        }
+        if (!("needs_directory" in $$source)) {
+            this["needs_directory"] = false;
+        }
+        if (!("file" in $$source)) {
+            this["file"] = "";
+        }
+        if (!("turns" in $$source)) {
+            this["turns"] = 0;
+        }
+        if (!("kept" in $$source)) {
+            this["kept"] = 0;
+        }
+        if (!("omitted" in $$source)) {
+            this["omitted"] = 0;
+        }
+        if (!("tools" in $$source)) {
+            this["tools"] = 0;
+        }
+        if (!("chars" in $$source)) {
+            this["chars"] = 0;
+        }
+        if (!("bytes" in $$source)) {
+            this["bytes"] = 0;
+        }
+        if (!("token" in $$source)) {
+            this["token"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RebuildPreview instance from a string or object.
+     */
+    static createFrom($$source: any = {}): RebuildPreview {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RebuildPreview($$parsedSource as Partial<RebuildPreview>);
+    }
+}
+
+/**
+ * RebuildResult 是写入之后的结果。
+ */
+export class RebuildResult {
+    "key": string;
+    "file": string;
+    "bytes": number;
+
+    /** Creates a new RebuildResult instance. */
+    constructor($$source: Partial<RebuildResult> = {}) {
+        if (!("key" in $$source)) {
+            this["key"] = "";
+        }
+        if (!("file" in $$source)) {
+            this["file"] = "";
+        }
+        if (!("bytes" in $$source)) {
+            this["bytes"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RebuildResult instance from a string or object.
+     */
+    static createFrom($$source: any = {}): RebuildResult {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RebuildResult($$parsedSource as Partial<RebuildResult>);
+    }
+}
+
 export class RestoreReport {
     "rollback_path": string;
     "preferences": string;
@@ -1450,6 +1693,50 @@ export class ResumePreview {
     static createFrom($$source: any = {}): ResumePreview {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new ResumePreview($$parsedSource as Partial<ResumePreview>);
+    }
+}
+
+/**
+ * RetentionRisk 是一个快被 Claude Code 清理的会话。
+ */
+export class RetentionRisk {
+    "key": string;
+    "title": string;
+
+    /**
+     * 距清理还剩几天；<=0 表示已到期，下次启动 Claude Code 时会被清理
+     */
+    "days_left": number;
+
+    /**
+     * 永久库里是否已有副本（清理后仍可查看、可重建）
+     */
+    "saved": boolean;
+
+    /** Creates a new RetentionRisk instance. */
+    constructor($$source: Partial<RetentionRisk> = {}) {
+        if (!("key" in $$source)) {
+            this["key"] = "";
+        }
+        if (!("title" in $$source)) {
+            this["title"] = "";
+        }
+        if (!("days_left" in $$source)) {
+            this["days_left"] = 0;
+        }
+        if (!("saved" in $$source)) {
+            this["saved"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RetentionRisk instance from a string or object.
+     */
+    static createFrom($$source: any = {}): RetentionRisk {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RetentionRisk($$parsedSource as Partial<RetentionRisk>);
     }
 }
 
@@ -1599,7 +1886,7 @@ export class SearchReply {
      * Creates a new SearchReply instance from a string or object.
      */
     static createFrom($$source: any = {}): SearchReply {
-        const $$createField2_0 = $$createType10;
+        const $$createField2_0 = $$createType12;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("hits" in $$parsedSource) {
             $$parsedSource["hits"] = $$createField2_0($$parsedSource["hits"]);
@@ -1968,9 +2255,9 @@ export class StorageView {
      * Creates a new StorageView instance from a string or object.
      */
     static createFrom($$source: any = {}): StorageView {
-        const $$createField8_0 = $$createType12;
+        const $$createField8_0 = $$createType14;
         const $$createField11_0 = $$createType8;
-        const $$createField13_0 = $$createType12;
+        const $$createField13_0 = $$createType14;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("items" in $$parsedSource) {
             $$parsedSource["items"] = $$createField8_0($$parsedSource["items"]);
@@ -2100,7 +2387,7 @@ export class TerminalShellView {
      * Creates a new TerminalShellView instance from a string or object.
      */
     static createFrom($$source: any = {}): TerminalShellView {
-        const $$createField4_0 = $$createType14;
+        const $$createField4_0 = $$createType16;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("options" in $$parsedSource) {
             $$parsedSource["options"] = $$createField4_0($$parsedSource["options"]);
@@ -2209,8 +2496,8 @@ export class TranscriptView {
      * Creates a new TranscriptView instance from a string or object.
      */
     static createFrom($$source: any = {}): TranscriptView {
-        const $$createField7_0 = $$createType16;
-        const $$createField9_0 = $$createType18;
+        const $$createField7_0 = $$createType18;
+        const $$createField9_0 = $$createType20;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("parts" in $$parsedSource) {
             $$parsedSource["parts"] = $$createField7_0($$parsedSource["parts"]);
@@ -2415,13 +2702,15 @@ const $$createType5 = $Create.Array($$createType4);
 const $$createType6 = ChatGPTProject.createFrom;
 const $$createType7 = $Create.Array($$createType6);
 const $$createType8 = $Create.Array($Create.Any);
-const $$createType9 = SearchHitView.createFrom;
+const $$createType9 = RetentionRisk.createFrom;
 const $$createType10 = $Create.Array($$createType9);
-const $$createType11 = StorageItem.createFrom;
+const $$createType11 = SearchHitView.createFrom;
 const $$createType12 = $Create.Array($$createType11);
-const $$createType13 = TerminalShellOption.createFrom;
+const $$createType13 = StorageItem.createFrom;
 const $$createType14 = $Create.Array($$createType13);
-const $$createType15 = TranscriptPart.createFrom;
+const $$createType15 = TerminalShellOption.createFrom;
 const $$createType16 = $Create.Array($$createType15);
-const $$createType17 = PromptMark.createFrom;
+const $$createType17 = TranscriptPart.createFrom;
 const $$createType18 = $Create.Array($$createType17);
+const $$createType19 = PromptMark.createFrom;
+const $$createType20 = $Create.Array($$createType19);

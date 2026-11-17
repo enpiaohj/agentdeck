@@ -309,7 +309,9 @@ README 截图用隔离的演示用户目录生成（见陷阱 #21），不得截
 ## 安全约定
 
 - **默认只读访问上游存储**：发现、读取、索引、导出全链路不写入上游。
-- **唯一例外是手动删除会话**（`internal/sessions/native_delete*.go` +
+- **唯一的两处写上游例外**：手动删除会话，与重建已被 Claude Code 清理的会话（下一条）。
+  先说删除：
+- **例外一：手动删除会话**（`internal/sessions/native_delete*.go` +
   `internal/app/delete_service.go`）：仅对用户显式选择、预览确认、备份成功的
   对象写入；涉及 Codex `state_5.sqlite` 时在单个事务里 `DELETE` 相关行。
   改动这条路径必须保持以下不变量，测试里都有对应用例：
@@ -335,6 +337,19 @@ README 截图用隔离的演示用户目录生成（见陷阱 #21），不得截
   - 未知数据库 schema 直接拒绝，不猜测着改。唯一例外是 Codex 库自带的维护型
     trigger：仅当 DDL 明确是 `AFTER/BEFORE INSERT` 或 `UPDATE`（不响应 DELETE）、
     单个 `BEGIN…END`、且写入目标都在已知表内时才放行；任何一条不满足仍 fail closed
+- **例外二：重建已被 Claude Code 清理的会话**（`internal/rebuild` + `internal/app/rebuild_service.go`）。
+  Claude Code 只保留约 30 天（`cleanupPeriodDays`）的会话文件，永久库里只有解析后的内容、没有原始 `.jsonl`，所以只能
+  “重建”：文字原样保留，工具调用与结果转写成文字，思考不带回，超过预算（12 万字符）时保留开头与最近部分。
+  真实 Claude CLI 实测可以 `--resume` 并记得内容。必须保持以下不变量，测试里都有对应用例：
+  - 只对 `agent == claude`、`Retained`（原文件已不在）、非 WSL / 网关 / 导入的会话开放；会话 ID 必须是小写 UUID
+  - 先预览（`PreviewRebuild`，不写任何文件）再确认（`Rebuild(token)`）；token 一次性、10 分钟过期，绑定会话、目录与
+    内容哈希，执行时重新生成并比对，变了就拒绝
+  - **只新建、绝不覆盖**：目标已存在就拒绝；先写同目录临时文件并落盘，再用硬链接放到目标名下（链接在目标已存在时失败），
+    写完回读比对，失败撤销。落点固定为 `<Claude 目录>/projects/<由目录名推出的文件夹>/<会话 ID>.jsonl`，文件夹名只含
+    字母数字与 `-`（规则见 `rebuild.ProjectDirName`，超过 200 字符时 Claude 会改用哈希，拒绝），不可能跳出 projects
+  - 不改 Claude 的 `settings.json` 等任何已有文件；“带历史新开会话”（`ContinueWithHistory`）完全不写上游，交接文档
+    写在 AgentDeck 自己的数据目录 `library/handoff/`
+  - `ClaudeRetention`（设置 → 会话）只读 `settings.json` 的 `cleanupPeriodDays` 并统计快到期的会话，不写任何东西
 - 会话内容视为不可信输入：恢复参数（session-id、cwd）必须白名单校验
 - 不得在日志、诊断包、提交中泄露凭据文件内容
   （`~/.claude/.credentials.json`、`~/.codex/auth.json` 等）

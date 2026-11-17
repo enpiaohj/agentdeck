@@ -35,6 +35,7 @@ import type { SessionView } from '../../bindings/github.com/enpiaohj/agentdeck/i
 import * as sessionService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/sessionservice'
 import * as markService from '../../bindings/github.com/enpiaohj/agentdeck/internal/app/markservice'
 import { resumeInOtherDirectory, resumeWithLocation } from './ProjectLocationDialog'
+import { openRebuild } from './RebuildDialog'
 import { agentMeta, fmtTime, relTime } from '../util'
 import { pickOpenPath } from '../nativeDialogs'
 import { AgentMark } from '../icons/AgentMark'
@@ -395,6 +396,8 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
         if (!navigator.clipboard) throw new Error('剪贴板当前不可用')
         await navigator.clipboard.writeText(action === 'copyCwd' ? item.cwd : items.map(row => row.title || '未命名会话').join('\n'))
         setActionMessage(action === 'copyCwd' ? '工作目录已复制。' : '会话标题已复制。')
+      } else if (action === 'rebuild') {
+        openRebuild({ key: item.key, title: item.title, cwd: item.cwd })
       } else if (action === 'resume') {
         // 这条路径的错误消息后端保证自解释（其中一条是「终端已打开、只是
         // 附带动作失败」），不再套「操作失败：」前缀，否则与事实相反。

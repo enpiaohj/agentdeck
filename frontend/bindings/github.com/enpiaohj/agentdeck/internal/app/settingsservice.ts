@@ -27,11 +27,20 @@ export function BrowserSettings(): $CancellablePromise<$models.BrowserSettingsVi
 }
 
 /**
+ * ClaudeRetention 读取 Claude Code 的会话保留期设置，并统计快到期的会话。只读：不改任何文件。
+ */
+export function ClaudeRetention(): $CancellablePromise<$models.ClaudeRetention> {
+    return $Call.ByID(542208257).then(($result: any) => {
+        return $$createType1($result);
+    });
+}
+
+/**
  * CleanupOld 按预览删除旧位置的数据；token 必须是同一次预览的结果。
  */
 export function CleanupOld(token: string): $CancellablePromise<$models.CleanupReport> {
     return $Call.ByID(283169458, token).then(($result: any) => {
-        return $$createType1($result);
+        return $$createType2($result);
     });
 }
 
@@ -40,7 +49,7 @@ export function CleanupOld(token: string): $CancellablePromise<$models.CleanupRe
  */
 export function CleanupPreview(): $CancellablePromise<$models.CleanupPlan> {
     return $Call.ByID(2751734091).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType3($result);
     });
 }
 
@@ -49,7 +58,7 @@ export function CleanupPreview(): $CancellablePromise<$models.CleanupPlan> {
  */
 export function Desktop(): $CancellablePromise<$models.DesktopOptions> {
     return $Call.ByID(3514621213).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType4($result);
     });
 }
 
@@ -71,7 +80,7 @@ export function ImportDeleteEnabled(): $CancellablePromise<boolean> {
  */
 export function Migrate(picked: string): $CancellablePromise<$models.MigrateReport> {
     return $Call.ByID(434712964, picked).then(($result: any) => {
-        return $$createType4($result);
+        return $$createType5($result);
     });
 }
 
@@ -102,7 +111,7 @@ export function ResetRoot(): $CancellablePromise<void> {
  */
 export function ResolveDestination(picked: string): $CancellablePromise<$models.DestinationView> {
     return $Call.ByID(432786299, picked).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType6($result);
     });
 }
 
@@ -129,7 +138,7 @@ export function SetBrowser(id: string): $CancellablePromise<$models.BrowserSetti
  */
 export function SetCloseToTray(enabled: boolean): $CancellablePromise<$models.DesktopOptions> {
     return $Call.ByID(3564853082, enabled).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType4($result);
     });
 }
 
@@ -149,7 +158,7 @@ export function SetImportDeleteEnabled(value: boolean): $CancellablePromise<bool
  */
 export function SetResumeMaximized(value: boolean): $CancellablePromise<$models.TerminalShellView> {
     return $Call.ByID(1913434964, value).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType7($result);
     });
 }
 
@@ -162,7 +171,7 @@ export function SetResumeMaximized(value: boolean): $CancellablePromise<$models.
  */
 export function SetResumeOpenMode(value: string): $CancellablePromise<$models.TerminalShellView> {
     return $Call.ByID(2532099537, value).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType7($result);
     });
 }
 
@@ -172,7 +181,7 @@ export function SetResumeOpenMode(value: string): $CancellablePromise<$models.Te
  */
 export function SetStartAtLogin(enabled: boolean): $CancellablePromise<$models.DesktopOptions> {
     return $Call.ByID(388123143, enabled).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType4($result);
     });
 }
 
@@ -185,7 +194,7 @@ export function SetStartAtLogin(enabled: boolean): $CancellablePromise<$models.D
  */
 export function SetTerminalShell(value: string): $CancellablePromise<$models.TerminalShellView> {
     return $Call.ByID(3306319109, value).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType7($result);
     });
 }
 
@@ -194,7 +203,7 @@ export function SetTerminalShell(value: string): $CancellablePromise<$models.Ter
  */
 export function Storage(): $CancellablePromise<$models.StorageView> {
     return $Call.ByID(1443616652).then(($result: any) => {
-        return $$createType7($result);
+        return $$createType8($result);
     });
 }
 
@@ -203,16 +212,17 @@ export function Storage(): $CancellablePromise<$models.StorageView> {
  */
 export function TerminalShell(): $CancellablePromise<$models.TerminalShellView> {
     return $Call.ByID(3736505951).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType7($result);
     });
 }
 
 // Private type creation functions
 const $$createType0 = $models.BrowserSettingsView.createFrom;
-const $$createType1 = $models.CleanupReport.createFrom;
-const $$createType2 = $models.CleanupPlan.createFrom;
-const $$createType3 = $models.DesktopOptions.createFrom;
-const $$createType4 = $models.MigrateReport.createFrom;
-const $$createType5 = $models.DestinationView.createFrom;
-const $$createType6 = $models.TerminalShellView.createFrom;
-const $$createType7 = $models.StorageView.createFrom;
+const $$createType1 = $models.ClaudeRetention.createFrom;
+const $$createType2 = $models.CleanupReport.createFrom;
+const $$createType3 = $models.CleanupPlan.createFrom;
+const $$createType4 = $models.DesktopOptions.createFrom;
+const $$createType5 = $models.MigrateReport.createFrom;
+const $$createType6 = $models.DestinationView.createFrom;
+const $$createType7 = $models.TerminalShellView.createFrom;
+const $$createType8 = $models.StorageView.createFrom;
