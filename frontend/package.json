@@ -1,7 +1,7 @@
 {
   "name": "agentdeck-frontend",
   "private": true,
-  "version": "0.20.4",
+  "version": "0.20.5",
   "license": "MIT",
   "type": "module",
   "scripts": {
