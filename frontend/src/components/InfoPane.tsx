@@ -181,7 +181,7 @@ export function InfoPane({ session, onChanged, notify, onClose, onDeleteSessions
     setSavingTitle(true)
     setMsg('')
     markService.SetTitle(key, value).then(() => {
-      if (currentKey.current === key) { setEditingTitle(false); setMsg(value ? '标题已保存' : '已恢复原名') }
+      if (currentKey.current === key) { setEditingTitle(false); setMsg(value ? '标题已保存' : '已还原原名') }
       onChanged()
     }).catch((e: unknown) => { if (currentKey.current === key) setMsg(`修改标题失败：${String(e).slice(0, 120)}`) })
       .finally(() => { if (currentKey.current === key) setSavingTitle(false) })
@@ -224,7 +224,7 @@ export function InfoPane({ session, onChanged, notify, onClose, onDeleteSessions
       onChanged()
       notify?.(markDoneMessage(archive ? 'archive' : 'unarchive', 1), {
         tone: 'success',
-        action: { label: '撤销', run: () => { markService.SetArchived(key, !archive).then(onChanged).catch(e => notify(`撤销失败：${String(e).slice(0, 120)}`, { tone: 'error' })) } },
+        action: { label: '撤消', run: () => { markService.SetArchived(key, !archive).then(onChanged).catch(e => notify(`撤消失败：${String(e).slice(0, 120)}`, { tone: 'error' })) } },
       })
     }).catch(e => setMsg(`归档操作失败：${String(e).slice(0, 120)}`))
   }
@@ -255,7 +255,7 @@ export function InfoPane({ session, onChanged, notify, onClose, onDeleteSessions
           </> : <>
             <Text className={styles.paneTitle}>{session.title || '未命名会话'}</Text>
             <Button size="small" appearance="subtle" icon={<EditRegular />} aria-label="编辑标题" disabled={savingTitle} onClick={() => { setTitleDraft(session.title); setEditingTitle(true); setMsg('') }} />
-            {session.title !== session.original_title ? <Button size="small" appearance="subtle" icon={<ArrowResetRegular />} aria-label="恢复原名" title={`恢复原名：${session.original_title || '未命名会话'}`} disabled={savingTitle} onClick={() => saveTitle('')} /> : null}
+            {session.title !== session.original_title ? <Button size="small" appearance="subtle" icon={<ArrowResetRegular />} aria-label="还原原名" title={`还原原名：${session.original_title || '未命名会话'}`} disabled={savingTitle} onClick={() => saveTitle('')} /> : null}
             <Button size="small" appearance="subtle" icon={session.favorite ? <StarFilled /> : <StarRegular />} onClick={toggleStar} aria-label={session.favorite ? '取消收藏' : '收藏'} />
             <Button appearance="subtle" size="small" icon={copied === 'title' ? <CheckmarkRegular /> : <CopyRegular />} onClick={() => copy(session.title, 'title')} aria-label="复制标题" />
           </>}

@@ -38,7 +38,7 @@ func (s *Store) BackupKeysTo(dest string, keys []string) error {
 		return errors.New("没有要备份的会话")
 	}
 	if _, err := os.Lstat(dest); err == nil {
-		return fmt.Errorf("恢复备份已存在：%s", dest)
+		return fmt.Errorf("还原备份已存在：%s", dest)
 	} else if !os.IsNotExist(err) {
 		return err
 	}

@@ -125,7 +125,7 @@ func (s *SettingsService) ResetRoot() error {
 // 返回错误，界面据此提示手动重启。
 func (s *SettingsService) Restart() error {
 	if s.a.cfg.Restart == nil {
-		return errors.New("当前环境不支持自动重启，请手动退出并重新打开 AgentDeck")
+		return errors.New("当前环境不支持自动重新启动，请手动退出并重新打开 AgentDeck")
 	}
 	return s.a.cfg.Restart()
 }

@@ -14,7 +14,7 @@ test('提示文案', () => {
   assert.equal(markPartialMessage('archive', 2, 1), '已归档 2 个会话，1 个会话操作失败')
 })
 
-test('撤销全部成功时不再提示', () => {
+test('撤消全部成功时不再提示', () => {
   assert.equal(undoFailureMessage(0), '')
-  assert.match(undoFailureMessage(2), /2 个会话未能恢复/)
+  assert.match(undoFailureMessage(2), /2 个会话未能还原/)
 })

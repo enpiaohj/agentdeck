@@ -18,7 +18,7 @@ export function PaneResizer({ label, edge = 'right', width }: { label: string; e
     aria-label={`调整${label}宽度`}
     aria-valuenow={width.width || undefined}
     tabIndex={0}
-    title={`拖拽调整${label}宽度，双击恢复自动宽度`}
+    title={`拖动调整${label}宽度，双击还原自动宽度`}
     onPointerDown={width.start}
     onKeyDown={onKeyDown}
   />

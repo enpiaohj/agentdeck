@@ -434,7 +434,7 @@ func (s *SessionService) RestoreData(src, currentPreferences string) (report Res
 		for cur := dest; ; cur = filepath.Dir(cur) {
 			fi, e := os.Lstat(cur)
 			if e == nil && fi.Mode()&os.ModeSymlink != 0 {
-				return fmt.Errorf("恢复目标含符号链接")
+				return fmt.Errorf("还原目标含符号链接")
 			}
 			if cur == filepath.Dir(cur) {
 				break
@@ -463,7 +463,7 @@ func (s *SessionService) RestoreData(src, currentPreferences string) (report Res
 	}
 	report.RollbackPath, err = s.backupData(filepath.Join(filepath.Dir(a.cfg.LibraryPath), "data-recovery"), currentPreferences)
 	if err != nil {
-		return report, fmt.Errorf("恢复前自动备份失败： %w", err)
+		return report, fmt.Errorf("还原前自动备份失败： %w", err)
 	}
 	// Always refresh after a possible partial commit, including failed merges.
 	defer func() {
@@ -482,7 +482,7 @@ func (s *SessionService) RestoreData(src, currentPreferences string) (report Res
 			for _, p := range created {
 				os.Remove(p)
 			}
-			err = fmt.Errorf("恢复未完成。历史、标注和项目库分别提交，已合并的数据不会自动回滚。恢复前自动备份（含项目及位置关联）：%s；%w", report.RollbackPath, err)
+			err = fmt.Errorf("还原未完成。历史、标注和项目库分别提交，已合并的数据不会自动回滚。还原前自动备份（含项目及位置关联）：%s；%w", report.RollbackPath, err)
 		}
 	}()
 	for _, p := range pending {
@@ -522,6 +522,6 @@ func (s *SessionService) RestoreData(src, currentPreferences string) (report Res
 		return report, statErr
 	}
 	report.Preferences = info.Preferences
-	report.Message = "已合并恢复；现有历史正文及版本保留，标注采用备份。全文索引需要重建。"
+	report.Message = "已合并还原；现有历史正文及版本保留，标注采用备份。全文索引需要重建。"
 	return report, nil
 }

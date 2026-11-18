@@ -53,10 +53,10 @@ export function DeletedSessionsNotice({ deletion: d }: { deletion: SessionDeleti
   return <div className="ad-deletion-notice" role="status" style={{ backgroundColor: tokens.colorBrandBackground2, color: tokens.colorNeutralForeground1 }}>
     <div>
       <span>{d.result ? d.result.message || `已删除 ${d.result.deleted_keys.length} 个会话。` : d.restoredMessage}</span>
-      {d.result?.backup_path ? <><div className="ad-delete-backup">{d.result.undo_token ? '恢复备份' : '未清理的临时备份'}：{d.result.backup_path}</div>{d.result.undo_token ? <div className="ad-delete-hint">可在本次运行期间撤销。备份文件将保留在本地磁盘。</div> : null}</> : null}
+      {d.result?.backup_path ? <><div className="ad-delete-backup">{d.result.undo_token ? '还原备份' : '未清理的临时备份'}：{d.result.backup_path}</div>{d.result.undo_token ? <div className="ad-delete-hint">可在本次运行期间撤消。备份文件将保留在本地磁盘。</div> : null}</> : null}
       {d.undoError ? <div role="alert" className="ad-delete-error">{d.undoError}</div> : null}
     </div>
-    {d.result?.undo_token ? <Button size="small" icon={d.undoBusy ? <Spinner size="extra-tiny" /> : <ArrowUndoRegular />} disabled={d.undoBusy || d.busy || !!d.targets.length} onClick={() => void d.undo()}>{d.undoBusy ? '正在恢复…' : '撤销删除'}</Button> : null}
+    {d.result?.undo_token ? <Button size="small" icon={d.undoBusy ? <Spinner size="extra-tiny" /> : <ArrowUndoRegular />} disabled={d.undoBusy || d.busy || !!d.targets.length} onClick={() => void d.undo()}>{d.undoBusy ? '正在还原…' : '撤消删除'}</Button> : null}
     <Button appearance="subtle" size="small" icon={<DismissRegular />} disabled={d.undoBusy} aria-label="关闭删除提示" onClick={d.dismissNotice} />
   </div>
 }

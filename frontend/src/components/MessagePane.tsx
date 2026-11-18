@@ -620,7 +620,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpT
           // 这个智能体的会话本就不在可读范围内（后端的 transcript 标记与
           // HasTranscript 同源），不是读取失败：说清限制，也不给按了没用的「重试」。
           <Text size={300} style={{ color: tokens.colorNeutralForeground3, overflowWrap: 'anywhere' }}>
-            AgentDeck 目前读不了 {m.label} 的会话正文。会话的标题、项目、时间与收藏标记仍然可用。
+            AgentDeck 目前无法读取 {m.label} 的会话正文。会话的标题、项目、时间与收藏标记仍然可用。
           </Text>
         ) : err ? (
           <div className={styles.errRow}>

@@ -201,7 +201,7 @@ func New(cfg Config) (*App, error) {
 		m.Close()
 		d.Close()
 		h.Close()
-		return nil, fmt.Errorf("读取删除恢复状态失败：%w", err)
+		return nil, fmt.Errorf("读取删除还原状态失败：%w", err)
 	}
 	a := &App{
 		cfg:           cfg,

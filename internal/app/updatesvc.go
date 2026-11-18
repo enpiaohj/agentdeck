@@ -436,7 +436,7 @@ func (s *UpdateService) RestartToInstall() error {
 		return errors.New("当前没有待安装的更新，请先下载")
 	}
 	if a.cfg.Restart == nil {
-		return errors.New("当前运行方式不支持自动重启，请手动退出并重新打开")
+		return errors.New("当前运行方式不支持自动重新启动，请手动退出并重新打开")
 	}
 	return a.cfg.Restart()
 }

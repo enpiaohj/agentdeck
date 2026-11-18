@@ -150,7 +150,7 @@ var storageLayout = []struct {
 }{
 	{"永久会话库", "library/history.db", "恢复与保留的会话正文", false},
 	{"删除备份", "library/deletions", "手动删除会话前写入的备份", false},
-	{"恢复前备份", "library/data-recovery", "恢复完整备份前的自动备份", false},
+	{"还原前备份", "library/data-recovery", "还原完整备份前的自动备份", false},
 	{"全文索引", indexRel, indexRebuildNote, true},
 	{"Claude 导入副本", "imports/claude", "导入的 Claude 会话副本", false},
 	{"标注库", "marks.db", "收藏、归档、标签、备注与本地标题", false},
@@ -288,7 +288,7 @@ func (a *App) migrationSkipNote(path string) (string, bool) {
 	}
 	switch base {
 	case "session.lock":
-		return "运行标记不迁移，重启时会重新写入", true
+		return "运行标记不迁移，重新启动时会重新写入", true
 	case "app-config.json":
 		return "应用配置文件固定在 %APPDATA%\\AgentDeck，不随数据移动", true
 	}
@@ -522,7 +522,7 @@ func (a *App) migrateStorage(picked string) (MigrateReport, error) {
 		return fail(err)
 	}
 	progress.done()
-	report.Message = fmt.Sprintf("数据已复制到 %s。重启 AgentDeck 后生效；旧位置的数据仍然保留，可在重启后确认无误再清理。", dest)
+	report.Message = fmt.Sprintf("数据已复制到 %s。重新启动 AgentDeck 后生效；旧位置的数据仍然保留，可在重新启动后确认无误再清理。", dest)
 	return report, nil
 }
 

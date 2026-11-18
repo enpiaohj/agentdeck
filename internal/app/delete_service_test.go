@@ -258,7 +258,7 @@ func TestManualDeleteRollsBackEarlierSourcesWhenLaterDeletionFails(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = svc.DeleteSessions(preview.Token); err == nil || !strings.Contains(err.Error(), "已自动恢复") {
+	if _, err = svc.DeleteSessions(preview.Token); err == nil || !strings.Contains(err.Error(), "已自动还原") {
 		t.Fatalf("Expected verified rollback, got %v", err)
 	}
 	for _, sess := range []sessions.Session{first, second} {

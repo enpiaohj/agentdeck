@@ -31,5 +31,5 @@ export function markPartialMessage(action: MarkAction, done: number, failed: num
 
 /** 撤销结果：全部成功返回空串（不需要再提示）。 */
 export function undoFailureMessage(failed: number): string {
-  return failed > 0 ? `撤销失败：${failed} 个会话未能恢复，请手动处理。` : ''
+  return failed > 0 ? `撤消失败：${failed} 个会话未能还原，请手动处理。` : ''
 }

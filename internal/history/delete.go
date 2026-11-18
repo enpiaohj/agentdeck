@@ -162,7 +162,7 @@ func (s *Store) RestoreKeysFrom(path string, keys []string) error {
 		record := records[key]
 		if current.present || len(current.versions) > 0 {
 			if current.present != record.present || current.metadata != record.metadata || current.hash != record.hash || !slices.Equal(current.versions, record.versions) {
-				return fmt.Errorf("恢复冲突，会话已有不同内容: %s", key)
+				return fmt.Errorf("还原冲突，会话已有不同内容: %s", key)
 			}
 			continue
 		}

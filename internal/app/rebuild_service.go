@@ -231,7 +231,7 @@ func writeNewFile(target string, data []byte) (err error) {
 	back, err := os.ReadFile(target)
 	if err != nil || !bytes.Equal(back, data) {
 		os.Remove(target)
-		return errors.New("写入后的校验失败，已撤销本次写入")
+		return errors.New("写入后的校验失败，已撤消本次写入")
 	}
 	return nil
 }

@@ -117,7 +117,7 @@ export function DataLocation() {
     try {
       await settingsService.ResetRoot()
       setRestartNeeded(true)
-      setMessage('数据位置已改回默认位置，重启 AgentDeck 后生效。')
+      setMessage('数据位置已改回默认位置，重新启动 AgentDeck 后生效。')
       load()
     } catch (reason) {
       setError(`未能改回默认位置：${String(reason)}`)
@@ -138,7 +138,7 @@ export function DataLocation() {
         setMigrated('')
         setProgress(null)
       }
-      setError(`未能自动重启：${String(reason)}。请手动退出 AgentDeck 后重新打开，新位置才会生效。`)
+      setError(`未能自动重新启动：${String(reason)}。请手动退出 AgentDeck 后重新打开，新位置才会生效。`)
     }
   }
   const copy = (view?.items ?? []).filter(item => item.present && !item.rebuild)
@@ -147,8 +147,8 @@ export function DataLocation() {
     <h2>存储位置</h2>
     <p>AgentDeck 自己的数据库与导入副本。原生智能体的会话仍保存在它们各自的目录里，不随这里迁移。</p>
     {view?.note ? <Text block role="alert" className="ad-storage-warn">{view.note}</Text> : null}
-    {restartNeeded ? <Text block role="status" className="ad-storage-restart">数据位置已改变，重启后生效。
-      <Button size="small" appearance="primary" onClick={() => void restart()}>立即重启</Button></Text> : null}
+    {restartNeeded ? <Text block role="status" className="ad-storage-restart">数据位置已改变，重新启动后生效。
+      <Button size="small" appearance="primary" onClick={() => void restart()}>立即重新启动</Button></Text> : null}
     {view ? <>
       <dl className="ad-storage-summary">
         <dt>当前位置</dt><dd>{view.using_default ? '默认位置' : view.root}</dd>
@@ -173,7 +173,7 @@ export function DataLocation() {
         {!view.using_default ? <Button size="small" appearance="subtle" icon={busy === 'reset' ? <Spinner size="extra-tiny" /> : <ArrowResetRegular />} disabled={!!busy} onClick={() => void reset()}>改回默认位置</Button> : null}
         <Button size="small" appearance="subtle" icon={<ArrowClockwiseRegular />} disabled={!!busy} onClick={load}>更新统计</Button>
       </div>
-      <p>迁移只复制 AgentDeck 自己的数据，不移动原生智能体的目录。数据位置固定是所选目录下的 {view.leaf} 子目录。全文索引{skipped.some(item => item.rebuild && item.present) ? `（当前 ${fmtBytes(skipped.reduce((sum, item) => sum + (item.present ? item.bytes : 0), 0))}）` : ''}可重建，不参与复制，重启后自动重建。</p>
+      <p>迁移只复制 AgentDeck 自己的数据，不移动原生智能体的目录。数据位置固定是所选目录下的 {view.leaf} 子目录。全文索引{skipped.some(item => item.rebuild && item.present) ? `（当前 ${fmtBytes(skipped.reduce((sum, item) => sum + (item.present ? item.bytes : 0), 0))}）` : ''}可重建，不参与复制，重新启动后自动重建。</p>
       <p>迁移过程中请勿关闭应用。旧位置的数据一律保留，确认无误后再清理。</p>
     </> : <Spinner size="tiny" />}
     {/* 迁移进度只画在弹窗里：迁移期间弹窗是模态且不许关闭，设置区被遮在后面，
@@ -185,7 +185,7 @@ export function DataLocation() {
       <p>以下位置在迁移前使用，数据仍然保留。确认新位置运行正常后可以清理。</p>
       <ul>{view.prev_dirs.map(dir => <li key={dir}><span className="ad-storage-path">{dir}</span></li>)}</ul>
       {view.prev_items.length ? <p>可清理：{view.prev_items.map(item => item.name).join('、')}，合计 {fmtBytes(view.prev_bytes)}。</p> : <p>该位置已没有可清理的 AgentDeck 数据。</p>}
-      {view.prev_in_use ? <p>旧位置仍是本次运行使用的目录，请先重启 AgentDeck，确认新位置运行正常后再清理。</p> : null}
+      {view.prev_in_use ? <p>旧位置仍是本次运行使用的目录，请先重新启动 AgentDeck，确认新位置运行正常后再清理。</p> : null}
       <Button size="small" appearance="subtle" icon={<DeleteRegular />} disabled={!!busy || !view.prev_items.length || view.prev_in_use} onClick={() => void preview()}>清理旧位置数据…</Button>
     </section> : null}
     <Dialog open={!!pending} onOpenChange={(_, data) => { if (!data.open) closeMigration() }}>
@@ -194,7 +194,7 @@ export function DataLocation() {
         <DialogContent>
           {migrated ? <>
             <Text block role="status" className="ad-storage-message">{migrated}</Text>
-            <p>新位置已经就绪，重启 AgentDeck 后生效。旧位置的数据一律保留，重启并确认新位置运行正常后再到设置里清理。</p>
+            <p>新位置已经就绪，重新启动 AgentDeck 后生效。旧位置的数据一律保留，重新启动并确认新位置运行正常后再到设置里清理。</p>
           </> : busy === 'migrate' ? <>
             <dl className="ad-storage-summary">
               <dt>数据位置</dt><dd><span className="ad-storage-path">{pending?.dest}</span></dd>
@@ -214,13 +214,13 @@ export function DataLocation() {
             <ul>{copy.map(item => <li key={item.path}>{item.name}（{fmtBytes(item.bytes)}）</li>)}</ul>
             {copy.length === 0 ? <p>当前还没有可迁移的数据文件。</p> : null}
             {pending?.reason ? <Text block role="alert" className="ad-storage-error">{pending.reason}</Text> : null}
-            <p>完成后需要重启 AgentDeck 才会使用新位置；旧位置的数据不会被删除。</p>
+            <p>完成后需要重新启动 AgentDeck 才会使用新位置；旧位置的数据不会被删除。</p>
           </>}
         </DialogContent>
         <DialogActions>
           {migrated ? <>
             <Button disabled={!!busy} onClick={closeMigration}>稍后</Button>
-            <Button appearance="primary" icon={<ArrowSyncRegular />} onClick={() => void restart(true)}>立即重启</Button>
+            <Button appearance="primary" icon={<ArrowSyncRegular />} onClick={() => void restart(true)}>立即重新启动</Button>
           </> : <>
             <Button disabled={!!busy} onClick={closeMigration}>取消</Button>
             <Button appearance="primary" disabled={!!busy || !pending?.ready} icon={busy === 'migrate' ? <Spinner size="extra-tiny" /> : undefined} onClick={() => void migrate()}>{busy === 'migrate' ? '正在迁移…' : '开始迁移'}</Button>

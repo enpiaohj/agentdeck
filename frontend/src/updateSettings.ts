@@ -89,7 +89,7 @@ export function createUpdateSettings(api: UpdateAPI, events: UpdateEvents) {
       try {
         await api.RestartToInstall()
       } catch (reason) {
-        await refresh(`重启失败：${String(reason)}`)
+        await refresh(`重新启动失败：${String(reason)}`)
       }
     },
     async openFolder() {

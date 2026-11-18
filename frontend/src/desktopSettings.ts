@@ -25,7 +25,7 @@ export function createDesktopSettings(api: DesktopAPI) {
       try {
         publish({ view: await api.Desktop(), operation: null, error: '' })
       } catch (reason) {
-        publish({ view: null, operation: null, error: `读取启动与托盘设置失败：${String(reason)}` })
+        publish({ view: null, operation: null, error: `读取启动与通知区域设置失败：${String(reason)}` })
       }
     },
     async save(key: DesktopKey, value: boolean) {
@@ -36,7 +36,7 @@ export function createDesktopSettings(api: DesktopAPI) {
         const view = await (key === 'start_at_login' ? api.SetStartAtLogin(value) : api.SetCloseToTray(value))
         publish({ view, operation: null, error: '' })
       } catch (reason) {
-        const error = `保存启动与托盘设置失败：${String(reason)}`
+        const error = `保存启动与通知区域设置失败：${String(reason)}`
         try {
           publish({ view: await api.Desktop(), operation: null, error })
         } catch (readReason) {

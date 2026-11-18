@@ -21,7 +21,7 @@ const categories = [
   { id: 'sessions', label: '会话', description: '设置会话排序、正文显示与默认阅读方式。', icon: <TextFontRegular /> },
   { id: 'terminal', label: '终端', description: '配置新建和继续会话时使用的 PowerShell 环境。', icon: <WindowNewRegular /> },
   { id: 'data', label: '数据管理', description: '查看存储占用、迁移数据位置与管理本地会话库。', icon: <DatabaseRegular /> },
-  { id: 'backup', label: '备份与恢复', description: '创建完整数据备份，或从备份文件恢复数据。', icon: <ArrowDownloadRegular /> },
+  { id: 'backup', label: '备份与还原', description: '创建完整数据备份，或从备份文件还原数据。', icon: <ArrowDownloadRegular /> },
   { id: 'diagnostics', label: '诊断', description: '检查智能体状态与搜索索引。', icon: <PulseRegular /> },
   { id: 'shortcuts', label: '快捷键', description: '查看导航、会话管理与阅读操作的键盘快捷键。', icon: <KeyboardRegular /> },
   { id: 'about', label: '关于', description: '查看版本与开发者信息，检查新版本，了解许可证以及隐私与数据说明。', icon: <InfoRegular /> },
@@ -52,9 +52,9 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
     ] },
     { id: 'layout', category: 'appearance', title: '界面布局', rows: [
       { key: 'navCollapsed', title: '侧栏默认状态', description: '展开时显示名称，收起时仅显示图标。窄窗口下自动收起。', control: id => <select id={id} value={p.navCollapsed ? 'collapsed' : 'expanded'} onChange={e => update({ navCollapsed: e.target.value === 'collapsed' })}><option value="expanded">展开</option><option value="collapsed">收起</option></select> },
-      { key: 'navWidth', title: '侧栏宽度', description: p.navWidth ? `当前为 ${p.navWidth} px。可拖动分隔条调整，或恢复自动宽度。` : '随窗口宽度自动调整。拖动分隔条可自定义宽度。', control: id => <Button id={id} size="small" disabled={!p.navWidth} onClick={() => update({ navWidth: 0 })}>恢复自动宽度</Button> },
-      { key: 'listWidth', title: '会话列表宽度', description: p.listWidth ? `当前为 ${p.listWidth} px。可拖动列表右侧的分隔条调整，或恢复自动宽度。` : '随窗口宽度自动调整。拖动列表右侧的分隔条可自定义宽度。', control: id => <Button id={id} size="small" disabled={!p.listWidth} onClick={() => update({ listWidth: 0 })}>恢复自动宽度</Button> },
-      { key: 'infoWidth', title: '会话详情栏宽度', description: p.infoWidth ? `当前为 ${p.infoWidth} px。可拖动详情栏左侧的分隔条调整，或恢复自动宽度。` : '随窗口宽度自动调整。拖动详情栏左侧的分隔条可自定义宽度。', control: id => <Button id={id} size="small" disabled={!p.infoWidth} onClick={() => update({ infoWidth: 0 })}>恢复自动宽度</Button> },
+      { key: 'navWidth', title: '侧栏宽度', description: p.navWidth ? `当前为 ${p.navWidth} px。可拖动分隔条调整，或还原自动宽度。` : '随窗口宽度自动调整。拖动分隔条可自定义宽度。', control: id => <Button id={id} size="small" disabled={!p.navWidth} onClick={() => update({ navWidth: 0 })}>还原自动宽度</Button> },
+      { key: 'listWidth', title: '会话列表宽度', description: p.listWidth ? `当前为 ${p.listWidth} px。可拖动列表右侧的分隔条调整，或还原自动宽度。` : '随窗口宽度自动调整。拖动列表右侧的分隔条可自定义宽度。', control: id => <Button id={id} size="small" disabled={!p.listWidth} onClick={() => update({ listWidth: 0 })}>还原自动宽度</Button> },
+      { key: 'infoWidth', title: '会话详情栏宽度', description: p.infoWidth ? `当前为 ${p.infoWidth} px。可拖动详情栏左侧的分隔条调整，或还原自动宽度。` : '随窗口宽度自动调整。拖动详情栏左侧的分隔条可自定义宽度。', control: id => <Button id={id} size="small" disabled={!p.infoWidth} onClick={() => update({ infoWidth: 0 })}>还原自动宽度</Button> },
       { key: 'infoPanel', title: '会话详情栏', description: '选中会话时，按此状态显示标签、备注与管理操作。', control: id => <select id={id} value={p.infoPanel} onChange={e => update({ infoPanel: e.target.value as typeof p.infoPanel })}><option value="open">默认展开</option><option value="closed">默认收起</option></select> },
       { key: 'hideEmptyProjects', title: '隐藏空项目', description: '隐藏没有会话的项目，正在筛选的项目除外。项目本身仍会保留。', control: id => <input id={id} aria-describedby={`${id}-description`} type="checkbox" role="switch" checked={p.hideEmptyProjects} onChange={e => update({ hideEmptyProjects: e.target.checked })} /> },
     ] },
@@ -71,8 +71,8 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
       { key: 'fold', title: '默认折叠过程记录', description: '收起思考、工具调用与结构化输出；需要时可逐项展开。', control: id => <input id={id} aria-describedby={`${id}-description`} type="checkbox" role="switch" checked={p.foldProcesses} onChange={e => update({ foldProcesses: e.target.checked })} /> },
     ] },
     { id: 'delete', category: 'sessions', title: '删除会话', rows: [
-      { key: 'deleteBackup', title: '删除前创建恢复备份', description: p.deleteBackup ? '删除会话前自动备份所选会话，可在本次运行期间撤销。备份文件保留在本地磁盘。' : '已停用。删除会话时不创建备份，删除后无法恢复。', control: id => <input id={id} aria-describedby={`${id}-description`} type="checkbox" role="switch" checked={p.deleteBackup} onChange={e => update({ deleteBackup: e.target.checked })} /> },
-      { key: 'allowImportDelete', title: '允许删除导入的聊天记录', description: '默认关闭。开启后，可以删除导入的 ChatGPT 聊天记录（会话详情、右键菜单和批量选择里的“删除”）。只删除 AgentDeck 里的副本，不影响 ChatGPT 上的原始聊天和你的导出文件；删除前会按上面的备份选项先备份。已删除的会话重新导入同一份导出时默认不会回来，可在导入页勾选恢复。', control: id => <ImportDeleteControl id={id} /> },
+      { key: 'deleteBackup', title: '删除前创建还原备份', description: p.deleteBackup ? '删除会话前自动备份所选会话，可在本次运行期间撤消。备份文件保留在本地磁盘。' : '已停用。删除会话时不创建备份，删除后无法还原。', control: id => <input id={id} aria-describedby={`${id}-description`} type="checkbox" role="switch" checked={p.deleteBackup} onChange={e => update({ deleteBackup: e.target.checked })} /> },
+      { key: 'allowImportDelete', title: '允许删除导入的聊天记录', description: '默认关闭。开启后，可以删除导入的 ChatGPT 聊天记录（会话详情、右键菜单和批量选择里的“删除”）。只删除 AgentDeck 里的副本，不影响 ChatGPT 上的原始聊天和你的导出文件；删除前会按上面的备份选项先备份。已删除的会话重新导入同一份导出时默认不会回来，可在导入页选中后还原。', control: id => <ImportDeleteControl id={id} /> },
     ] },
     { id: 'shell', category: 'terminal', title: '终端环境', rows: [
       { key: 'terminalShell', title: '终端 PowerShell', description: '新建或继续会话时使用的终端。更改后对新打开的终端生效。', control: id => <TerminalShellControl id={id} /> },
@@ -86,7 +86,7 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
   const dataSections: SettingsDataSection[] = []
   if (matches('data', '数据管理 存储位置 数据目录 迁移 磁盘 空间 清理旧位置')) dataSections.push('storage')
   if (matches('data', '数据管理 本地会话库 永久会话库 历史库 持久保存 压缩 版本 统计 清理旧版本 旧版本 回收空间')) dataSections.push('library')
-  if (matches('backup', '备份与恢复 完整数据备份 ZIP 文件 导入历史 收藏 标签 备注 偏好设置')) dataSections.push('backup')
+  if (matches('backup', '备份与还原 备份与恢复 完整数据备份 ZIP 文件 导入历史 收藏 标签 备注 偏好设置')) dataSections.push('backup')
   if (matches('diagnostics', '诊断 智能体检测 能力 状态 发现 原生恢复 会话来源')) dataSections.push('agents')
   if (matches('diagnostics', '诊断 搜索索引 全文索引 重建 检索')) dataSections.push('index')
   const shortcuts = matches('shortcuts', '快捷键 键盘 搜索 Ctrl 选择 Shift 阅读 设置 F2 重命名 Delete 删除 F5 刷新')
@@ -130,13 +130,13 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
           </section> : null}
           {q && about ? <section className="ad-settings-section" aria-labelledby={`${baseId}-about-heading`}><h2 id={`${baseId}-about-heading`}>关于 · AgentDeck</h2><AboutView /><PrivacyNote /></section> : null}
           {shortcuts ? <section className="ad-settings-section"><h2>快捷键列表</h2><dl className="ad-shortcuts">{[
-            ['搜索所有会话','Ctrl + K'],['刷新会话列表','F5'],['新建会话','Ctrl + N'],['新建项目','Ctrl + Shift + N'],['打开设置','Ctrl + ,'],['调整栏宽','拖拽分隔条 / 方向键'],['打开操作菜单','Shift + F10 / 菜单键'],['重命名所选会话','F2'],['删除所选会话','Delete'],['查找当前会话','Ctrl + F'],['下一 / 上一处匹配','Enter / Shift + Enter'],['全选当前列表','Ctrl + A'],['多选 / 连选智能体（侧栏）','Ctrl + 单击 / Shift + 单击'],['追加 / 取消选择','Ctrl + 单击'],['连续选择','Shift + 单击'],['追加连续范围','Ctrl + Shift + 单击'],['清空选择','Esc'],['移动焦点 / 扩展选择','方向键 / Shift + 方向键'],['保存备注','Ctrl + Enter'],
+            ['搜索所有会话','Ctrl + K'],['刷新会话列表','F5'],['新建会话','Ctrl + N'],['新建项目','Ctrl + Shift + N'],['打开设置','Ctrl + ,'],['调整栏宽','拖动分隔条 / 方向键'],['打开操作菜单','Shift + F10 / 菜单键'],['重命名所选会话','F2'],['删除所选会话','Delete'],['查找当前会话','Ctrl + F'],['下一 / 上一处匹配','Enter / Shift + Enter'],['全选当前列表','Ctrl + A'],['多选 / 连选智能体（侧栏）','Ctrl + 单击 / Shift + 单击'],['追加 / 取消选择','Ctrl + 单击'],['连续选择','Shift + 单击'],['追加连续范围','Ctrl + Shift + 单击'],['清空选择','Esc'],['移动焦点 / 扩展选择','方向键 / Shift + 方向键'],['保存备注','Ctrl + Enter'],
           ].map(([label, key]) => <div key={label}><dt>{label}</dt><dd><kbd>{key}</kbd></dd></div>)}</dl><p className="ad-settings-note">全选仅作用于筛选后当前展开的会话。删除操作会先显示确认窗口。</p></section> : null}
-          {empty ? <div className="ad-settings-empty"><SearchRegular /><h2>未找到匹配的设置</h2><p>尝试使用“主题”“托盘”或“备份”等关键词。</p><Button size="small" onClick={() => setQuery('')}>清除搜索</Button></div> : null}
-          {!q && ['general', 'appearance', 'sessions'].includes(category) ? <footer className="ad-settings-footer"><div><strong>偏好设置</strong><p>恢复外观、布局、阅读与默认智能体的初始设置。</p></div><Button appearance="subtle" size="small" icon={<ArrowResetRegular />} onClick={() => setResetOpen(true)}>恢复偏好设置…</Button></footer> : null}
+          {empty ? <div className="ad-settings-empty"><SearchRegular /><h2>未找到匹配的设置</h2><p>尝试使用“主题”“通知区域”或“备份”等关键词。</p><Button size="small" onClick={() => setQuery('')}>清除搜索</Button></div> : null}
+          {!q && ['general', 'appearance', 'sessions'].includes(category) ? <footer className="ad-settings-footer"><div><strong>偏好设置</strong><p>还原外观、布局、阅读与默认智能体的初始设置。</p></div><Button appearance="subtle" size="small" icon={<ArrowResetRegular />} onClick={() => setResetOpen(true)}>还原偏好设置…</Button></footer> : null}
         </div>
       </div>
     </div>
-    <Dialog open={resetOpen} onOpenChange={(_, value) => setResetOpen(value.open)}><DialogSurface><DialogBody><DialogTitle>恢复偏好设置？</DialogTitle><DialogContent>颜色主题、界面布局、会话设置、默认智能体和最近目录记录将恢复为初始状态。开机启动、托盘行为、终端配置及会话数据保持原样。</DialogContent><DialogActions><Button onClick={() => setResetOpen(false)}>取消</Button><Button appearance="primary" onClick={() => { reset(); setResetOpen(false) }}>恢复默认</Button></DialogActions></DialogBody></DialogSurface></Dialog>
+    <Dialog open={resetOpen} onOpenChange={(_, value) => setResetOpen(value.open)}><DialogSurface><DialogBody><DialogTitle>还原偏好设置？</DialogTitle><DialogContent>颜色主题、界面布局、会话设置、默认智能体和最近目录记录将还原为初始状态。登录时启动、通知区域行为、终端配置及会话数据保持原样。</DialogContent><DialogActions><Button onClick={() => setResetOpen(false)}>取消</Button><Button appearance="primary" onClick={() => { reset(); setResetOpen(false) }}>还原默认</Button></DialogActions></DialogBody></DialogSurface></Dialog>
   </section>
 }

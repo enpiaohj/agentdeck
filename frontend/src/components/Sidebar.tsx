@@ -292,7 +292,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
       onRefresh(); setAction(null)
       notify(`项目显示名称已改为“${name.trim()}”，会话列表同步生效。`, {
         tone: 'success',
-        action: { label: '撤销', run: () => void undoRename(project, project.name) },
+        action: { label: '撤消', run: () => void undoRename(project, project.name) },
       })
     } catch (reason) { setActionError(String(reason)) }
     finally { pending.current = false; setBusy(false) }
@@ -302,8 +302,8 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
     try {
       await projectService.Rename(project.path, name)
       onRefresh()
-      notify(`已恢复为“${name}”。`, { tone: 'success' })
-    } catch (reason) { notify(`撤销失败：${String(reason)}`, { tone: 'error' }) }
+      notify(`已还原为“${name}”。`, { tone: 'success' })
+    } catch (reason) { notify(`撤消失败：${String(reason)}`, { tone: 'error' }) }
   }
   const removeProject = async (project: Project) => {
     if (pending.current) return
@@ -323,7 +323,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
 
   const renameError = (() => {
     const value = renameDraft.trim()
-    if (!value) return '显示名称不能为空；可用“使用目录名”恢复为目录名称。'
+    if (!value) return '显示名称不能为空；可用“使用目录名”还原为目录名称。'
     if (value.length > 200) return '显示名称不能超过 200 个字符。'
     if (/[\u0000-\u001f\u007f]/.test(renameDraft)) return '显示名称不能包含换行等控制字符。'
     return ''
@@ -580,7 +580,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
             className={styles.item}
             style={{ width: 'auto', margin: 0, padding: '4px 6px' }}
             onClick={onOpenDiagnostics}
-            title="能力诊断 / 备份恢复"
+            title="能力诊断 / 备份还原"
           >
             <SettingsRegular fontSize={15} />
             设置

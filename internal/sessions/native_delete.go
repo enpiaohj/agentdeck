@@ -411,7 +411,7 @@ func (p *NativeDeletePlan) Backup(dir string) error {
 		Histories []*nativeIndex
 		Databases []*nativeDatabase
 		Recovery  string
-	}{1, p.session.Agent, p.session.ID, p.files, p.index, p.histories, p.databases, "先关闭原始客户端。仅在原路径不存在且 SHA256 校验正确时，将 .source 恢复至 Files.Path；不得覆盖重建文件。SQLite 仅在结构匹配、所选会话行均不存在时，在一个事务中依次执行保存的 Tables.Inserts，禁止替换整个数据库。仅在所选 ID 没有新索引行时追加 Index.Lines 或 Histories.Lines，保留其他会话行。此备份包含私密会话内容，请妥善保管。"}
+	}{1, p.session.Agent, p.session.ID, p.files, p.index, p.histories, p.databases, "先关闭原始客户端。仅在原路径不存在且 SHA256 校验正确时，将 .source 还原至 Files.Path；不得覆盖重建文件。SQLite 仅在结构匹配、所选会话行均不存在时，在一个事务中依次执行保存的 Tables.Inserts，禁止替换整个数据库。仅在所选 ID 没有新索引行时追加 Index.Lines 或 Histories.Lines，保留其他会话行。此备份包含私密会话内容，请妥善保管。"}
 	b, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return err
@@ -471,7 +471,7 @@ func (p *NativeDeletePlan) Delete() error {
 		return err
 	}
 	if manifestHash != p.manifestHash {
-		return errors.New("恢复清单已发生变化，拒绝删除")
+		return errors.New("还原清单已发生变化，拒绝删除")
 	}
 	for _, f := range p.files {
 		hash, _, err := nativeHash(f.Backup)
@@ -479,7 +479,7 @@ func (p *NativeDeletePlan) Delete() error {
 			return err
 		}
 		if hash != f.Hash {
-			return errors.New("恢复备份已损坏，拒绝删除")
+			return errors.New("还原备份已损坏，拒绝删除")
 		}
 	}
 	if err := p.deleteMetadata(); err != nil {
@@ -511,7 +511,7 @@ func (p *NativeDeletePlan) DiscardBackup() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if !p.deleted || p.backup == "" {
-		return errors.New("删除尚未完成，不能丢弃恢复备份")
+		return errors.New("删除尚未完成，不能丢弃还原备份")
 	}
 	var errs []error
 	for i := range p.files {
@@ -549,7 +549,7 @@ func (p *NativeDeletePlan) Restore() error {
 			if hash == f.Hash {
 				f.removed = false
 			} else {
-				errs = append(errs, fmt.Errorf("恢复冲突，来源已重建: %s", f.Path))
+				errs = append(errs, fmt.Errorf("还原冲突，来源已重建: %s", f.Path))
 			}
 			continue
 		} else if !os.IsNotExist(err) {

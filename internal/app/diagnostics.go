@@ -153,7 +153,7 @@ func (s *MarkService) RestoreMarks(src string) error {
 		// 写回失败:留底还在,恢复它
 		os.Rename(bak, cur)
 		a.marks, _ = marks.Open(cur)
-		return fmt.Errorf("写入恢复数据失败(当前库已还原): %v", err)
+		return fmt.Errorf("写入还原数据失败(当前库已还原): %v", err)
 	}
 	fresh, err := marks.Open(cur)
 	if err != nil {

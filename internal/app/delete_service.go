@@ -107,12 +107,12 @@ func loadDeletedKeys(library string) (map[string]bool, error) {
 			continue
 		}
 		if err != nil || !info.Mode().IsRegular() || info.Size() > 1<<20 {
-			return nil, fmt.Errorf("无法校验删除恢复记录：%s", path)
+			return nil, fmt.Errorf("无法校验删除还原记录：%s", path)
 		}
 		data, err := os.ReadFile(path)
 		var record deletionRecord
 		if err != nil || json.Unmarshal(data, &record) != nil || record.Version != 1 {
-			return nil, fmt.Errorf("删除恢复记录损坏：%s", path)
+			return nil, fmt.Errorf("删除还原记录损坏：%s", path)
 		}
 		if record.State == "deleting" || record.State == "deleted" || record.State == "restoring" || record.State == "needs-recovery" {
 			for _, key := range append(record.Keys, record.Owned...) {
@@ -306,7 +306,7 @@ func (s *SessionService) deleteSessions(token string, keepBackup bool) (DeleteRe
 	}
 	root := deletionDir(a.cfg.LibraryPath)
 	if err := os.MkdirAll(root, 0700); err != nil {
-		return DeleteReport{}, fmt.Errorf("无法创建恢复备份，未删除任何数据：%w", err)
+		return DeleteReport{}, fmt.Errorf("无法创建还原备份，未删除任何数据：%w", err)
 	}
 	dir, err := os.MkdirTemp(root, "delete-"+time.Now().Format("20060102-150405")+"-")
 	if err != nil {
@@ -354,14 +354,14 @@ func (s *SessionService) deleteSessions(token string, keepBackup bool) (DeleteRe
 		if restoreErr := errors.Join(failures...); restoreErr != nil {
 			_ = job.saveState("needs-recovery")
 			s.refreshAfterDelete()
-			return DeleteReport{}, fmt.Errorf("删除未完成，自动恢复未全部成功。恢复备份：%s；%w；恢复：%v", dir, cause, restoreErr)
+			return DeleteReport{}, fmt.Errorf("删除未完成，自动还原未全部成功。还原备份：%s；%w；还原：%v", dir, cause, restoreErr)
 		}
 		if err := job.saveState("restored"); err != nil {
-			return DeleteReport{}, fmt.Errorf("数据已回退，恢复状态写入失败。备份：%s；%w", dir, err)
+			return DeleteReport{}, fmt.Errorf("数据已回退，还原状态写入失败。备份：%s；%w", dir, err)
 		}
 		a.blockDeleted(job.ownedKeys, false)
 		s.refreshAfterDelete()
-		return DeleteReport{}, fmt.Errorf("删除未完成，已自动恢复。备份：%s；%w", dir, cause)
+		return DeleteReport{}, fmt.Errorf("删除未完成，已自动还原。备份：%s；%w", dir, cause)
 	}
 	for i, plan := range job.native {
 		if err = plan.RebaseAfterOwnBatchChange(job.native[:i]); err != nil {
@@ -439,7 +439,7 @@ func (s *SessionService) RestoreDeletedSessions(token string) (string, error) {
 	defer a.dataMu.Unlock()
 	job := a.deleteUndos[token]
 	if job == nil {
-		return "", errors.New("撤销请求已失效；请使用删除时保存的恢复备份")
+		return "", errors.New("撤消请求已失效；请使用删除时保存的还原备份")
 	}
 	a.captureMu.Lock()
 	defer a.captureMu.Unlock()
@@ -450,7 +450,7 @@ func (s *SessionService) RestoreDeletedSessions(token string) (string, error) {
 		return "", err
 	}
 	fail := func(err error) (string, error) {
-		return "", fmt.Errorf("恢复未完成，未覆盖冲突内容；恢复备份：%s；%w", job.dir, err)
+		return "", fmt.Errorf("还原未完成，未覆盖冲突内容；还原备份：%s；%w", job.dir, err)
 	}
 	for i := len(job.native) - 1; i >= 0; i-- {
 		if err := job.native[i].Restore(); err != nil {
@@ -469,7 +469,7 @@ func (s *SessionService) RestoreDeletedSessions(token string) (string, error) {
 	a.blockDeleted(job.ownedKeys, false)
 	delete(a.deleteUndos, token)
 	s.refreshAfterDelete()
-	return fmt.Sprintf("已恢复 %d 个会话的原始记录与本地内容。", len(job.keys)), nil
+	return fmt.Sprintf("已还原 %d 个会话的原始记录与本地内容。", len(job.keys)), nil
 }
 
 // ---- 已删除的导入会话：不再写入，也可以恢复 ----

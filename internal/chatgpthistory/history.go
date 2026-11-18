@@ -962,7 +962,7 @@ func Import(root, source, account string, opts Options) (Report, error) {
 	if len(m.Entries) == 0 {
 		switch {
 		case len(restore) > 0:
-			return report, errors.New("在这份导出里没有找到要恢复的会话")
+			return report, errors.New("在这份导出里没有找到要还原的会话")
 		case report.SkippedDeleted > 0:
 			// everything in it was deleted on purpose: nothing to import, and not an error
 			return report, nil

@@ -43,28 +43,28 @@ export function DataBackup({ onRestored }: { onRestored: () => void }) {
       const report = await sessionService.RestoreData(pending.path, JSON.stringify(preferences))
       update(parsePreferences(report.preferences))
       setPending(null)
-      setMessage(`数据恢复完成。恢复前备份：${report.rollback_path}`)
+      setMessage(`数据还原完成。还原前备份：${report.rollback_path}`)
       onRestored()
       try { await searchService.Rebuild() }
-      catch (reason) { setError(`数据已恢复，但全文索引重建未能启动：${String(reason)}`) }
-    } catch (reason) { setPending(null); setError(`恢复未完成：${String(reason)}`) }
+      catch (reason) { setError(`数据已还原，但全文索引重建未能启动：${String(reason)}`) }
+    } catch (reason) { setPending(null); setError(`还原未完成：${String(reason)}`) }
     finally { setBusy(null) }
   }
-  return <section className="ad-backup-section" aria-label="完整数据备份与恢复">
+  return <section className="ad-backup-section" aria-label="完整数据备份与还原">
     <h2>完整备份</h2>
     <p>将本地会话库及全部内容版本、收藏、归档、标签、备注、导入历史、项目设置、位置关联和界面偏好保存为一个 ZIP 文件。</p>
     <div className="ad-backup-actions">
       <Button size="small" icon={busy === 'backup' ? <Spinner size="extra-tiny" /> : <DatabaseRegular />} disabled={!!busy} onClick={() => void backup()}>{busy === 'backup' ? '正在备份…' : '创建完整备份…'}</Button>
-      <Button size="small" icon={busy === 'inspect' ? <Spinner size="extra-tiny" /> : <ArrowUploadRegular />} disabled={!!busy} onClick={() => void chooseRestore()}>{busy === 'inspect' ? '正在校验…' : '从完整备份恢复…'}</Button>
+      <Button size="small" icon={busy === 'inspect' ? <Spinner size="extra-tiny" /> : <ArrowUploadRegular />} disabled={!!busy} onClick={() => void chooseRestore()}>{busy === 'inspect' ? '正在校验…' : '从完整备份还原…'}</Button>
     </div>
-    <p>恢复采用合并方式，保留当前新增会话与内容版本；同一会话的收藏、归档、标签和备注以备份为准。恢复前自动创建当前数据的完整备份。</p>
-    <p>备份范围为 AgentDeck 已保存的数据，不包含原生智能体的账号凭据、原始目录和附件文件。全文索引在恢复后重新构建。</p>
+    <p>还原采用合并方式，保留当前新增会话与内容版本；同一会话的收藏、归档、标签和备注以备份为准。还原前自动创建当前数据的完整备份。</p>
+    <p>备份范围为 AgentDeck 已保存的数据，不包含原生智能体的账号凭据、原始目录和附件文件。全文索引在还原后重新构建。</p>
     <p>单个备份最多包含 20,000 个数据文件，解压后总大小不超过 4 GiB。</p>
     {message ? <Text block role="status" className="ad-backup-message">{message}</Text> : null}
     {error ? <Text block role="alert" className="ad-backup-error">{error}</Text> : null}
     <Dialog open={!!pending} onOpenChange={(_, data) => { if (!data.open && !busy) setPending(null) }}>
       <DialogSurface className="ad-backup-dialog"><DialogBody>
-        <DialogTitle>恢复完整备份</DialogTitle>
+        <DialogTitle>还原完整备份</DialogTitle>
         <DialogContent>
           {pending ? <>
             <p>备份已通过完整性校验。请确认以下信息：</p>
@@ -77,12 +77,12 @@ export function DataBackup({ onRestored }: { onRestored: () => void }) {
               <dt>备份文件</dt><dd>{pending.path}</dd>
             </dl>
             <p>当前新增会话和历史版本将予以保留。同一会话的标注、同一项目的设置与位置关联及界面偏好将采用备份中的内容；存在冲突的导入文件不会被覆盖。</p>
-            <p>恢复前将自动保存当前数据，完成后重新构建全文索引。</p>
+            <p>还原前将自动保存当前数据，完成后重新构建全文索引。</p>
           </> : null}
         </DialogContent>
         <DialogActions>
           <Button disabled={!!busy} onClick={() => setPending(null)}>取消</Button>
-          <Button appearance="primary" disabled={!!busy} icon={busy === 'restore' ? <Spinner size="extra-tiny" /> : undefined} onClick={() => void restore()}>{busy === 'restore' ? '正在恢复…' : '恢复数据'}</Button>
+          <Button appearance="primary" disabled={!!busy} icon={busy === 'restore' ? <Spinner size="extra-tiny" /> : undefined} onClick={() => void restore()}>{busy === 'restore' ? '正在还原…' : '还原数据'}</Button>
         </DialogActions>
       </DialogBody></DialogSurface>
     </Dialog>

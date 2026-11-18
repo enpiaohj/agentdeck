@@ -121,7 +121,7 @@ export function ChatGPTHistoryImport({ onImported }: { onImported: (report: Chat
       const prefix = result.already_imported ? '此导出文件已导入过，已更新项目名'
         : result.conversations === 0 && result.skipped_deleted > 0 ? '没有新的内容：这份导出里的会话都是你删除过的'
         : `已导入 ${result.conversations} 个会话（${result.projects} 个项目）`
-      setMessage(`${prefix}${result.images ? `；${result.images} 张图片` : ''}${result.skipped_blocks ? `；${result.skipped_blocks} 处图片或音频内容未导入` : ''}${result.reclaimed ? `；已清理 ${result.reclaimed} 个被取代的旧批次，释放 ${fmtBytes(result.reclaimed_bytes)}` : ''}${result.restored ? `；已恢复 ${result.restored} 个你删除过的会话` : ''}${result.skipped_deleted && result.conversations > 0 ? `；${result.skipped_deleted} 个你删除过的会话未导入` : ''}`)
+      setMessage(`${prefix}${result.images ? `；${result.images} 张图片` : ''}${result.skipped_blocks ? `；${result.skipped_blocks} 处图片或音频内容未导入` : ''}${result.reclaimed ? `；已清理 ${result.reclaimed} 个被取代的旧批次，释放 ${fmtBytes(result.reclaimed_bytes)}` : ''}${result.restored ? `；已还原 ${result.restored} 个你删除过的会话` : ''}${result.skipped_deleted && result.conversations > 0 ? `；${result.skipped_deleted} 个你删除过的会话未导入` : ''}`)
       await onImported(result)
     } catch (reason) { setError(`${saved ? '数据已保存，但界面刷新失败：' : ''}${String(reason)}`.slice(0, 400)) }
     finally { setBusy(false) }
@@ -194,8 +194,8 @@ export function ChatGPTHistoryImport({ onImported }: { onImported: (report: Chat
           </div>
         </div> : null}
         {deleted.length > 0 ? <div className={styles.field}>
-          <Text weight="semibold">恢复误删的会话（可选）</Text>
-          <div className={styles.note}>这份导出里有 {deleted.length} 个会话是你之前从 AgentDeck 删除的，导入时默认不会再写入。如果其中有误删的，勾选后会重新导入（原来的收藏、标签和备注不会恢复）。</div>
+          <Text weight="semibold">还原误删的会话（可选）</Text>
+          <div className={styles.note}>这份导出里有 {deleted.length} 个会话是你之前从 AgentDeck 删除的，导入时默认不会再写入。如果其中有误删的，选中后会重新导入（原来的收藏、标签和备注不会还原）。</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <Button size="small" appearance="subtle" disabled={busy} onClick={() => setRestore(new Set(deleted.map(item => item.id)))}>全选</Button>
             <Button size="small" appearance="subtle" disabled={busy || restore.size === 0} onClick={() => setRestore(new Set())}>全不选</Button>

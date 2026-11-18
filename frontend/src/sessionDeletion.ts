@@ -18,16 +18,16 @@ export const isChatGPTImport = (item: DeletionSource): boolean => item.source ==
 export function deleteSummary(backup: boolean, imported = false): string {
   if (imported) {
     return backup
-      ? '此操作只删除 AgentDeck 里导入的副本，以及它的所有版本、收藏、标签和备注；ChatGPT 上的原始聊天和你的导出文件不受影响。重新导入同一份导出，也不会让它回来。删除前将自动创建恢复备份，可在本次运行期间撤销。'
-      : '此操作只删除 AgentDeck 里导入的副本，以及它的所有版本、收藏、标签和备注；ChatGPT 上的原始聊天和你的导出文件不受影响。当前未启用删除前备份，删除后无法恢复。'
+      ? '此操作只删除 AgentDeck 里导入的副本，以及它的所有版本、收藏、标签和备注；ChatGPT 上的原始聊天和你的导出文件不受影响。重新导入同一份导出，也不会让它回来。删除前将自动创建还原备份，可在本次运行期间撤消。'
+      : '此操作只删除 AgentDeck 里导入的副本，以及它的所有版本、收藏、标签和备注；ChatGPT 上的原始聊天和你的导出文件不受影响。当前未启用删除前备份，删除后无法还原。'
   }
   return backup
-    ? '此操作将删除原始会话记录，以及 AgentDeck 中的所有版本、收藏、标签和备注。删除前将自动创建恢复备份，可在本次运行期间撤销。'
-    : '此操作将永久删除原始会话记录，以及 AgentDeck 中的所有版本、收藏、标签和备注。当前未启用删除前备份，删除后无法恢复。'
+    ? '此操作将删除原始会话记录，以及 AgentDeck 中的所有版本、收藏、标签和备注。删除前将自动创建还原备份，可在本次运行期间撤消。'
+    : '此操作将永久删除原始会话记录，以及 AgentDeck 中的所有版本、收藏、标签和备注。当前未启用删除前备份，删除后无法还原。'
 }
 
 /** 不可撤销时才需要的那一次勾选；可撤销时不增加额外步骤。 */
-export const irreversibleAck = '我了解此操作无法撤销'
+export const irreversibleAck = '我了解此操作无法撤消'
 
 /** 会话列表最多直接列出 limit 个标题，其余折成「以及另外 N 个」。 */
 export function deletionTitles(titles: readonly string[], limit = 5): { shown: string[]; more: number } {

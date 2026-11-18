@@ -571,7 +571,7 @@ func (p *NativeDeletePlan) restoreMetadata() error {
 		}
 		now, err := nativeDBSnapshot(tx, old.Path, p.session.ID)
 		if err == nil && now.Schema != old.Schema {
-			err = errors.New("Codex 状态库结构已变化，恢复中止")
+			err = errors.New("Codex 状态库结构已变化，还原中止")
 		}
 		existing := map[string]bool{}
 		allowed := map[string]bool{}
@@ -584,7 +584,7 @@ func (p *NativeDeletePlan) restoreMetadata() error {
 			for _, t := range now.Tables {
 				for _, insert := range t.Inserts {
 					if !allowed[insert] {
-						err = errors.New("Codex 会话元数据已重建，恢复冲突")
+						err = errors.New("Codex 会话元数据已重建，还原冲突")
 						break
 					}
 					existing[insert] = true
@@ -655,7 +655,7 @@ func (p *NativeDeletePlan) rewriteIndex(idx *nativeIndex, restore bool) error {
 		if reflect.DeepEqual(now.Lines, idx.Lines) {
 			return nil
 		}
-		return errors.New("Codex 标题索引已重建，恢复冲突")
+		return errors.New("Codex 标题索引已重建，还原冲突")
 	}
 	src, err := os.Open(idx.Path)
 	if err != nil {

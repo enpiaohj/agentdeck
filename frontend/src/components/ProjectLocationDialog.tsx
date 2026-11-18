@@ -134,7 +134,7 @@ export function ProjectLocationDialog() {
       {!editing ? <Checkbox checked={remember} disabled={busy || completed || !request?.original} label="保存为此项目的位置关联" onChange={(_, data) => setRemember(data.checked === true)} /> : null}
       {!editing && !request?.original ? <p className="ad-form-note">此会话未记录原项目目录，无法保存位置关联。所选目录仅用于本次操作。</p> : null}
       {!editing && !remember && request?.original ? <p className="ad-form-note">本次操作使用所选目录，不更改已保存的位置关联。</p> : null}
-      {saved ? <MessageBar intent="info">位置关联已保存：{saved}。关闭此窗口不会撤销保存；仅本次使用其他目录也不会更改此关联。</MessageBar> : null}
+      {saved ? <MessageBar intent="info">位置关联已保存：{saved}。关闭此窗口不会撤消保存；仅本次使用其他目录也不会更改此关联。</MessageBar> : null}
       {completed ? <p className="ad-form-note" role="status">终端已打开，无需再次启动。请关闭此窗口并在终端中继续操作。</p> : null}
     </div>
   </FormDialog>

@@ -308,7 +308,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
     notify(failed ? markPartialMessage(action, keys.length, failed) : markDoneMessage(action, keys.length), {
       tone: failed ? 'info' : 'success',
       action: {
-        label: '撤销',
+        label: '撤消',
         run: () => {
           void Promise.allSettled(keys.map(key => applyMark(inverseAction(action), key))).then(results => {
             const text = undoFailureMessage(results.filter(r => r.status === 'rejected').length)

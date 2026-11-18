@@ -36,7 +36,7 @@ func (a *App) desktopOptionsLocked() (DesktopOptions, error) {
 	if view.StartAtLoginSupported {
 		enabled, err := a.cfg.StartAtLoginStatus()
 		if err != nil {
-			return view, fmt.Errorf("读取开机自启动状态失败：%w", err)
+			return view, fmt.Errorf("读取登录时启动状态失败：%w", err)
 		}
 		view.StartAtLogin = enabled
 	}
@@ -54,18 +54,18 @@ func (s *SettingsService) SetStartAtLogin(enabled bool) (DesktopOptions, error) 
 		return view, err
 	}
 	if !view.StartAtLoginSupported {
-		return view, errors.New("当前环境不支持开机自启动")
+		return view, errors.New("当前环境不支持登录时启动")
 	}
 	previous := view.StartAtLogin
 	if err := a.cfg.SetStartAtLogin(enabled); err != nil {
-		return view, fmt.Errorf("设置开机自启动失败：%w", err)
+		return view, fmt.Errorf("设置登录时启动失败：%w", err)
 	}
 	cfg := a.settings
 	cfg.StartAtLogin = enabled
 	if err := appconfig.Save(cfg); err != nil {
 		saveErr := fmt.Errorf("写入应用配置失败：%w", err)
 		if rollbackErr := a.cfg.SetStartAtLogin(previous); rollbackErr != nil {
-			return view, errors.Join(saveErr, fmt.Errorf("恢复开机自启动状态失败：%w", rollbackErr))
+			return view, errors.Join(saveErr, fmt.Errorf("还原登录时启动状态失败：%w", rollbackErr))
 		}
 		return view, saveErr
 	}
@@ -84,7 +84,7 @@ func (s *SettingsService) SetCloseToTray(enabled bool) (DesktopOptions, error) {
 		return view, err
 	}
 	if !view.TraySupported {
-		return view, errors.New("当前环境不支持关闭到托盘")
+		return view, errors.New("当前环境不支持关闭到通知区域")
 	}
 	cfg := a.settings
 	cfg.CloseToTray = enabled

@@ -76,8 +76,8 @@ export function useSessionDeletion(onDeleted: (keys: string[]) => void, onRestor
     undoOperation.current = true; setUndoBusy(true); setUndoError('')
     try {
       const message = await sessionService.RestoreDeletedSessions(result.undo_token)
-      setRestoredMessage(message || '会话已恢复。'); setResult(null); onRestored()
-    } catch (reason) { setUndoError(`撤销失败：${String(reason)}。备份仍保存在：${result.backup_path}`) }
+      setRestoredMessage(message || '会话已还原。'); setResult(null); onRestored()
+    } catch (reason) { setUndoError(`撤消失败：${String(reason)}。备份仍保存在：${result.backup_path}`) }
     finally { undoOperation.current = false; setUndoBusy(false) }
   }
   return { targets, includeChildren, confirmedEnded, setConfirmedEnded, backup, preview, loading, busy, error, result, undoBusy, undoError, restoredMessage,

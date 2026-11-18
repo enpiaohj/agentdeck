@@ -18,7 +18,7 @@ const subscribeStatus = (handler: (view: UpdateView) => void) =>
   })
 
 const autoDescription = '启动后在后台检查一次新版本，同一个版本每天最多打扰一次。关闭后仍可手动检查。'
-export const matchesUpdateSettings = (query: string) => matchesSetting(query, '更新 版本 检查更新 新版本 升级 安装 重启 取消下载 下载并更新 立即重启 自动检查 更新内容 发布页', autoDescription)
+export const matchesUpdateSettings = (query: string) => matchesSetting(query, '更新 版本 检查更新 新版本 升级 安装 重新启动 重启 取消下载 下载并更新 立即重新启动 立即重启 自动检查 更新内容 发布页', autoDescription)
 
 // 时间按本地时区显示到分钟：发布与检查时间只需要能对上，不需要秒。
 function formatTime(value: string): string {
@@ -69,7 +69,7 @@ export function UpdateControl({ id }: { id: string }) {
   } else if (stage === 'ready') {
     tone = 'ok'; icon = <CheckmarkCircleFilled />
     title = `${latest} 已下载并校验`
-    detail = '重启后生效；直接退出也会在退出时写入，下次启动即为新版本。'
+    detail = '重新启动后生效；直接退出也会在退出时写入，下次启动即为新版本。'
   } else if (stage === 'available') {
     tone = 'accent'; icon = <ArrowCircleDownFilled />
     title = `发现新版本 ${latest}`
@@ -113,7 +113,7 @@ export function UpdateControl({ id }: { id: string }) {
             onClick={() => void settings.cancelDownload()}>取消下载</Button> : null}
           {stage === 'ready' ? <>
             <Button id={`${id}-restart`} size="small" appearance="primary" icon={<ArrowSyncRegular />}
-              disabled={busy} onClick={() => setConfirmRestart(true)}>立即重启</Button>
+              disabled={busy} onClick={() => setConfirmRestart(true)}>立即重新启动</Button>
             <Button size="small" icon={<FolderOpenRegular />} onClick={() => void settings.openFolder()}>打开所在文件夹</Button>
           </> : null}
         </div>
@@ -142,9 +142,9 @@ export function UpdateControl({ id }: { id: string }) {
       </SettingRow>
     </div>
 
-    <FormDialog open={confirmRestart} title="重启以完成更新"
+    <FormDialog open={confirmRestart} title="重新启动以完成更新"
       intro={<p className="ad-update-confirm-intro">AgentDeck 会先关闭，再写入新版本并重新打开。</p>}
-      submitLabel="立即重启" busyLabel="正在重启…" busy={false}
+      submitLabel="立即重新启动" busyLabel="正在重新启动…" busy={false}
       onSubmit={() => { setConfirmRestart(false); void settings.restart() }}
       onClose={() => setConfirmRestart(false)} returnFocus={`#${id}-restart`}>
       <p className="ad-settings-note">正在终端里运行的会话不受影响；下次打开时是 {latest}。若这次写入失败，下次启动会提示，并保留原版本可用。</p>
