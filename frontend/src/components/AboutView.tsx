@@ -29,7 +29,7 @@ export function PrivacyNote() {
   return <div className="ad-setting-card ad-about-card">
     <section className="ad-about-privacy" aria-label="隐私与数据">
       <h4>隐私与数据</h4>
-      <p>AgentDeck 不收集遥测、崩溃报告或使用统计，不需要账号。会话正文、索引、标注与偏好全部保存在本机，不会上传。</p>
+      <p>AgentDeck 不收集遥测、崩溃报告或使用统计，不需要账号。会话正文、索引、标注与首选项全部保存在本机，不会上传。</p>
       <p>唯一的对外请求是“检查更新”：向 GitHub 发起一次只读请求以读取最新正式发布，只带产品名与版本号，不发送会话、路径或账号信息。可在上方关闭启动后的自动检查；下载只在你选择“下载并更新”时发生。</p>
     </section>
   </div>
