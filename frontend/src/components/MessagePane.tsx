@@ -575,11 +575,11 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpT
         <Button size="small" appearance="subtle" icon={<ArrowUpRegular />} onClick={()=>navigate(0)} disabled={loading}>会话开头</Button>
         {prompts.length ? <>
           <Tooltip content="上一问" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronLeftRegular />} aria-label="跳到上一问" disabled={loading||promptAt<=0} onClick={()=>jumpToPrompt(prompts[promptAt-1].index)} /></Tooltip>
-          <span role="status" className="ad-reader-range" title={tr ? `当前窗口为第 ${tr.start+1}–${tr.start+tr.parts.length} 段，共 ${tr.total} 段（消息、思考、工具调用与结果各算一段）` : undefined}>{loading?'正在载入…':promptAt<0?`共 ${prompts.length} 问`:`第 ${promptAt+1} / ${prompts.length} 问`}</span>
+          <span role="status" className="ad-reader-range" title={tr ? `当前窗口为第 ${tr.start+1}–${tr.start+tr.parts.length} 段，共 ${tr.total} 段（消息、思考、工具调用与结果各算一段）` : undefined}>{loading?'正在加载…':promptAt<0?`共 ${prompts.length} 问`:`第 ${promptAt+1} / ${prompts.length} 问`}</span>
           <Tooltip content="下一问" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronRightRegular />} aria-label="跳到下一问" disabled={loading||promptAt>=prompts.length-1} onClick={()=>jumpToPrompt(prompts[promptAt+1].index)} /></Tooltip>
         </> : <>
           <Tooltip content="更早的内容" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronLeftRegular />} aria-label="阅读更早内容" disabled={loading||!tr?.has_before} onClick={()=>navigate(tr?.start??0,true)} /></Tooltip>
-          <span role="status" className="ad-reader-range" title="“段”是会话正文的一个片段：消息、思考、工具调用与结果各算一段">{loading?`正在载入…${tr?.total?`（${tr.total} 段）`:''}`:tr?.total?`第 ${tr.start+1}–${tr.start+tr.parts.length} 段，共 ${tr.total} 段`:'暂无正文'}</span>
+          <span role="status" className="ad-reader-range" title="“段”是会话正文的一个片段：消息、思考、工具调用与结果各算一段">{loading?`正在加载…${tr?.total?`（${tr.total} 段）`:''}`:tr?.total?`第 ${tr.start+1}–${tr.start+tr.parts.length} 段，共 ${tr.total} 段`:'暂无正文'}</span>
           <Tooltip content="较新的内容" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronRightRegular />} aria-label="阅读较新内容" disabled={loading||!tr?.has_after} onClick={()=>navigate((tr?.start??0)+(tr?.parts.length??0))} /></Tooltip>
         </>}
         <Tooltip content={findOpen ? '收起查找 (Esc)' : '查找当前会话 (Ctrl+F)'} relationship="label"><Button size="small" appearance={findOpen ? 'secondary' : 'subtle'} icon={<SearchRegular />} aria-label="查找当前会话" aria-pressed={findOpen} onClick={findOpen ? closeFind : openFind} /></Tooltip>
@@ -594,7 +594,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpT
           <SearchRegular className="ad-find-glyph" aria-hidden="true" />
           <input ref={findInput} className="ad-find-input" aria-label="查找当前会话" placeholder="查找当前会话…" value={findQuery} onChange={event => { cancelFindJump(); setFindQuery(event.target.value) }} onKeyDown={event => { if (event.nativeEvent.isComposing) return; if (event.key === 'Enter') { event.preventDefault(); moveFind(event.shiftKey ? -1 : 1) } }} />
           {findQuery ? <Tooltip content="清除关键词" relationship="label"><Button size="small" appearance="subtle" icon={<DismissCircleRegular />} aria-label="清除关键词" onClick={clearFind} /></Tooltip> : null}
-          <span className="ad-find-count" role="status">{findBusy ? '查找中…' : findError ? '查找失败' : !findQuery.trim() ? '' : !findHits.length ? '无匹配' : findIndex < 0 ? `${findHits.length} 段` : `${findIndex + 1} / ${findHits.length}`}</span>
+          <span className="ad-find-count" role="status">{findBusy ? '正在查找…' : findError ? '查找失败' : !findQuery.trim() ? '' : !findHits.length ? '无匹配' : findIndex < 0 ? `${findHits.length} 段` : `${findIndex + 1} / ${findHits.length}`}</span>
           <Tooltip content="上一命中段 (Shift+Enter)" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronUpRegular />} aria-label="上一处匹配" disabled={!findHits.length} onClick={() => moveFind(-1)} /></Tooltip>
           <Tooltip content="下一命中段 (Enter)" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronDownRegular />} aria-label="下一处匹配" disabled={!findHits.length} onClick={() => moveFind(1)} /></Tooltip>
           <Tooltip content="收起查找，回到查找前的位置 (Esc)" relationship="label"><Button size="small" appearance="subtle" icon={<DismissRegular />} aria-label="收起查找" onClick={closeFind} /></Tooltip>
@@ -612,10 +612,10 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpT
         {tr?.has_before && !loading ? <div className="ad-page-boundary"><Button size="small" onClick={() => navigate(tr.start, true)}>继续阅读更早内容</Button><span>当前从原始第 {tr.start + 1} 段开始；上一窗口紧接此处。</span></div> : null}
         {tr?.storage_warning ? <Text role="alert" size={200} block style={{ marginBottom: 12, color: tokens.colorPaletteRedForeground1 }}>{tr.storage_warning}</Text> : null}
         {tr?.retained ? <Text size={200} block style={{ marginBottom: 12, color: tokens.colorNeutralForeground3 }}>正在阅读 AgentDeck 永久保留的本地副本，上游原记录暂不可用。</Text> : null}
-        {tr && !loading && hitPart >= 0 && (hitPart < tr.start || hitPart >= tr.start+tr.parts.length || tr.parts[hitPart-tr.start]?.cut) ? <Text size={200} block style={{ marginBottom: 12, color: tokens.colorNeutralForeground3 }}>本段尚有未载入内容，可使用段内前文、后文按钮继续阅读，也可导出完整 Markdown。</Text> : null}
-        {tr?.cut ? <Text size={200} block style={{ marginBottom: 12, color: tokens.colorNeutralForeground3 }}>会话预览达到读取上限，部分内容未载入。</Text> : null}
+        {tr && !loading && hitPart >= 0 && (hitPart < tr.start || hitPart >= tr.start+tr.parts.length || tr.parts[hitPart-tr.start]?.cut) ? <Text size={200} block style={{ marginBottom: 12, color: tokens.colorNeutralForeground3 }}>本段尚有未加载内容，可使用段内前文、后文按钮继续阅读，也可导出完整 Markdown。</Text> : null}
+        {tr?.cut ? <Text size={200} block style={{ marginBottom: 12, color: tokens.colorNeutralForeground3 }}>会话预览达到读取上限，部分内容未加载。</Text> : null}
         {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: 24, color: tokens.colorNeutralForeground3 }}><Spinner size="tiny" /><Text size={200}>正在载入会话{session.messages ? `（约 ${session.messages} 条消息）` : ''}…</Text></div>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: 24, color: tokens.colorNeutralForeground3 }}><Spinner size="tiny" /><Text size={200}>正在加载会话{session.messages ? `（约 ${session.messages} 条消息）` : ''}…</Text></div>
         ) : !session.transcript ? (
           // 这个智能体的会话本就不在可读范围内（后端的 transcript 标记与
           // HasTranscript 同源），不是读取失败：说清限制，也不给按了没用的「重试」。
@@ -668,9 +668,9 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpT
                         {folded.monospace ? <CodeArea raw={p.text} styles={styles} theme={theme} head="" scroll foldLong={false} /> : renderRichText(p.text, styles, theme, reveal, destination.revision)}
                       </ProcessContent>
                     ) : renderRichText(p.text, styles, theme, reveal, destination.revision)}
-                    {p.omitted_before ? <div><Text size={200}>本段前 {p.omitted_before} 个字符未载入。</Text><Button size="small" onClick={() => { cancelFindJump(); partOffset.current = Math.max(0, p.omitted_before - 6000); restoreScroll.current = null; restoreAnchor.current = null; setDestination(previous => ({ at: partIndex, before: false, focus: partIndex, revision: previous.revision + 1 })) }}>读取本段前文</Button></div> : null}
+                    {p.omitted_before ? <div><Text size={200}>本段前 {p.omitted_before} 个字符未加载。</Text><Button size="small" onClick={() => { cancelFindJump(); partOffset.current = Math.max(0, p.omitted_before - 6000); restoreScroll.current = null; restoreAnchor.current = null; setDestination(previous => ({ at: partIndex, before: false, focus: partIndex, revision: previous.revision + 1 })) }}>读取本段前文</Button></div> : null}
                     {p.cut ? <Button size="small" onClick={() => { cancelFindJump(); partOffset.current = p.omitted_before + Array.from(p.text).length; restoreScroll.current = null; restoreAnchor.current = null; setDestination(previous => ({ at: partIndex, before: false, focus: partIndex, revision: previous.revision + 1 })) }}>读取本段后文</Button> : null}
-                    {!folded && p.cut ? <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>此段还有 {p.cut} 个字符未载入</Text> : null}
+                    {!folded && p.cut ? <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>此段还有 {p.cut} 个字符未加载</Text> : null}
                   </div>
                   {folded ? <button className={styles.msgCopy} style={{ marginTop: 9 }} onClick={() => copy(p.text, String(i))} title="复制原文" aria-label={`复制${folded.label}原文`}>
                     {copied === String(i) ? <CheckmarkRegular fontSize={13} /> : <CopyRegular fontSize={13} />}
@@ -746,7 +746,7 @@ function ProcessContent({ content, reveal, revealToken, cut, styles, meta, child
       <span className={styles.foldPreview}>{content.preview}</span>
       <span className={styles.foldCount}>{content.lines} 行{cut ? ' · 已截断' : ''}</span>
     </summary>
-    {expanded ? <div className={styles.foldBody}>{children}{cut ? <Text size={200} block>此段还有 {cut} 个字符未载入</Text> : null}</div> : null}
+    {expanded ? <div className={styles.foldBody}>{children}{cut ? <Text size={200} block>此段还有 {cut} 个字符未加载</Text> : null}</div> : null}
   </details>
 }
 
@@ -877,7 +877,7 @@ function CodeArea({ raw, styles, theme, head, scroll, reveal = false, revealToke
         </div>
       </div> : null}</div>
       {copyError ? <Text role="alert" size={200} style={{ color: tokens.colorPaletteRedForeground1 }}>{copyError}</Text> : null}
-      {long && !expanded ? <div className="ad-source-note">显示前 12 / {lines.length} 行；复制包含完整已载入代码。</div> : null}
+      {long && !expanded ? <div className="ad-source-note">显示前 12 / {lines.length} 行；复制包含完整已加载代码。</div> : null}
     </div>
   )
 }

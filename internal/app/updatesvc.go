@@ -159,7 +159,7 @@ func (s *UpdateService) Check() (UpdateView, error) {
 	if a.update.checking || a.update.downloading {
 		view := a.updateViewLocked()
 		a.updateMu.Unlock()
-		return view, errors.New("上一次操作还没结束，请稍候")
+		return view, errors.New("上一次操作尚未结束，请稍候")
 	}
 	a.update.checking = true
 	a.update.errMsg = ""
@@ -289,7 +289,7 @@ func (s *UpdateService) Download() (UpdateView, error) {
 	if a.update.checking || a.update.downloading {
 		view := a.updateViewLocked()
 		a.updateMu.Unlock()
-		return view, errors.New("上一次操作还没结束，请稍候")
+		return view, errors.New("上一次操作尚未结束，请稍候")
 	}
 	if !a.update.checked || !a.update.result.Available {
 		view := a.updateViewLocked()

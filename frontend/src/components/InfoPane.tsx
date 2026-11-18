@@ -163,7 +163,7 @@ export function InfoPane({ session, onChanged, notify, onClose, onDeleteSessions
         {resizer ? <PaneResizer label="会话详情" edge="left" width={resizer} /> : null}
         <div className={styles.tabs}>
           <Text className={styles.paneHeading}>会话详情</Text>
-          <Button appearance="subtle" size="small" icon={<DismissRegular />} onClick={onClose} aria-label="收起信息面板" style={{ marginLeft: 'auto' }} />
+          <Button appearance="subtle" size="small" icon={<DismissRegular />} onClick={onClose} aria-label="收起信息窗格" style={{ marginLeft: 'auto' }} />
         </div>
         <div className={styles.empty}>
           <DocumentTextRegular fontSize={24} />
@@ -234,7 +234,7 @@ export function InfoPane({ session, onChanged, notify, onClose, onDeleteSessions
       {resizer ? <PaneResizer label="会话详情" edge="left" width={resizer} /> : null}
       <div className={styles.tabs}>
         <Text className={styles.paneHeading}>会话详情</Text>
-        <Button appearance="subtle" size="small" icon={<DismissRegular />} onClick={onClose} aria-label="收起信息面板" style={{ marginLeft: 'auto' }} />
+        <Button appearance="subtle" size="small" icon={<DismissRegular />} onClick={onClose} aria-label="收起信息窗格" style={{ marginLeft: 'auto' }} />
       </div>
 
       <div className={styles.body}>
@@ -265,7 +265,7 @@ export function InfoPane({ session, onChanged, notify, onClose, onDeleteSessions
           <AgentMark agent={session.agent} size={22} />
           <Text size={300}>{m.label}{session.source === 'wsl' ? '(WSL)' : ''}</Text>
           {session.source === 'import' || session.source === 'cache' || session.source === 'retained' ? <><span aria-hidden="true" className={styles.agentSep}>·</span><span className={styles.agentSource}>{session.source === 'import' ? '官方导入' : session.source === 'cache' ? 'Desktop 聊天缓存' : '永久保留副本'}</span></> : null}
-          {session.upstream_deleted ? <span role="img" aria-label="已在原 Agent 中删除" title={UPSTREAM_DELETED_HINT} style={{ display: 'inline-flex', color: tokens.colorNeutralForeground4, cursor: 'default' }}><DocumentDismissRegular fontSize={16} /></span> : null}
+          {session.upstream_deleted ? <span role="img" aria-label="已在原智能体中删除" title={UPSTREAM_DELETED_HINT} style={{ display: 'inline-flex', color: tokens.colorNeutralForeground4, cursor: 'default' }}><DocumentDismissRegular fontSize={16} /></span> : null}
         </div>
 
         <div className={styles.section}>
@@ -320,7 +320,7 @@ export function InfoPane({ session, onChanged, notify, onClose, onDeleteSessions
         <details className={mergeClasses('ad-disclosure', styles.advanced)} key={`metadata-${session.key}`}>
           <summary className={styles.advancedSummary}><ChevronRightRegular className="ad-disclosure-icon" fontSize={12} />完整会话信息</summary>
           <div className={styles.kv}>
-            <span className={styles.k}>会话类型</span><span className={styles.v}>{session.role === 'subagent' ? '子 Agent 会话' : '主会话'}</span>
+            <span className={styles.k}>会话类型</span><span className={styles.v}>{session.role === 'subagent' ? '子智能体会话' : '主会话'}</span>
             {session.account ? <><span className={styles.k}>账号</span><span className={styles.v}>{session.account}</span></> : null}
             <span className={styles.k}>保留策略</span><span className={styles.v}>读取后持久保存，不自动清理</span>
             <span className={styles.k}>创建时间</span><span className={styles.v}>{fmtTime(session.created)}</span>

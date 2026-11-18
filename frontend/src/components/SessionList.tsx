@@ -469,14 +469,14 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
     }}>
       <div className={styles.head}>
         <span className={styles.headTitle} title={filter.project || listTitle}>{listTitle}</span>
-        <span className={styles.count} aria-live="polite" title="子会话收在主会话下，不重复计入会话数量">{query || month || account ? `${hierarchy.roots.length} / ${allFamilies.roots.length}` : allFamilies.roots.length} 个会话{hierarchy.childKeys.size ? ` · ${hierarchy.childKeys.size} 个子会话` : ''}</span>
+        <span className={styles.count} aria-live="polite" title="子会话归入主会话，不重复计入会话数量">{query || month || account ? `${hierarchy.roots.length} / ${allFamilies.roots.length}` : allFamilies.roots.length} 个会话{hierarchy.childKeys.size ? ` · ${hierarchy.childKeys.size} 个子会话` : ''}</span>
         {/* 全选与清空是同一个位置的一个图标：没有选中项时是全选，选中后是清空。
             此前两个动作分在两端——头部是全选，底部批量条里才有“清空”，而且
             只在多选时才出现，单选一项时反而没有清空的入口。 */}
-        <Tooltip content={checked.size ? '清空选择 (Esc)' : '全选筛选后当前展开的会话（含已展开子会话）(Ctrl+A)'} relationship="label">
+        <Tooltip content={checked.size ? '清除选择 (Esc)' : '全选筛选后当前展开的会话（含已展开子会话）(Ctrl+A)'} relationship="label">
           <Button size="small" appearance="subtle"
             icon={checked.size ? <SelectAllOffRegular /> : <SelectAllOnRegular />}
-            aria-label={checked.size ? '清空选择' : '全选会话'}
+            aria-label={checked.size ? '清除选择' : '全选会话'}
             disabled={busy || (!checked.size && !visibleRows.length)}
             onClick={checked.size ? clearSelection : selectAll} />
         </Tooltip>
@@ -491,7 +491,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
             onClick={onRefresh} />
         </Tooltip> : null}
       </div>
-      <span id={helpId} className="ad-sr-only">单击选中；Ctrl+单击切换；Shift 连选；Ctrl+Shift 追加连选；Ctrl+A 全选筛选后当前展开项（包含屏幕外行）；Esc 清空选择。上下方向键移动，Home / End 到首尾；左右方向键展开或收起子会话。</span>
+      <span id={helpId} className="ad-sr-only">单击选中；Ctrl+单击切换；Shift 连选；Ctrl+Shift 追加连选；Ctrl+A 全选筛选后当前展开项（包含屏幕外行）；Esc 清除选择。上下方向键移动，Home / End 到首尾；左右方向键展开或收起子会话。</span>
       <div className={styles.tools}>
         <div className="ad-filter-chips">
           {(filter.agents ?? []).map(agent => <Button key={agent} size="small" onClick={() => {
@@ -537,12 +537,12 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
           <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
             {query || month || account ? '请调整关键词，或清除筛选条件。' : filter.archived
               ? '会话归档后显示在此列表，可随时取消归档。'
-              : '使用受支持的 Agent 创建会话后，请单击“刷新”重新扫描。'}
+              : '使用受支持的智能体创建会话后，请单击“刷新会话列表”重新扫描。'}
           </Text>
           {query || month || account ? <Button size="small" onClick={() => { setQuery(''); setMonth(''); setAccount('') }}>清除筛选</Button> : null}
           {!(query || month || account) && !filter.archived && !filter.favorites && onNewSession ? <>
             <Button size="small" appearance="primary" onClick={onNewSession}>新建会话</Button>
-            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>已有会话却没出现？到“设置”&gt;“数据来源”检查智能体是否被检测到。</Text>
+            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>已有会话却没出现？到“设置”&gt;“诊断”检查智能体是否被检测到。</Text>
           </> : null}
         </div>
       ) : (
@@ -654,7 +654,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
                           {expandedFamilies.has(s.key) ? <ChevronDownRegular fontSize={12} /> : <ChevronRightRegular fontSize={12} />}{childCount} 个子会话
                         </button> : null}
                         {s.tags.length ? <span className={styles.tagCount} aria-label={`${s.tags.length} 个标签`}><TagRegular fontSize={11} />{s.tags.length}</span> : null}
-                        {s.upstream_deleted ? <span className={styles.upstreamGone} role="img" aria-label="已在原 Agent 中删除" title={UPSTREAM_DELETED_HINT}><DocumentDismissRegular fontSize={13} /></span> : null}
+                        {s.upstream_deleted ? <span className={styles.upstreamGone} role="img" aria-label="已在原智能体中删除" title={UPSTREAM_DELETED_HINT}><DocumentDismissRegular fontSize={13} /></span> : null}
                         {filter.archived ? <Button size="small" appearance="subtle" icon={<ArchiveArrowBackRegular />} aria-label="取消归档" title="取消归档" tabIndex={(visibleSelection.focus ?? visibleKeys[0]) === s.key ? 0 : -1} onClick={unarchive(s)} /> : null}
                       </div>
                     </div>

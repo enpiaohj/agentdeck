@@ -416,7 +416,7 @@ export function App() {
       window.setTimeout(() => setListVersion(value => value + 1), 12_000),
       window.setTimeout(() => {
         setListVersion(value => value + 1)
-        notify('若仍未看到新会话，请按 F5 或点会话列表顶部的刷新按钮重新扫描本机会话。')
+        notify('若仍未显示新会话，请按 F5 或选择会话列表顶部的“刷新会话列表”按钮重新扫描本机会话。')
       }, 45_000),
     ]
   }
@@ -538,7 +538,7 @@ export function App() {
         </div>
         {crashed ? (
           <div className={styles.crashed}>
-            <span>检测到上次未正常退出。如界面显示异常，请前往“设置”&gt;“数据与诊断”重建索引。</span>
+            <span>检测到上次未正常退出。如界面显示异常，请前往“设置”&gt;“诊断”重建索引。</span>
             <button className={styles.crashedClose} onClick={() => setCrashed(false)} title="关闭提示">
               <DismissRegular fontSize={14} />
             </button>

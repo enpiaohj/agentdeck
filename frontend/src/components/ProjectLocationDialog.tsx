@@ -122,7 +122,7 @@ export function ProjectLocationDialog() {
   const editing = request?.action === 'save'
   return <FormDialog open={!!request} title={editing ? '更改项目位置' : '选择会话工作目录'}
     intro={<p className="ad-form-note">{editing ? '指定此项目的实际目录。位置关联仅保存在 AgentDeck 中，不会移动文件或修改原始会话记录。' : request?.notice || '当前项目目录无法用于此操作。请选择现有目录，并确认下方显示的工作目录和恢复命令。'}</p>}
-    submitLabel={completed ? '终端已打开' : editing ? '保存' : request?.action === 'copy' ? '复制命令' : '继续会话'} busyLabel="处理中…" busy={busy} error={error}
+    submitLabel={completed ? '终端已打开' : editing ? '保存' : request?.action === 'copy' ? '复制命令' : '继续会话'} busyLabel="正在处理…" busy={busy} error={error}
     submitDisabled={!trimmed || checking || validated !== trimmed || completed} onSubmit={() => void submit()} onClose={() => close()}>
     <div className="ad-form">
       <Field label={editing ? '原项目目录' : '会话原项目目录'}><Input readOnly value={request?.original || '未记录'} /></Field>

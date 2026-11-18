@@ -188,7 +188,7 @@ export function DiagnosticsView({ revision = 0, embedded = false, sections = all
         {rows === null ? (
           <Spinner size="tiny" />
         ) : rows.length === 0 ? (
-          <Text className={styles.msg}>未发现 Agent 会话。使用受支持的 Agent 创建会话后，请返回工作台重新扫描。</Text>
+          <Text className={styles.msg}>未发现智能体会话。使用受支持的智能体创建会话后，请返回工作台重新扫描。</Text>
         ) : (
           <div className={styles.tableWrap}><table className={styles.table}>
             <thead>

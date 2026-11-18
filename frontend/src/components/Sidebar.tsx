@@ -356,7 +356,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
       open={!!renamed}
       title="修改项目显示名称"
       intro={<p className="ad-form-note">会话列表与项目列表都会用这个名称；磁盘上的目录名不会改动。</p>}
-      submitLabel="保存" busyLabel="保存中…" busy={busy} error={actionError}
+      submitLabel="保存" busyLabel="正在保存…" busy={busy} error={actionError}
       submitDisabled={!!renameError || renameDraft.trim() === (renamed?.name ?? '')}
       onSubmit={() => { if (renamed && !renameError) void saveRename(renamed, renameDraft) }}
       onClose={closeAction}
@@ -373,7 +373,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
       open={!!removed}
       title="从项目列表移除"
       intro={<p className="ad-form-note">移除“{removed?.name}”在 AgentDeck 中的项目设置，包括显示名称和默认智能体。目录、文件和会话均会保留{removed?.declared ? '' : '；该目录已有会话，移除后仍会显示在列表中'}。此操作不会删除任何数据。</p>}
-      submitLabel="从项目列表移除" busyLabel="移除中…" busy={busy} error={actionError}
+      submitLabel="从项目列表移除" busyLabel="正在移除…" busy={busy} error={actionError}
       submitAppearance="destructive"
       onSubmit={() => { if (removed) void removeProject(removed) }}
       onClose={closeAction}
@@ -472,8 +472,8 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
   return (
     <nav className={`ad-sidebar ${styles.nav}`} aria-label="会话导航">
       <div className={styles.head}>
-        <Text className={styles.appName}>工作空间</Text>
-        <button className={styles.item} style={{ width: 'auto', margin: 0, padding: '4px 6px' }} onClick={onToggle} title="折叠导航">
+        <Text className={styles.appName}>工作区</Text>
+        <button className={styles.item} style={{ width: 'auto', margin: 0, padding: '4px 6px' }} onClick={onToggle} title="收起导航">
           <ChevronDoubleLeftRegular />
         </button>
       </div>

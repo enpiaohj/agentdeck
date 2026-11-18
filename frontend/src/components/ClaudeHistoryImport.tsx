@@ -87,7 +87,7 @@ export function ClaudeHistoryImport({ onImported }: { onImported: (report: Claud
           <Button appearance="primary" icon={busy ? <Spinner size="extra-tiny" /> : <ArrowUploadRegular />} disabled={busy || !file || !account.trim()} onClick={() => void run()}>{busy ? '正在导入…' : '导入聊天记录'}</Button>
         </div>
       </div>
-      <p className={styles.note}>导入副本保存在本机，不会自动同步云端。当前读取导出中的文本和思考内容；附件文件本体、图片及部分工具内容不在导入范围内。导入记录可查看和搜索，不能用 CLI 恢复命令继续。</p>
+      <p className={styles.note}>导入副本保存在本机，不会自动同步云端。当前读取导出中的文本和思考内容；附件文件本体、图片及部分工具内容不在导入范围内。导入记录可查看和搜索，无法使用 CLI 恢复命令继续。</p>
     </div>
   </section>
 }

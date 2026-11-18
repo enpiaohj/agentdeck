@@ -17,7 +17,7 @@ const subscribeStatus = (handler: (view: UpdateView) => void) =>
     if (view) handler(view)
   })
 
-const autoDescription = '启动后在后台检查一次新版本，同一个版本每天最多打扰一次。关闭后仍可手动检查。'
+const autoDescription = '启动后在后台检查一次新版本，同一个版本每天最多提示一次。关闭后仍可手动检查。'
 export const matchesUpdateSettings = (query: string) => matchesSetting(query, '更新 版本 检查更新 新版本 升级 安装 重新启动 重启 取消下载 下载并更新 立即重新启动 立即重启 自动检查 更新内容 发布页', autoDescription)
 
 // 时间按本地时区显示到分钟：发布与检查时间只需要能对上，不需要秒。
@@ -43,7 +43,7 @@ export function UpdateControl({ id }: { id: string }) {
   }, [settings])
   const stage = stageOf(view, loading)
   const busy = stage === 'loading' || stage === 'checking' || stage === 'downloading'
-  const version = view?.dev ? '开发版本' : view?.current ? `v${view.current}` : '读取中…'
+  const version = view?.dev ? '开发版本' : view?.current ? `v${view.current}` : '正在读取…'
   const latestVersion = view?.latest ? `v${view.latest}` : ''
   const latest = latestVersion || '新版本'
   const checkedAt = formatTime(view?.checked_at ?? '')

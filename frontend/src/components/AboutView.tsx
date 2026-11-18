@@ -14,7 +14,7 @@ function Link({ href, children }: { href: string; children: string }) {
 // 这里不再重复。
 export function AboutView() {
   return <div className="ad-setting-card ad-about-card">
-    <div className="ad-about-brand"><h3>AgentDeck</h3><span>跨 Agent 的历史会话搜索与恢复工作台</span></div>
+    <div className="ad-about-brand"><h3>AgentDeck</h3><span>跨智能体的历史会话搜索与恢复工作台</span></div>
     <dl className="ad-info-list">
       <div><dt>开发者</dt><dd>enpiaohj<span className="ad-info-sub"><Link href={authorURL}>GitHub</Link></span></dd></div>
       <div><dt>源码仓库</dt><dd><Link href={repoURL}>{repoURL}</Link></dd></div>

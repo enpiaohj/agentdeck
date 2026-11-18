@@ -103,7 +103,7 @@ export function NewSessionDialog({ open, project, initialAgent, availability, re
     returnFocus='[data-return-focus="new-session"]'
     intro={<p className="ad-form-note">{project ? '在该项目目录中打开终端并启动智能体。' : '在所选工作目录中打开终端并启动智能体。'}</p>}
     submitLabel="新建会话"
-    busyLabel="启动中…"
+    busyLabel="正在启动…"
     busy={busy}
     error={error}
     submitDisabled={!trimmedPath || blocked}

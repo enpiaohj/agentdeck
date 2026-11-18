@@ -227,7 +227,7 @@ func (s *SessionService) backupData(destDir, preferences string) (result string,
 		}
 	}()
 	zw := zip.NewWriter(out)
-	manifest := backupManifest{FormatVersion: 1, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Scope: "AgentDeck 自有永久历史（含全部版本）、标注、Claude 与 ChatGPT 导入库（含已导入的图片）、首选项；不含原生 Agent 目录、凭据及可重建全文索引。"}
+	manifest := backupManifest{FormatVersion: 1, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Scope: "AgentDeck 自有永久历史（含全部版本）、标注、Claude 与 ChatGPT 导入库（含已导入的图片）、首选项；不含原生智能体的目录、凭据及可重建全文索引。"}
 	var total int64
 	for name, p := range content {
 		if len(manifest.Files) >= backupFileLimit {

@@ -24,7 +24,7 @@ export function DeleteSessionsDialog({ deletion: d }: { deletion: SessionDeletio
           {shown.map((title, index) => <li key={index}>{title}</li>)}
           {more ? <li className="ad-delete-more">以及另外 {more} 个会话</li> : null}
         </ul>
-        <p className="ad-delete-note">{importedOnly ? '备份选项可在“设置 › 会话”中更改。' : '删除前，请在原应用或终端中结束相关会话。备份选项可在“设置 › 会话”中更改。'}</p>
+        <p className="ad-delete-note">{importedOnly ? '备份选项可在“设置”>“会话”中更改。' : '删除前，请在原应用或终端中结束相关会话。备份选项可在“设置”>“会话”中更改。'}</p>
         {d.loading ? <div className="ad-delete-loading" role="status"><Spinner size="tiny" />正在核对原始记录与删除范围…</div> : null}
         {preview && (preview.children > 0 || d.includeChildren) ? <Checkbox checked={d.includeChildren} disabled={d.busy} onChange={(_, data) => d.changeChildren(data.checked === true)} label={`同时删除已知子会话（${preview.children} 个）`} /> : null}
         {preview ? <details className="ad-delete-scope"><summary>详细信息（{preview.native_files} 个文件，{(preview.bytes / 1024 / 1024).toFixed(2)} MB）</summary>
@@ -35,7 +35,7 @@ export function DeleteSessionsDialog({ deletion: d }: { deletion: SessionDeletio
             {preview.metadata_files ? <><dt>改写元数据</dt><dd>{preview.metadata_files} 个（状态库与共享索引，只删行不删文件）</dd></> : null}
           </dl>
           {preview.paths.length ? <ul className="ad-delete-paths">{preview.paths.map((path, index) => <li key={index}>{path}</li>)}</ul> : <p>没有仍存在的原始文件，将清理 AgentDeck 中的保留记录。</p>}
-          <p className="ad-delete-hint">未选中的独立子会话将保留。Claude 主记录专属的子 Agent 文件属于该记录，已包含在上述范围内。</p>
+          <p className="ad-delete-hint">未选中的独立子会话将保留。Claude 主记录专属的子智能体文件属于该记录，已包含在上述范围内。</p>
         </details> : null}
         {preview && !d.backup ? <Checkbox className="ad-delete-ack" checked={d.confirmedEnded} disabled={d.busy} onChange={(_, data) => d.setConfirmedEnded(data.checked === true)} label={irreversibleAck} /> : null}
       </DialogContent>

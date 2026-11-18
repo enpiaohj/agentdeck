@@ -119,7 +119,7 @@ export function NewProjectDialog({ open, current, initialAgent, availability, on
     returnFocus='[data-return-focus="new-project"]'
     intro={<p className="ad-form-note">指定项目目录和默认智能体。目录不存在时会自动创建。</p>}
     submitLabel="创建项目"
-    busyLabel="创建中…"
+    busyLabel="正在创建…"
     busy={busy}
     error={error || preferencesError}
     submitDisabled={!trimmedPath || blocked}

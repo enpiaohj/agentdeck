@@ -123,7 +123,7 @@ export function RebuildDialog() {
         </DialogContent>
         <DialogActions>
           <Button disabled={busy} onClick={close}>{done ? '关闭' : '取消'}</Button>
-          {!done ? <Button appearance="primary" disabled={!ready || busy || loading || dirty} onClick={() => void submit()}>{busy ? '处理中…' : submitLabel}</Button> : null}
+          {!done ? <Button appearance="primary" disabled={!ready || busy || loading || dirty} onClick={() => void submit()}>{busy ? '正在处理…' : submitLabel}</Button> : null}
         </DialogActions>
       </DialogBody>
     </DialogSurface>

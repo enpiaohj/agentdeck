@@ -63,8 +63,8 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
     ] },
     { id: 'typography', category: 'sessions', title: '正文显示', rows: [
       { key: 'fontSize', title: '正文字号', description: '调整会话正文的文字大小。', control: id => <select id={id} value={p.fontSize} onChange={e => update({ fontSize: Number(e.target.value) })}>{[13,14,15,16,18].map(n => <option key={n} value={n}>{n} px</option>)}</select> },
-      { key: 'spacing', title: '正文行距', description: '舒适适合长文阅读，紧凑便于快速浏览。', control: id => <select id={id} value={p.spacing} onChange={e => update({ spacing: e.target.value as typeof p.spacing })}><option value="comfortable">舒适</option><option value="compact">紧凑</option></select> },
-      { key: 'width', title: '阅读宽度', description: '自适应随窗口调整；适中与宽版使用固定的阅读宽度。', control: id => <select id={id} value={p.readingWidth} onChange={e => update({ readingWidth: e.target.value as typeof p.readingWidth })}><option value="balanced">适中</option><option value="wide">宽版</option><option value="adaptive">自适应</option></select> },
+      { key: 'spacing', title: '正文行距', description: '“舒适”适合长文阅读，“紧凑”便于快速浏览。', control: id => <select id={id} value={p.spacing} onChange={e => update({ spacing: e.target.value as typeof p.spacing })}><option value="comfortable">舒适</option><option value="compact">紧凑</option></select> },
+      { key: 'width', title: '阅读宽度', description: '“自适应”随窗口调整；“适中”与“宽版”使用固定的阅读宽度。', control: id => <select id={id} value={p.readingWidth} onChange={e => update({ readingWidth: e.target.value as typeof p.readingWidth })}><option value="balanced">适中</option><option value="wide">宽版</option><option value="adaptive">自适应</option></select> },
     ] },
     { id: 'reading', category: 'sessions', title: '阅读行为', rows: [
       { key: 'start', title: '默认阅读位置', description: '没有已保存的阅读位置时，打开会话后定位到此处。', control: id => <select id={id} value={p.readingStart} onChange={e => update({ readingStart: e.target.value as typeof p.readingStart })}><option value="latest">最新一轮问答</option><option value="start">会话开头</option></select> },
@@ -130,13 +130,13 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
           </section> : null}
           {q && about ? <section className="ad-settings-section" aria-labelledby={`${baseId}-about-heading`}><h2 id={`${baseId}-about-heading`}>关于 · AgentDeck</h2><AboutView /><PrivacyNote /></section> : null}
           {shortcuts ? <section className="ad-settings-section"><h2>快捷键列表</h2><dl className="ad-shortcuts">{[
-            ['搜索所有会话','Ctrl + K'],['刷新会话列表','F5'],['新建会话','Ctrl + N'],['新建项目','Ctrl + Shift + N'],['打开设置','Ctrl + ,'],['调整栏宽','拖动分隔条 / 方向键'],['打开操作菜单','Shift + F10 / 菜单键'],['重命名所选会话','F2'],['删除所选会话','Delete'],['查找当前会话','Ctrl + F'],['下一 / 上一处匹配','Enter / Shift + Enter'],['全选当前列表','Ctrl + A'],['多选 / 连选智能体（侧栏）','Ctrl + 单击 / Shift + 单击'],['追加 / 取消选择','Ctrl + 单击'],['连续选择','Shift + 单击'],['追加连续范围','Ctrl + Shift + 单击'],['清空选择','Esc'],['移动焦点 / 扩展选择','方向键 / Shift + 方向键'],['保存备注','Ctrl + Enter'],
-          ].map(([label, key]) => <div key={label}><dt>{label}</dt><dd><kbd>{key}</kbd></dd></div>)}</dl><p className="ad-settings-note">全选仅作用于筛选后当前展开的会话。删除操作会先显示确认窗口。</p></section> : null}
-          {empty ? <div className="ad-settings-empty"><SearchRegular /><h2>未找到匹配的设置</h2><p>尝试使用“主题”“通知区域”或“备份”等关键词。</p><Button size="small" onClick={() => setQuery('')}>清除搜索</Button></div> : null}
+            ['搜索所有会话','Ctrl + K'],['刷新会话列表','F5'],['新建会话','Ctrl + N'],['新建项目','Ctrl + Shift + N'],['打开设置','Ctrl + ,'],['调整栏宽','拖动分隔条 / 方向键'],['打开操作菜单','Shift + F10 / 菜单键'],['重命名所选会话','F2'],['删除所选会话','Delete'],['查找当前会话','Ctrl + F'],['下一 / 上一处匹配','Enter / Shift + Enter'],['全选当前列表','Ctrl + A'],['多选 / 连选智能体（侧栏）','Ctrl + 单击 / Shift + 单击'],['追加 / 取消选择','Ctrl + 单击'],['连续选择','Shift + 单击'],['追加连续范围','Ctrl + Shift + 单击'],['清除选择','Esc'],['移动焦点 / 扩展选择','方向键 / Shift + 方向键'],['保存备注','Ctrl + Enter'],
+          ].map(([label, key]) => <div key={label}><dt>{label}</dt><dd><kbd>{key}</kbd></dd></div>)}</dl><p className="ad-settings-note">全选仅作用于筛选后当前展开的会话。删除操作会先显示确认对话框。</p></section> : null}
+          {empty ? <div className="ad-settings-empty"><SearchRegular /><h2>未找到匹配的设置</h2><p>请尝试使用“主题”“通知区域”或“备份”等关键词。</p><Button size="small" onClick={() => setQuery('')}>清除搜索</Button></div> : null}
           {!q && ['general', 'appearance', 'sessions'].includes(category) ? <footer className="ad-settings-footer"><div><strong>首选项</strong><p>还原外观、布局、阅读与默认智能体的初始设置。</p></div><Button appearance="subtle" size="small" icon={<ArrowResetRegular />} onClick={() => setResetOpen(true)}>还原首选项…</Button></footer> : null}
         </div>
       </div>
     </div>
-    <Dialog open={resetOpen} onOpenChange={(_, value) => setResetOpen(value.open)}><DialogSurface><DialogBody><DialogTitle>还原首选项？</DialogTitle><DialogContent>颜色主题、界面布局、会话设置、默认智能体和最近目录记录将还原为初始状态。登录时启动、通知区域行为、终端配置及会话数据保持原样。</DialogContent><DialogActions><Button onClick={() => setResetOpen(false)}>取消</Button><Button appearance="primary" onClick={() => { reset(); setResetOpen(false) }}>还原默认设置</Button></DialogActions></DialogBody></DialogSurface></Dialog>
+    <Dialog open={resetOpen} onOpenChange={(_, value) => setResetOpen(value.open)}><DialogSurface><DialogBody><DialogTitle>还原首选项？</DialogTitle><DialogContent>颜色主题、界面布局、会话设置、默认智能体和最近目录记录将还原为初始状态。登录时启动、通知区域行为、终端配置及会话数据保持不变。</DialogContent><DialogActions><Button onClick={() => setResetOpen(false)}>取消</Button><Button appearance="primary" onClick={() => { reset(); setResetOpen(false) }}>还原默认设置</Button></DialogActions></DialogBody></DialogSurface></Dialog>
   </section>
 }
