@@ -1,0 +1,27 @@
+package app
+
+// Emitter 把服务层的事件推给前端。internal/app 不 import wails——
+// 装配处（cmd/agentdeck-desktop）注入 wails 的 EmitEvent 包装，测试里
+// 注入收集器。data 一律是可序列化的 DTO。
+type Emitter func(event string, data any)
+
+// 事件名常量：前端经 wails EventsOn 订阅。
+const (
+	// EventIndexProgress 全文索引构建中，data 是 IndexStatus。
+	EventIndexProgress = "index:progress"
+	// EventIndexReady 全文索引构建完成（或失败），data 是 IndexStatus。
+	EventIndexReady = "index:ready"
+	// EventSessionsChanged 标注（收藏/归档/标签/备注）发生变化，
+	// data 是变化的会话 key（string）。
+	EventSessionsChanged = "sessions:changed"
+	// EventProjectsChanged 只有项目清单变了（新建 / 声明项目），会话行本身
+	// 没有变化；前端只需刷新侧栏，不必重载会话列表。
+	EventProjectsChanged = "projects:changed"
+	// EventMessagesReady 后台消息数补齐完成，data 为 nil；前端收到后
+	// 重拉一次列表即可显示真实消息数（补齐前列表一律 0）。
+	EventMessagesReady = "sessions:messages"
+	// EventStorageProgress 数据位置迁移进度，data 是 StorageProgress。
+	EventStorageProgress = "storage:progress"
+	// EventUpdateStatus 在线更新的检查/下载状态变化，data 是 UpdateView。
+	EventUpdateStatus = "update:status"
+)
