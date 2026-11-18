@@ -137,6 +137,6 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
         </div>
       </div>
     </div>
-    <Dialog open={resetOpen} onOpenChange={(_, value) => setResetOpen(value.open)}><DialogSurface><DialogBody><DialogTitle>还原首选项？</DialogTitle><DialogContent>颜色主题、界面布局、会话设置、默认智能体和最近目录记录将还原为初始状态。登录时启动、通知区域行为、终端配置及会话数据保持原样。</DialogContent><DialogActions><Button onClick={() => setResetOpen(false)}>取消</Button><Button appearance="primary" onClick={() => { reset(); setResetOpen(false) }}>还原默认</Button></DialogActions></DialogBody></DialogSurface></Dialog>
+    <Dialog open={resetOpen} onOpenChange={(_, value) => setResetOpen(value.open)}><DialogSurface><DialogBody><DialogTitle>还原首选项？</DialogTitle><DialogContent>颜色主题、界面布局、会话设置、默认智能体和最近目录记录将还原为初始状态。登录时启动、通知区域行为、终端配置及会话数据保持原样。</DialogContent><DialogActions><Button onClick={() => setResetOpen(false)}>取消</Button><Button appearance="primary" onClick={() => { reset(); setResetOpen(false) }}>还原默认设置</Button></DialogActions></DialogBody></DialogSurface></Dialog>
   </section>
 }
