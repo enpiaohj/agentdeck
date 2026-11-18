@@ -1,0 +1,35 @@
+version: '3'
+
+vars:
+  APP_NAME: agentdeck-desktop
+  BIN_DIR: bin
+
+tasks:
+  bindings:
+    desc: 生成 Go 服务层的前端 bindings(须从 main 包扫 services)
+    dir: cmd/agentdeck-desktop
+    cmds:
+      - wails3 generate bindings -d ../../frontend/bindings -ts
+
+  frontend:build:
+    desc: 构建前端产物
+    dir: frontend
+    cmds:
+      - npm install --no-audit --no-fund
+      - npm run build
+
+  build:
+    desc: 完整构建桌面应用(bindings → 前端 → Go)
+    cmds:
+      - task: bindings
+      - task: frontend:build
+      # 清理旧 bundle 后平铺拷入 embed 目录，与 rebuild.ps1 共用入口
+      - pwsh -NoProfile -File frontend/scripts/sync-assets.ps1
+      # -H windowsgui:GUI 子系统,双击不弹控制台;-s -w 去符号表
+      # -trimpath:去掉构建机的绝对路径,发布产物里不留本机目录
+      - go build -trimpath -tags production -ldflags "-H windowsgui -s -w" -o {{.BIN_DIR}}/{{.APP_NAME}}.exe ./cmd/agentdeck-desktop
+
+  dev:
+    desc: 开发模式(前端热载)
+    cmds:
+      - wails3 dev

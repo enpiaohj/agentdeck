@@ -1,0 +1,27 @@
+# 统一换行符：仓库内存 LF，检出时按平台转换
+* text=auto
+
+# Go 源码始终 LF
+*.go text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf
+
+# 脚本
+*.sh text eol=lf
+*.py text eol=lf
+
+# Windows 专用
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# 二进制
+*.exe binary
+*.dll binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.gif binary
+*.zip binary
+
+# 文档
+*.md text eol=lf
