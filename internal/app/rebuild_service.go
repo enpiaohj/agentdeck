@@ -77,7 +77,7 @@ func (a *App) rebuildable(key string) (sessions.Session, error) {
 	case sess.WSL != "" || sess.Gateway || sess.Imported:
 		return sess, errors.New("WSL、网关与导入的会话不支持重建")
 	case !sess.Retained:
-		return sess, errors.New("这个会话在 Claude Code 里还在，直接继续即可，不需要重建")
+		return sess, errors.New("此会话在 Claude Code 中仍然存在，可以直接继续，无需重建")
 	case !rebuild.ValidID(sess.ID):
 		return sess, errors.New("会话 ID 不是有效的 Claude 会话标识")
 	}
@@ -185,7 +185,7 @@ func (s *ResumeService) Rebuild(token string) (RebuildResult, error) {
 		return RebuildResult{}, err
 	}
 	if sha256.Sum256(data) != plan.hash {
-		return RebuildResult{}, errors.New("会话内容在预览之后变了，请重新预览")
+		return RebuildResult{}, errors.New("预览之后会话内容已发生变化，请重新预览")
 	}
 	if err := writeNewFile(plan.target, data); err != nil {
 		return RebuildResult{}, err
@@ -231,7 +231,7 @@ func writeNewFile(target string, data []byte) (err error) {
 	back, err := os.ReadFile(target)
 	if err != nil || !bytes.Equal(back, data) {
 		os.Remove(target)
-		return errors.New("写入后回读校验失败，已撤销本次写入")
+		return errors.New("写入后的校验失败，已撤销本次写入")
 	}
 	return nil
 }
@@ -259,7 +259,7 @@ func (s *ResumeService) ContinueWithHistory(key, dir string) (HandoffResult, err
 		dir = sess.Cwd
 	}
 	if dir == "" {
-		return HandoffResult{}, errors.New("原目录不存在，请先选择一个目录")
+		return HandoffResult{}, errors.New("原项目目录不存在，请先选择一个目录")
 	}
 	if dir, err = existingDir(dir); err != nil {
 		return HandoffResult{}, err

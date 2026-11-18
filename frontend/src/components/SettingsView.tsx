@@ -116,7 +116,7 @@ export function SettingsView({ revision, onBack }: { revision: number; onBack: (
             <h2 id={`${baseId}-${group.id}-heading`}>{q ? `${categories.find(item => item.id === group.category)?.label} · ${group.title}` : group.title}</h2>
             <div className="ad-setting-card">{group.rows.map(row => <SettingRow key={row.key} id={`${baseId}-${row.key}`} title={row.title} description={row.description}>{row.control(`${baseId}-${row.key}`)}</SettingRow>)}</div>
           </section>)}
-          {retention ? <section className="ad-settings-section" aria-label="Claude Code 会话保留期"><h2>{q ? '会话 · Claude Code 会话保留期' : 'Claude Code 会话保留期'}</h2><ClaudeRetentionControl /></section> : null}
+          {retention ? <section className="ad-settings-section" aria-label="Claude Code 会话保留期限"><h2>{q ? '会话 · Claude Code 会话保留期限' : 'Claude Code 会话保留期限'}</h2><ClaudeRetentionControl /></section> : null}
           {!q && ['appearance', 'sessions'].includes(category) ? <aside className="ad-settings-preview" aria-label="阅读预览"><div className="ad-preview-toolbar"><span>阅读预览</span><span>实时更新</span></div><ReadingPreview /></aside> : null}
           {dataSections.length ? <DiagnosticsView key={dataSections.join(':')} revision={revision} embedded sections={dataSections} /> : null}
           {!q && about ? <section className="ad-settings-section" aria-label="关于 AgentDeck">

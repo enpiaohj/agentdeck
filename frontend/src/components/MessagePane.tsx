@@ -583,7 +583,7 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpT
           <Tooltip content="较新的内容" relationship="label"><Button size="small" appearance="subtle" icon={<ChevronRightRegular />} aria-label="阅读较新内容" disabled={loading||!tr?.has_after} onClick={()=>navigate((tr?.start??0)+(tr?.parts.length??0))} /></Tooltip>
         </>}
         <Tooltip content={findOpen ? '收起查找 (Esc)' : '查找当前会话 (Ctrl+F)'} relationship="label"><Button size="small" appearance={findOpen ? 'secondary' : 'subtle'} icon={<SearchRegular />} aria-label="查找当前会话" aria-pressed={findOpen} onClick={findOpen ? closeFind : openFind} /></Tooltip>
-        {prompts.length > 1 ? <Tooltip content={preferences.promptRail ? '隐藏提问导航条' : '显示提问导航条：右侧每根刻度是一次提问，点击跳转'} relationship="label">
+        {prompts.length > 1 ? <Tooltip content={preferences.promptRail ? '隐藏提问导航条' : '显示提问导航条：右侧每根刻度是一次提问，单击可跳转'} relationship="label">
           <Button size="small" appearance={preferences.promptRail ? 'secondary' : 'subtle'} icon={<TextBulletListLtrRegular />} aria-pressed={preferences.promptRail} aria-label="提问导航条" onClick={() => updatePreferences({ promptRail: !preferences.promptRail })} />
         </Tooltip> : null}
         <Button size="small" appearance={destination.at<0?'secondary':'subtle'} icon={<ArrowDownRegular />} onClick={()=>navigate(-1)} disabled={loading}>最新消息</Button>
@@ -705,8 +705,8 @@ function Loaded({ session, sourceVersion, jumpPart, jumpMatch, jumpOffset, jumpT
               onClick={() => void runAction(async () => { await resumeWithLocation(session.key, 'copy') })}>复制恢复命令</Button>
           </>
         ) : session.agent === 'claude' && session.source === 'retained' ? (
-          <Tooltip content="Claude Code 已清理此会话的原记录。可以用 AgentDeck 保留的内容重建后继续，或新开会话并带上历史" relationship="description">
-            <Button size="small" appearance="primary" icon={<OpenRegular />} onClick={() => openRebuild({ key: session.key, title: session.title, cwd: session.cwd })}>继续已清理的会话…</Button>
+          <Tooltip content="Claude Code 已删除此会话的原始记录。可以使用 AgentDeck 保留的副本重建后继续，或新建会话并附带历史记录" relationship="description">
+            <Button size="small" appearance="primary" icon={<OpenRegular />} onClick={() => openRebuild({ key: session.key, title: session.title, cwd: session.cwd })}>继续会话…</Button>
           </Tooltip>
         ) : (
           <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>此记录支持阅读、搜索与导出</Text>

@@ -29,7 +29,7 @@ export function SessionContextMenu({ items, point, pinned = false, onClose, onAc
           <MenuItem icon={<EditRegular />} secondaryContent="F2" onClick={() => onAction('rename')}>重命名</MenuItem>
           <MenuItem icon={<CodeRegular />} disabled={!canResume || items[0].source === 'wsl'} title={!canResume ? '该来源的会话暂不支持在终端中继续（仅可查看历史）' : items[0].source === 'wsl' ? 'WSL 会话需在 WSL 内继续' : undefined} onClick={() => onAction('resume')}>在终端中继续会话</MenuItem>
           <MenuItem icon={<FolderArrowRightRegular />} disabled={!canResume || items[0].source === 'wsl'} title={!canResume ? '该来源的会话暂不支持在终端中继续（仅可查看历史）' : items[0].source === 'wsl' ? 'WSL 会话需在 WSL 内继续' : '仅本次换一个目录继续，不改动会话记录'} onClick={() => onAction('resumeElsewhere')}>在其他目录继续…</MenuItem>
-          {single && items[0].agent === 'claude' && items[0].source === 'retained' ? <MenuItem icon={<OpenRegular />} title="Claude Code 已清理此会话的原记录：用保留的内容重建后继续，或新开会话并带上历史" onClick={() => onAction('rebuild')}>继续已清理的会话…</MenuItem> : null}
+          {single && items[0].agent === 'claude' && items[0].source === 'retained' ? <MenuItem icon={<OpenRegular />} title="Claude Code 已删除此会话的原始记录：使用保留的副本重建后继续，或新建会话并附带历史记录" onClick={() => onAction('rebuild')}>从保留的副本继续会话…</MenuItem> : null}
           <MenuItem icon={<CopyRegular />} disabled={!canResume} title={!canResume ? '该来源的会话没有可用的恢复命令' : undefined} onClick={() => onAction('copyResume')}>复制恢复命令</MenuItem>
           <MenuDivider />
         </> : null}

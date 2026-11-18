@@ -158,7 +158,7 @@ func TestRebuildRefusesWhatItShouldNot(t *testing.T) {
 	if _, err := r.PreviewRebuild("codex:c1", ""); err == nil {
 		t.Error("只支持 Claude Code")
 	}
-	if _, err := r.PreviewRebuild("claude:"+rebuildTestID, ""); err == nil || !strings.Contains(err.Error(), "还在") {
+	if _, err := r.PreviewRebuild("claude:"+rebuildTestID, ""); err == nil || !strings.Contains(err.Error(), "仍然存在") {
 		t.Errorf("还在原位的会话不需要重建: %v", err)
 	}
 }

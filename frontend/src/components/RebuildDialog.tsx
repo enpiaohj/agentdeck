@@ -70,14 +70,14 @@ export function RebuildDialog() {
         return
       }
       const result = await resumeService.Rebuild(preview.token)
-      if (!openAfter) { setDone(`已重建会话文件：${result.file}。现在可以在会话列表里点“继续会话”。`); return }
+      if (!openAfter) { setDone(`已重建会话文件：${result.file}。现在可以在会话列表中选择“继续会话”。`); return }
       try {
         const opened = await resumeService.OpenAtResult(target.key, preview.directory)
         if (opened.warning) { setDone(`会话已重建，终端已打开，但有一条提示：${opened.warning}`); return }
         close()
       } catch (reason) {
         // 文件已经写好，只是终端没起来：如实说明，别让用户以为重建失败了
-        setDone(`会话已重建（${result.file}），但打开终端失败：${readable(reason)}。可在会话列表里再点“继续会话”。`)
+        setDone(`会话已重建（${result.file}），但无法打开终端：${readable(reason)}。可以稍后在会话列表中选择“继续会话”。`)
       }
     } catch (reason) { setError(readable(reason)) }
     finally { setBusy(false) }
@@ -85,36 +85,36 @@ export function RebuildDialog() {
 
   const ready = !!preview?.token
   const dirty = !!preview && path.trim() !== (preview.directory || '')
-  const content = preview ? `${preview.turns} 轮对话、${preview.kept} 条消息${preview.tools ? `，${preview.tools} 次工具调用转成文字` : ''}${preview.omitted ? `，较早的 ${preview.omitted} 条已省略` : ''}` : ''
-  const submitLabel = mode === 'handoff' ? '新开会话并带上历史' : openAfter ? '重建并继续会话' : '重建会话'
+  const content = preview ? `${preview.turns} 轮对话、${preview.kept} 条消息${preview.tools ? `，${preview.tools} 次工具调用（已转换为文本）` : ''}${preview.omitted ? `，较早的 ${preview.omitted} 条消息已省略` : ''}` : ''
+  const submitLabel = mode === 'handoff' ? '新建会话并附带历史记录' : openAfter ? '重建并继续' : '重建'
   return <Dialog open={!!target} onOpenChange={(_, data) => { if (!data.open && !busy) close() }}>
     <DialogSurface onKeyDown={event => event.stopPropagation()}>
       <DialogBody>
-        <DialogTitle>继续已被清理的会话</DialogTitle>
+        <DialogTitle>继续会话</DialogTitle>
         <DialogContent>
-          <p className="ad-form-note">Claude Code 只保留约 30 天的会话，这个会话的原记录已被它清理。AgentDeck 的永久库里还留着内容，可以用下面两种方式继续。</p>
+          <p className="ad-form-note">Claude Code 默认只保留约 30 天内的会话，此会话的原始记录已被它删除。AgentDeck 保留了一份副本，可通过以下两种方式继续。</p>
           <div className="ad-form">
             <Field label="会话"><Input readOnly value={target?.title || '未命名会话'} /></Field>
-            <Field label="原目录"><Input readOnly value={preview?.original || target?.cwd || '未记录'} /></Field>
-            <Field label="在此目录继续" validationMessage={preview?.needs_directory ? '原目录已不存在，请选择一个已有的目录。' : undefined} validationState={preview?.needs_directory ? 'warning' : 'none'}>
+            <Field label="原项目目录"><Input readOnly value={preview?.original || target?.cwd || '未记录'} /></Field>
+            <Field label="继续会话的目录" validationMessage={preview?.needs_directory ? '原项目目录已不存在，请选择一个现有目录。' : undefined} validationState={preview?.needs_directory ? 'warning' : 'none'}>
               <div className="ad-form-row">
-                <Input aria-label="在此目录继续" value={path} disabled={busy || !!done} onChange={(_, data) => setPath(data.value)} />
+                <Input aria-label="继续会话的目录" value={path} disabled={busy || !!done} onChange={(_, data) => setPath(data.value)} />
                 <Button disabled={busy || !!done} onClick={() => void browse()}>选择目录…</Button>
                 {dirty && target ? <Button disabled={busy || loading} onClick={() => void load(target.key, path.trim())}>应用</Button> : null}
               </div>
             </Field>
-            {loading ? <p className="ad-form-note" role="status"><Spinner size="extra-tiny" /> 正在读取保留的会话内容…</p> : null}
+            {loading ? <p className="ad-form-note" role="status"><Spinner size="extra-tiny" /> 正在读取保留的副本…</p> : null}
             {ready && !done ? <>
               <RadioGroup value={mode} disabled={busy} onChange={(_, data) => setMode(data.value as Mode)} aria-label="继续方式">
-                <Radio value="rebuild" label="重建后继续此会话（推荐）" />
-                <p className="ad-form-note" style={{ margin: '0 0 8px 28px' }}>在 Claude Code 的数据目录里新建一个会话文件（只新建，不会覆盖任何已有文件），然后用 claude --resume 接着聊。工具调用与结果只保留文字描述，思考内容不会带回。重建后 Claude Code 会重新按保留期计时。</p>
-                <Radio value="handoff" label="新开会话并带上历史" />
-                <p className="ad-form-note" style={{ margin: '0 0 8px 28px' }}>不写 Claude 的目录：把历史整理成一份文档，新开一个 Claude 会话，让它先读完再继续。不是真正的续接，历史很长时只带最近的部分。</p>
+                <Radio value="rebuild" label="重建会话文件后继续（推荐）" />
+                <p className="ad-form-note" style={{ margin: '0 0 8px 28px' }}>在 Claude Code 的数据目录中新建一个会话文件（只新建，不会覆盖任何现有文件），然后使用 claude --resume 继续。工具调用与结果将转换为文本，不包含思考内容。重建后，Claude Code 将重新开始计算保留期限。</p>
+                <Radio value="handoff" label="新建会话并附带历史记录" />
+                <p className="ad-form-note" style={{ margin: '0 0 8px 28px' }}>不写入 Claude 的目录：将历史记录整理为一份文档，新建一个 Claude 会话，并让它先阅读该文档再继续。这不是真正的续接，历史记录很长时只包含最近的部分。</p>
               </RadioGroup>
-              <p className="ad-form-note">将带回：{content}。</p>
+              <p className="ad-form-note">将包含：{content}。</p>
               {mode === 'rebuild' ? <>
-                <Field label="将写入的会话文件"><Input readOnly value={preview?.file ?? ''} /></Field>
-                <Checkbox checked={openAfter} disabled={busy} label="完成后立即在终端里继续" onChange={(_, data) => setOpenAfter(data.checked === true)} />
+                <Field label="将创建的会话文件"><Input readOnly value={preview?.file ?? ''} /></Field>
+                <Checkbox checked={openAfter} disabled={busy} label="完成后立即在终端中继续" onChange={(_, data) => setOpenAfter(data.checked === true)} />
               </> : null}
             </> : null}
             {done ? <MessageBar intent="success">{done}</MessageBar> : null}

@@ -143,7 +143,7 @@ export function ChatGPTHistoryImport({ onImported }: { onImported: (report: Chat
         <div className={styles.field}>
           <label className={styles.label} htmlFor="chatgpt-import-account">2. 设置账号名称</label>
           <Input id="chatgpt-import-account" value={account} maxLength={80} disabled={busy} contentBefore={<PersonRegular />} placeholder="例如：个人账号" onChange={(_, data) => setAccount(data.value)} />
-          <div className={styles.note}>先填写账号名称，再选择文件。同一账号的后续导入请使用相同的名称，以便更新、去重，并带回已命名的项目。</div>
+          <div className={styles.note}>先填写账号名称，再选择文件。同一账号的后续导入请使用相同的名称，以便更新、去重，并保留已命名的项目名称。</div>
         </div>
         <div className={styles.field}>
           <span className={styles.label}>3. 选择导出文件</span>
@@ -169,7 +169,7 @@ export function ChatGPTHistoryImport({ onImported }: { onImported: (report: Chat
           <Text weight="semibold">4. 命名项目（可选）</Text>
           <div className={styles.note}>{preview.projects.some(p => p.suggested)
             ? `导出文件中没有项目名。已从本机的 ChatGPT 桌面应用读取到 ${preview.projects.filter(p => p.suggested).length} 个项目的名称并填入，你可以直接使用或修改。`
-            : '导出文件中没有项目名，只有编号。'}右侧列出各项目中最近的会话标题和上传的文件名，可据此识别项目。没有现成的名称时，会根据会话标题和上传的文件名给出“推荐名”，只是推测，请确认后再使用。也可以点“在 ChatGPT 中打开”，用 {browserName} 打开项目页面查看名称（可在“设置”&gt;“常规”中更改浏览器）。留空则使用默认名称；之后可随时重命名，无需重新导入。</div>
+            : '导出文件中没有项目名，只有编号。'}右侧列出各项目中最近的会话标题和上传的文件名，可据此识别项目。没有现成的名称时，会根据会话标题和上传的文件名给出“推荐名”，只是推测，请确认后再使用。也可以选择“在 ChatGPT 中打开”，用 {browserName} 打开项目页面查看名称（可在“设置”&gt;“常规”中更改浏览器）。留空则使用默认名称；之后可随时重命名，无需重新导入。</div>
           {preview.projects.some(p => p.recommended && empty(p.id)) ? <Button size="small" appearance="secondary" style={{ alignSelf: 'flex-start' }} disabled={busy} onClick={useAllRecommended}>全部使用推荐名</Button> : null}
           <div>
             {preview.projects.map(project => <div key={project.id} className={styles.project}>

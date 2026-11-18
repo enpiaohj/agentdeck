@@ -491,7 +491,7 @@ export function SessionList({ filter, selectedKey, onSelect, onOpenDetails, onDe
             onClick={onRefresh} />
         </Tooltip> : null}
       </div>
-      <span id={helpId} className="ad-sr-only">单击选中；Ctrl 点击切换；Shift 连选；Ctrl+Shift 追加连选；Ctrl+A 全选筛选后当前展开项（包含屏幕外行）；Esc 清空选择。上下方向键移动，Home / End 到首尾；左右方向键展开或收起子会话。</span>
+      <span id={helpId} className="ad-sr-only">单击选中；Ctrl+单击切换；Shift 连选；Ctrl+Shift 追加连选；Ctrl+A 全选筛选后当前展开项（包含屏幕外行）；Esc 清空选择。上下方向键移动，Home / End 到首尾；左右方向键展开或收起子会话。</span>
       <div className={styles.tools}>
         <div className="ad-filter-chips">
           {(filter.agents ?? []).map(agent => <Button key={agent} size="small" onClick={() => {

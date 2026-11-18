@@ -564,7 +564,7 @@ export function Sidebar({ collapsed, listVersion, onToggle, filter, onFilter, on
           )
         })}
         {projects.length === 0 ? <EmptyState icon={<FolderRegular fontSize={22} />} title="暂无项目" compact>
-          点“＋”新建项目并指定默认智能体；已有会话的目录会自动出现在这里。
+          选择“＋”新建项目并指定默认智能体；已有会话的目录会自动出现在这里。
         </EmptyState> : null}
       </div> : null}
       {projectsOpen && projects.length > PROJECT_PREVIEW + 2 ? (

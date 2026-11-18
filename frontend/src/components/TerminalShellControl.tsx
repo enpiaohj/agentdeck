@@ -141,8 +141,8 @@ const OPEN_MODE_LABELS: Record<string, string> = {
 
 // OPEN_MODE_HINTS 是各选项的悬浮说明：选项名很短，具体落在哪个窗口由这里说清。
 const OPEN_MODE_HINTS: Record<string, string> = {
-  window: '每次继续会话都新开一个终端窗口。',
-  tab: '在活动的 Windows Terminal 窗口中新开一个标签；没有打开的终端窗口时新建一个。',
+  window: '每次继续会话都打开一个新的终端窗口。',
+  tab: '在活动的 Windows Terminal 窗口中打开一个新标签；没有打开的终端窗口时新建一个。',
 }
 
 // ResumeOpenModeControl 是继续会话时终端的打开方式：新窗口，或在活动的终端
